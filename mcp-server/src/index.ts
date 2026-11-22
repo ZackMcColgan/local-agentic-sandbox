@@ -15,7 +15,7 @@ app.use(cors());
 export function createMcpServer(): McpServer {
   const mcp = new McpServer({
     name: "local-agentic-sandbox-tools",
-    version: "2.0.0"
+    version: "2.0.0",
   });
   registerCodeRunner(mcp);
   registerAttestation(mcp);
@@ -47,7 +47,7 @@ export const ALLOWED_FILE_EXTENSIONS = new Set([
   ".yml",
   ".sql",
   ".css",
-  ".toml"
+  ".toml",
 ]);
 
 export function isAllowedFileArtifact(filePath: string): boolean {
@@ -101,7 +101,7 @@ export async function handleFilesRequest(req: Request, res: Response) {
 
   if (!isAllowedFileArtifact(filePath)) {
     return res.status(415).json({
-      error: "Unsupported media type: only allowed workspace file artifacts are permitted"
+      error: "Unsupported media type: only allowed workspace file artifacts are permitted",
     });
   }
 
@@ -122,8 +122,9 @@ export async function handleFilesRequest(req: Request, res: Response) {
     res.setHeader("Content-Type", mime);
     res.setHeader("Content-Length", stat.size.toString());
     res.send(content);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
   }
 }
 
@@ -138,9 +139,9 @@ app.get("/health", (_req: Request, res: Response) => {
       user: "10001:10001",
       network_egress: "BLOCKED",
       rootfs: "READ_ONLY",
-      capabilities: "DROPPED_ALL"
+      capabilities: "DROPPED_ALL",
     },
-    active_sessions: sessions.size
+    active_sessions: sessions.size,
   });
 });
 
@@ -194,6 +195,8 @@ if (isMainModule) {
   app.listen(PORT, HOST, () => {
     console.log(`[MCP Server] Active and listening at http://${HOST}:${PORT}`);
     console.log(`[MCP Server] SSE Endpoint: http://${HOST}:${PORT}/sse`);
-    console.log(`[MCP Server] Registered Tools: execute_sandboxed_python, verify_container_provenance`);
+    console.log(
+      `[MCP Server] Registered Tools: execute_sandboxed_python, verify_container_provenance`
+    );
   });
 }

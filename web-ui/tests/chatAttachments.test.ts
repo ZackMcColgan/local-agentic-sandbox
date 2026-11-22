@@ -6,11 +6,9 @@ import os from "os";
 import { ThreadStore, ThreadMessage, resolveThreadsDir } from "../lib/threads/threadStore.js";
 import {
   buildFileDeliverablesDirective,
-  getThreadOutputsWorkspaceRelPath,
-  resolveTurnOutputPath,
   recordTurnOutputWrite,
   collectTurnAttachments,
-  ThreadTurnWriteTracker
+  ThreadTurnWriteTracker,
 } from "../lib/threadOutputs.js";
 import { GET } from "../app/api/files/route.js";
 import { NextRequest } from "next/server";
@@ -24,7 +22,7 @@ test("ThreadStore retains message attachments across reloads", async () => {
     const store = new ThreadStore();
     const thread = store.createThread({
       title: "Test Thread with Attachments",
-      model: "swift-15-27b-mtp"
+      model: "swift-15-27b-mtp",
     });
 
     const assistantMsg: ThreadMessage = {
@@ -37,9 +35,9 @@ test("ThreadStore retains message attachments across reloads", async () => {
           name: "breakout.html",
           type: "text/html",
           size: 2048,
-          previewUrl: `${thread.id}/files/breakout.html`
-        }
-      ]
+          previewUrl: `${thread.id}/files/breakout.html`,
+        },
+      ],
     };
 
     thread.messages.push(assistantMsg);
@@ -126,8 +124,18 @@ test("F5.4: Exact write tracking with collectTurnAttachments and no mtime leaks"
     const tracker = new ThreadTurnWriteTracker(threadId, tmpDir);
     const recordedList: string[] = [];
 
-    const recCurrent = recordTurnOutputWrite(recordedList, `.agent/threads/${threadId}/files/current.html`, threadId, tmpDir);
-    const recUnrelated = recordTurnOutputWrite(recordedList, "web-ui/app/page.tsx", threadId, tmpDir);
+    const recCurrent = recordTurnOutputWrite(
+      recordedList,
+      `.agent/threads/${threadId}/files/current.html`,
+      threadId,
+      tmpDir
+    );
+    const recUnrelated = recordTurnOutputWrite(
+      recordedList,
+      "web-ui/app/page.tsx",
+      threadId,
+      tmpDir
+    );
 
     tracker.recordWrite(`.agent/threads/${threadId}/files/current.html`);
     tracker.recordWrite("web-ui/app/page.tsx");
@@ -137,7 +145,11 @@ test("F5.4: Exact write tracking with collectTurnAttachments and no mtime leaks"
 
     // Collect turn attachments: must ONLY include current.html, NOT older.html, NOT page.tsx
     const attachments = collectTurnAttachments(threadId, tmpDir, recordedList);
-    assert.equal(attachments.length, 1, `Expected exactly 1 attachment, got: ${JSON.stringify(attachments)}`);
+    assert.equal(
+      attachments.length,
+      1,
+      `Expected exactly 1 attachment, got: ${JSON.stringify(attachments)}`
+    );
     assert.equal(attachments[0].name, "current.html");
     assert.equal(attachments[0].previewUrl, `${threadId}/files/current.html`);
     assert.equal(attachments[0].type, "text/html");
@@ -149,16 +161,29 @@ test("F5.4: Exact write tracking with collectTurnAttachments and no mtime leaks"
 
     // Subsequent turn with zero workspace_write_file calls returns [] even with fresh mtime
     const emptyTurnAttachments = collectTurnAttachments(threadId, tmpDir, []);
-    assert.deepEqual(emptyTurnAttachments, [], "Turn with zero recorded writes must return empty attachments");
+    assert.deepEqual(
+      emptyTurnAttachments,
+      [],
+      "Turn with zero recorded writes must return empty attachments"
+    );
 
     // Nested subpath support inside files/
     const subDir = path.join(threadOutputsDir, "sub");
     fs.mkdirSync(subDir, { recursive: true });
     const chartSvg = path.join(subDir, "chart.svg");
-    fs.writeFileSync(chartSvg, '<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>', "utf8");
+    fs.writeFileSync(
+      chartSvg,
+      '<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>',
+      "utf8"
+    );
 
     const nestedList: string[] = [];
-    const recNested = recordTurnOutputWrite(nestedList, `.agent/threads/${threadId}/files/sub/chart.svg`, threadId, tmpDir);
+    const recNested = recordTurnOutputWrite(
+      nestedList,
+      `.agent/threads/${threadId}/files/sub/chart.svg`,
+      threadId,
+      tmpDir
+    );
     assert.equal(recNested, "sub/chart.svg");
 
     const nestedAttachments = collectTurnAttachments(threadId, tmpDir, nestedList);
@@ -168,7 +193,9 @@ test("F5.4: Exact write tracking with collectTurnAttachments and no mtime leaks"
     assert.equal(nestedAttachments[0].type, "image/svg+xml");
 
     // Verify GET /api/files?path=<threadId>/files/sub/chart.svg&download=1 works
-    const req = new NextRequest(`http://localhost:3000/api/files?path=${threadId}/files/sub/chart.svg&download=1`);
+    const req = new NextRequest(
+      `http://localhost:3000/api/files?path=${threadId}/files/sub/chart.svg&download=1`
+    );
     const res = await GET(req);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("content-type"), "image/svg+xml; charset=utf-8");

@@ -4,7 +4,9 @@ import fs from "fs";
 import path from "path";
 
 test("Stretch Item 1: Worker Modelfiles Specification Suite", async (t) => {
-  const root = fs.existsSync(path.join(process.cwd(), "deploy")) ? process.cwd() : path.resolve(process.cwd(), "..");
+  const root = fs.existsSync(path.join(process.cwd(), "deploy"))
+    ? process.cwd()
+    : path.resolve(process.cwd(), "..");
   const builderPath = path.join(root, "deploy", "modelfiles", "Modelfile.builder");
   const criticPath = path.join(root, "deploy", "modelfiles", "Modelfile.critic");
 
@@ -17,12 +19,21 @@ test("Stretch Item 1: Worker Modelfiles Specification Suite", async (t) => {
     assert.ok(content.includes("SYSTEM"), "Builder must have system instructions");
   });
 
-  await t.test("Critic Modelfile specifies base model, deterministic temperature, and strict JSON verdict prompt", () => {
-    assert.ok(fs.existsSync(criticPath), "Modelfile.critic must exist");
-    const content = fs.readFileSync(criticPath, "utf8");
-    assert.ok(content.includes("FROM swift-15-27b-mtp"), "Critic must use swift-15-27b-mtp");
-    assert.ok(content.includes("PARAMETER temperature 0.1"), "Critic must use temperature 0.1");
-    assert.ok(content.includes('"approved": boolean'), "Critic prompt must specify approved field");
-    assert.ok(content.includes('"feedback": string[]'), "Critic prompt must specify feedback field");
-  });
+  await t.test(
+    "Critic Modelfile specifies base model, deterministic temperature, and strict JSON verdict prompt",
+    () => {
+      assert.ok(fs.existsSync(criticPath), "Modelfile.critic must exist");
+      const content = fs.readFileSync(criticPath, "utf8");
+      assert.ok(content.includes("FROM swift-15-27b-mtp"), "Critic must use swift-15-27b-mtp");
+      assert.ok(content.includes("PARAMETER temperature 0.1"), "Critic must use temperature 0.1");
+      assert.ok(
+        content.includes('"approved": boolean'),
+        "Critic prompt must specify approved field"
+      );
+      assert.ok(
+        content.includes('"feedback": string[]'),
+        "Critic prompt must specify feedback field"
+      );
+    }
+  );
 });

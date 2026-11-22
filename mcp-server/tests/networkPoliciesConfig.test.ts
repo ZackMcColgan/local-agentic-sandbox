@@ -6,7 +6,10 @@ import path from "path";
 describe("NetworkPolicy GitHub CIDR Parameterization Suite", () => {
   const repoRoot = path.resolve(process.cwd(), "..");
   const valuesPath = path.join(repoRoot, "deploy/helm/local-agentic-sandbox/values.yaml");
-  const templatePath = path.join(repoRoot, "deploy/helm/local-agentic-sandbox/templates/network-policies.yaml");
+  const templatePath = path.join(
+    repoRoot,
+    "deploy/helm/local-agentic-sandbox/templates/network-policies.yaml"
+  );
   const hasHelmConfig = fs.existsSync(valuesPath) && fs.existsSync(templatePath);
 
   it("defines githubCIDRs list in Helm values.yaml with default GitHub CIDRs", (t) => {
@@ -21,9 +24,18 @@ describe("NetworkPolicy GitHub CIDR Parameterization Suite", () => {
       valuesContent.includes("githubCIDRs:"),
       "values.yaml must declare networkPolicies.githubCIDRs"
     );
-    assert.ok(valuesContent.includes("140.82.112.0/20"), "Must include default CIDR 140.82.112.0/20");
-    assert.ok(valuesContent.includes("192.30.252.0/22"), "Must include default CIDR 192.30.252.0/22");
-    assert.ok(valuesContent.includes("185.199.108.0/22"), "Must include default CIDR 185.199.108.0/22");
+    assert.ok(
+      valuesContent.includes("140.82.112.0/20"),
+      "Must include default CIDR 140.82.112.0/20"
+    );
+    assert.ok(
+      valuesContent.includes("192.30.252.0/22"),
+      "Must include default CIDR 192.30.252.0/22"
+    );
+    assert.ok(
+      valuesContent.includes("185.199.108.0/22"),
+      "Must include default CIDR 185.199.108.0/22"
+    );
   });
 
   it("parameterizes network-policies.yaml template using .Values.networkPolicies.githubCIDRs instead of hardcoded IPs", (t) => {

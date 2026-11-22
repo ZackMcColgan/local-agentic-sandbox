@@ -27,7 +27,7 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
             return { exitCode: 0, stdout: "", stderr: "" };
           }
           return { exitCode: 0, stdout: "Switched to branch feat/task-123456789012\n", stderr: "" };
-        }
+        },
       });
 
       const res = await gitOps.createAndSwitchBranch("feat/task-123456789012");
@@ -38,7 +38,7 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
     it("strictly REJECTS checkout or branch creation targeting main or master", async () => {
       const gitOps = new WorkerGitOps({
         runId: "run-test-2",
-        commandRunner: async () => ({ exitCode: 0, stdout: "", stderr: "" })
+        commandRunner: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
       });
 
       await assert.rejects(
@@ -66,7 +66,7 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
             return { exitCode: 0, stdout: "main\n", stderr: "" };
           }
           return { exitCode: 0, stdout: "", stderr: "" };
-        }
+        },
       });
 
       await assert.rejects(
@@ -80,10 +80,12 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
   });
 
   describe("2. Threads API Branch Format & GitOps Defaults", () => {
-    let origExecute: any;
+    let origExecute: typeof OvernightSupervisor.prototype.executeTaskWithRecovery;
     before(() => {
       origExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
-      OvernightSupervisor.prototype.executeTaskWithRecovery = async function(t: TaskManifest) { return t; };
+      OvernightSupervisor.prototype.executeTaskWithRecovery = async function (t: TaskManifest) {
+        return t;
+      };
     });
     after(() => {
       OvernightSupervisor.prototype.executeTaskWithRecovery = origExecute;
@@ -95,8 +97,8 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
         body: JSON.stringify({
           action: "launchTask",
           goal: "Build test feature",
-          scope: "PROJECT"
-        })
+          scope: "PROJECT",
+        }),
       });
 
       const res = await POST(req);
@@ -122,8 +124,8 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
           action: "launchTask",
           goal: "No git ops task",
           scope: "PROJECT",
-          enableGitOps: false
-        })
+          enableGitOps: false,
+        }),
       });
 
       const res = await POST(req);
@@ -139,8 +141,8 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
           action: "launchTask",
           goal: "Hands-free capstone run",
           scope: "PROJECT",
-          autoDeployOnGreen: true
-        })
+          autoDeployOnGreen: true,
+        }),
       });
 
       const res = await POST(req);
@@ -167,11 +169,11 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
             return { exitCode: 0, stdout: "feat/task-test001\n", stderr: "" };
           }
           return { exitCode: 0, stdout: "ok\n", stderr: "" };
-        }
+        },
       });
 
       const supervisor = new OvernightSupervisor({
-        checkpointDirectory: tmpDir
+        checkpointDirectory: tmpDir,
       });
 
       const task: TaskManifest = {
@@ -191,33 +193,35 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
             status: "pending",
             builderIterations: 1,
             criticRounds: 1,
-            acceptanceCriteria: []
-          }
+            acceptanceCriteria: [],
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
-      const mockStepExecutor = async (m: any) => {
+      const mockStepExecutor = async () => {
         return {
           status: "completed",
           gitSha: "commit-sha-abc123",
           targetFile: "lib/core.ts",
           deliverableContent: "export const core = 1;",
-          thinking: "Done"
+          thinking: "Done",
         };
       };
 
       const result = await supervisor.executeTaskWithRecovery(task, {
-        stepExecutor: mockStepExecutor as any,
+        stepExecutor: mockStepExecutor as unknown as NonNullable<
+          Parameters<typeof supervisor.executeTaskWithRecovery>[1]
+        >["stepExecutor"],
         gitOps: mockGitOps,
         gateRunner: async () => {
           gateRan = true;
           return { exitCode: 0, stdout: "PASS: 291 tests passed\n", stderr: "" };
-        }
+        },
       });
 
       assert.equal(result.status, "completed");
@@ -252,15 +256,19 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
             deploymentName: "web-ui",
             namespace: "local-agentic-sandbox",
             dryRun: true,
-            skipPreRollout: true // Skip actual long npm run in unit test
-          })
+            skipPreRollout: true, // Skip actual long npm run in unit test
+          }),
         });
 
         const res = await deployPOST(req);
         assert.equal(res.status, 200);
         const data = await res.json();
         assert.ok(data.deployId || data.record?.deployId);
-        assert.ok(data.status === "deployed" || data.record?.status === "deployed" || data.status === "rolled_back");
+        assert.ok(
+          data.status === "deployed" ||
+            data.record?.status === "deployed" ||
+            data.status === "rolled_back"
+        );
       } finally {
         process.env.SELF_DEPLOY_ENABLED = original;
       }
@@ -286,21 +294,21 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
             status: "completed",
             builderIterations: 1,
             criticRounds: 1,
-            acceptanceCriteria: []
-          }
+            acceptanceCriteria: [],
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
         startedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString()
+        completedAt: new Date().toISOString(),
       };
 
       const html = renderToString(
         React.createElement(LiveRunBlock, {
           task,
-          onDeployRun: () => {}
+          onDeployRun: () => {},
         })
       );
 
@@ -326,12 +334,14 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
           reasoningEffort: "medium" as const,
           messages: [],
           onSendMessage: async () => {},
-          defaultComposerMode: "build"
+          defaultComposerMode: "build",
         })
       );
 
       assert.ok(
-        html.includes("Auto-Deploy on Green Gate") || html.includes("auto-deploy") || html.includes("Auto-Deploy"),
+        html.includes("Auto-Deploy on Green Gate") ||
+          html.includes("auto-deploy") ||
+          html.includes("Auto-Deploy"),
         "ChatStream in Build mode must render opt-in Auto-Deploy on Green Gate toggle"
       );
     });

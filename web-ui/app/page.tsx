@@ -1,55 +1,23 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { ChatStream, ChatMessage } from "@/components/ChatStream";
-import { ExplorerPanel } from "@/components/ExplorerPanel";
-import { ThreadsSidebar } from "@/components/ThreadsSidebar";
-import { ModelBottomSheet } from "@/components/ModelBottomSheet";
-import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
-import { TraceWaterfall } from "@/components/TraceWaterfall";
-import { SandboxGauge } from "@/components/SandboxGauge";
-import { MorningReportView } from "@/components/MorningReportView";
+import type { ChatMessage } from "@/components/ChatStream";
+import { useLiveTraces } from "@/lib/hooks/useLiveTraces";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
-import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
+import { TaskManifest, TaskScope } from "@/lib/subagents/types";
 import { Thread } from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { SimulationScenarioKey } from "@/lib/simulator";
-import {
-  Layers,
-  ShieldCheck,
-  Globe,
-  Cpu,
-  ArrowLeft,
-  Hammer,
-  Shield,
-  Activity,
-  FolderTree,
-  Menu,
-  MessageSquare,
-  Sun,
-  Sparkles,
-  Settings,
-  Columns3,
-  FolderGit2
-} from "lucide-react";
-import { DiffViewer } from "@/components/DiffViewer";
-import { CodeBlock } from "@/components/ArtifactRenderers";
-import { NavigationDrawer, NavView } from "@/components/NavigationDrawer";
-import { SettingsView } from "@/components/SettingsView";
-import { BuildsView } from "@/components/BuildsView";
-import { BoardView } from "@/components/BoardView";
+import type { NavView } from "@/components/NavigationDrawer";
+import type { SettingsView } from "@/components/SettingsView";
 import type { BoardItem } from "@/lib/board/boardStore";
 import type { BoardControlAction, BoardControlState } from "@/lib/board/boardControlStore";
-import { SkillsView } from "@/components/SkillsView";
-import { ProjectsView } from "@/components/ProjectsView";
+import type { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
-import { PRESET_MODEL_PROFILES, ModelProfile, AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
-import {
-  getInitialWelcomeMessage,
-  loadChatHistory,
-  saveChatHistory
-} from "@/lib/chatHistory";
+import { AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { getInitialWelcomeMessage } from "@/lib/chatHistory";
+import { ViewShell } from "@/components/ViewShell";
 
 export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -61,14 +29,11 @@ export default function Home() {
   const [overnightReport, setOvernightReport] = useState<OvernightMorningReport | null>(null);
 
   // Model & telemetry state
-  const [traces, setTraces] = useState<ExecutionTraceItem[]>([]);
-  const [status, setStatus] = useState({
-    llm: "INITIALIZING",
-    ollama: "INITIALIZING",
-    mcp: "INITIALIZING",
-    airGapped: true
+  const skipThreadLoadRef = useRef<string | null>(null);
+  const { traces, updateTraces: handleTracesUpdate } = useLiveTraces(selectedThreadId, {
+    shouldSkipClear: (threadId) => skipThreadLoadRef.current === threadId,
   });
-  const [agentMode, setAgentMode] = useState<AgentMode>(DEFAULT_AGENT_MODE);
+  const agentMode: AgentMode = DEFAULT_AGENT_MODE;
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("preferred_model");
@@ -84,8 +49,16 @@ export default function Home() {
     return "low";
   });
   const [installedModels, setInstalledModels] = useState<string[]>([]);
-  const [profiles, setProfiles] = useState<ModelProfile[]>(PRESET_MODEL_PROFILES);
-  const [securityPosture, setSecurityPosture] = useState<any>(undefined);
+  const [securityPosture, setSecurityPosture] = useState<
+    | {
+        execution_uid: string;
+        root_filesystem: string;
+        capabilities: string;
+        tmpfs_buffer: string;
+        provenance_level: string;
+      }
+    | undefined
+  >(undefined);
   const [isModelSheetOpen, setIsModelSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"unified" | "security">("unified");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -140,20 +113,22 @@ export default function Home() {
   };
   const [pendingSkillsCount, setPendingSkillsCount] = useState<number>(0);
   const [selfDeployEnabled, setSelfDeployEnabled] = useState<boolean>(false);
-  const [deployHistory, setDeployHistory] = useState<any[]>([]);
+  const [deployHistory, setDeployHistory] = useState<
+    NonNullable<React.ComponentProps<typeof SettingsView>["deployHistory"]>
+  >([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<"diff" | "output" | "files">("diff");
-  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{ path: string; content: string } | null>(null);
-  const [isLoadingFilePreview, setIsLoadingFilePreview] = useState<boolean>(false);
-  const skipThreadLoadRef = useRef<string | null>(null);
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] = useState<{
+    path: string;
+    content: string;
+  } | null>(null);
 
   const handlePreviewWorkspaceFile = async (filePath: string) => {
     try {
-      setIsLoadingFilePreview(true);
       const res = await fetch(`/api/files?path=${encodeURIComponent(filePath)}&format=json`);
       if (res.ok) {
         const data = await res.json();
@@ -163,10 +138,11 @@ export default function Home() {
         const text = await textRes.text();
         setSelectedWorkspaceFile({ path: filePath, content: text });
       }
-    } catch (err: any) {
-      console.warn("[WorkspacePreview] Failed to preview file:", err.message);
-    } finally {
-      setIsLoadingFilePreview(false);
+    } catch (err: unknown) {
+      console.warn(
+        "[WorkspacePreview] Failed to preview file:",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   };
 
@@ -177,7 +153,7 @@ export default function Home() {
 
   // Fallback messages state if no thread is loaded yet
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage(DEFAULT_PRIMARY_MODEL)
+    getInitialWelcomeMessage(DEFAULT_PRIMARY_MODEL),
   ]);
 
   // Synchronous-like hydration for theme support
@@ -192,7 +168,7 @@ export default function Home() {
         const speedNum = querySpeed ? parseFloat(querySpeed) : undefined;
         setInitialSimulation({
           scenarioKey: querySimulate as SimulationScenarioKey,
-          speedMultiplier: isNaN(speedNum as number) ? undefined : speedNum
+          speedMultiplier: isNaN(speedNum as number) ? undefined : speedNum,
         });
       }
       if (queryTab === "skills") setActiveNavView("skills");
@@ -202,8 +178,11 @@ export default function Home() {
       else if (queryTab === "settings") setActiveNavView("settings");
       else if (queryTab === "security") setViewMode("security");
 
-      const saved = queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
-      const isDark = saved ? saved === "dark" : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const saved =
+        queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
+      const isDark = saved
+        ? saved === "dark"
+        : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
       const applyTheme = (dark: boolean) => {
         document.documentElement.classList.toggle("dark", dark);
@@ -230,27 +209,16 @@ export default function Home() {
     } catch {}
   }, []);
 
-
   // Fetch sandbox & service status
   const fetchStatus = async () => {
     try {
       const res = await fetch("/api/sandbox-status");
       if (res.ok) {
         const data = await res.json();
-        const llmStatus = data.services?.llm?.status || data.services?.ollama?.status || "OFFLINE";
-        const llmModels = data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
-        const llmProfiles = data.services?.llm?.profiles || data.services?.ollama?.profiles;
-        setStatus({
-          llm: llmStatus,
-          ollama: llmStatus,
-          mcp: data.services?.mcp_server?.status || "OFFLINE",
-          airGapped: true
-        });
+        const llmModels =
+          data.services?.llm?.installed_models || data.services?.ollama?.installed_models;
         if (llmModels) {
           setInstalledModels(llmModels);
-        }
-        if (llmProfiles) {
-          setProfiles(llmProfiles);
         }
         setSecurityPosture(data.security_posture);
       }
@@ -265,12 +233,7 @@ export default function Home() {
         }
       } catch {}
     } catch {
-      setStatus({
-        llm: "UNREACHABLE",
-        ollama: "UNREACHABLE",
-        mcp: "UNREACHABLE",
-        airGapped: true
-      });
+      // Best-effort status refresh
     }
   };
 
@@ -327,7 +290,7 @@ export default function Home() {
       const res = await fetch("/api/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "toggleKillSwitch", enabled: targetState })
+        body: JSON.stringify({ action: "toggleKillSwitch", enabled: targetState }),
       });
       if (res.ok) {
         setSelfDeployEnabled(targetState);
@@ -344,16 +307,24 @@ export default function Home() {
           action: "executeSelfDeploy",
           taskId,
           threadId: selectedThreadId,
-          branchName: activeTask?.branchName || (activeTask as any)?.branch
-        })
+          branchName: activeTask?.branchName || (activeTask as { branch?: string } | null)?.branch,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         if (activeTask && activeTask.taskId === taskId) {
           setActiveTask({
             ...activeTask,
-            deploymentUrl: data.deploymentUrl || (data.status === "deployed" || data.record?.status === "deployed" || data.success ? `http://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:3001` : activeTask.deploymentUrl),
-            deploymentNamespace: data.deploymentNamespace || data.namespace || activeTask.deploymentNamespace || "local-agentic-sandbox"
+            deploymentUrl:
+              data.deploymentUrl ||
+              (data.status === "deployed" || data.record?.status === "deployed" || data.success
+                ? `http://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:3001`
+                : activeTask.deploymentUrl),
+            deploymentNamespace:
+              data.deploymentNamespace ||
+              data.namespace ||
+              activeTask.deploymentNamespace ||
+              "local-agentic-sandbox",
           });
         }
         await fetchDeployStatus();
@@ -373,8 +344,8 @@ export default function Home() {
         if (Array.isArray(data.threads)) {
           setThreads(data.threads);
           if (selectLatest && data.threads.length > 0 && selectedThreadId === null) {
-            const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
-            const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+            const urlParams =
+              typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
             const explicitThread = urlParams?.get("thread");
             const explicitView = (urlParams?.get("view") || urlParams?.get("tab")) as NavView;
             const drawerQuery = urlParams?.get("drawer");
@@ -429,7 +400,10 @@ export default function Home() {
           setTasks(data.tasks);
         }
         if (data.activeTask) {
-          if (!selectedThreadId && (data.activeTask.status === "active" || data.activeTask.status === "planning")) {
+          if (
+            !selectedThreadId &&
+            (data.activeTask.status === "active" || data.activeTask.status === "planning")
+          ) {
             setActiveTask(data.activeTask);
           }
           if (data.activeTask.status === "completed" || data.activeTask.status === "parked") {
@@ -448,12 +422,19 @@ export default function Home() {
     }
   };
 
+  const fetchThreadsRef = useRef(fetchThreads);
+  fetchThreadsRef.current = fetchThreads;
+  const fetchActiveTaskRef = useRef(fetchActiveTask);
+  fetchActiveTaskRef.current = fetchActiveTask;
+  const selectedThreadIdRef = useRef(selectedThreadId);
+  selectedThreadIdRef.current = selectedThreadId;
+
   useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
-    fetchThreads(true);
-    fetchActiveTask();
+    fetchThreadsRef.current(true);
+    fetchActiveTaskRef.current();
     fetchMorningReport();
   }, []);
 
@@ -466,7 +447,6 @@ export default function Home() {
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
     if (!selectedThreadId) {
-      setTraces([]);
       return;
     }
 
@@ -475,19 +455,17 @@ export default function Home() {
       return;
     }
 
-    setTraces([]);
-
     const loadSelectedThread = async () => {
       try {
         const res = await fetch(`/api/threads/${selectedThreadId}`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
+          headers: { "Cache-Control": "no-cache" },
         });
         if (res.ok) {
           const data = await res.json();
           if (data.thread) {
-            setSelectedModel(data.thread.model || selectedModel);
-            setReasoningEffort(data.thread.reasoningEffort || reasoningEffort);
+            setSelectedModel((prev) => data.thread.model || prev);
+            setReasoningEffort((prev) => data.thread.reasoningEffort || prev);
             if (Array.isArray(data.thread.messages)) {
               setMessages(data.thread.messages);
             }
@@ -519,13 +497,15 @@ export default function Home() {
       try {
         const res = await fetch(`/api/threads/${selectedThreadId}`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
+          headers: { "Cache-Control": "no-cache" },
         });
         if (!res.ok || !active) return;
         const data = await res.json();
         if (Array.isArray(data?.thread?.messages)) {
           setMessages(data.thread.messages);
-          const lastAssistant = [...data.thread.messages].reverse().find((m: ChatMessage) => m.role === "assistant");
+          const lastAssistant = [...data.thread.messages]
+            .reverse()
+            .find((m: ChatMessage) => m.role === "assistant");
           if (isLiveStreamingMessage(lastAssistant) && active) {
             timer = setTimeout(pollLiveThread, STREAM_POLL_INTERVAL_MS);
           }
@@ -542,21 +522,24 @@ export default function Home() {
   }, [selectedThreadId, isThreadLiveStreaming]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
+  const activeTaskId = activeTask?.taskId;
+  const activeTaskStatus = activeTask?.status;
   useEffect(() => {
-    if (!activeTask || (activeTask.status !== "active" && activeTask.status !== "planning")) return;
-    if (activeTask.taskId?.startsWith("sim-")) return;
+    if (!activeTaskId || (activeTaskStatus !== "active" && activeTaskStatus !== "planning")) return;
+    if (activeTaskId.startsWith("sim-")) return;
 
     const pollTask = async () => {
       try {
-        const res = await fetch(`/api/tasks?taskId=${activeTask.taskId}`);
+        const res = await fetch(`/api/tasks?taskId=${activeTaskId}`);
         if (res.ok) {
           const data = await res.json();
           if (data.task) {
             setActiveTask(data.task);
             if (data.task.status !== "active") {
-              fetchThreads(false);
-              if (selectedThreadId) {
-                fetch(`/api/threads/${selectedThreadId}`)
+              fetchThreadsRef.current(false);
+              const currentThreadId = selectedThreadIdRef.current;
+              if (currentThreadId) {
+                fetch(`/api/threads/${currentThreadId}`)
                   .then((r) => r.json())
                   .then((td) => {
                     if (td?.thread?.messages && Array.isArray(td.thread.messages)) {
@@ -578,7 +561,7 @@ export default function Home() {
 
     const interval = setInterval(pollTask, 2000);
     return () => clearInterval(interval);
-  }, [activeTask?.taskId, activeTask?.status]);
+  }, [activeTaskId, activeTaskStatus]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -628,8 +611,8 @@ export default function Home() {
         body: JSON.stringify({
           title: "New thread",
           model: selectedModel,
-          reasoningEffort
-        })
+          reasoningEffort,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -641,7 +624,11 @@ export default function Home() {
           setViewMode("unified");
           setActiveNavView("sessions");
           try {
-            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+            window.history.pushState(
+              { threadId: data.thread.id },
+              "",
+              `?thread=${encodeURIComponent(data.thread.id)}`
+            );
           } catch {}
         }
       }
@@ -670,7 +657,7 @@ export default function Home() {
   // Launch a multi-milestone builder task inside the thread
   const handleLaunchTask = async (
     goal: string,
-    attachments?: any[],
+    attachments?: unknown[],
     scope?: TaskScope,
     autoDeployOnGreen?: boolean
   ) => {
@@ -687,8 +674,8 @@ export default function Home() {
           attachments,
           model: selectedModel,
           reasoningEffort,
-          autoDeployOnGreen: Boolean(autoDeployOnGreen)
-        })
+          autoDeployOnGreen: Boolean(autoDeployOnGreen),
+        }),
       });
 
       if (res.ok) {
@@ -706,14 +693,20 @@ export default function Home() {
           setSelectedThreadId(data.thread.id);
           setMessages(data.thread.messages || []);
           try {
-            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+            window.history.pushState(
+              { threadId: data.thread.id },
+              "",
+              `?thread=${encodeURIComponent(data.thread.id)}`
+            );
           } catch {}
         }
         if (data.task) {
           setActiveTask(data.task);
         }
       } else {
-        const errData = await res.json().catch(() => ({ error: `Failed to launch task: HTTP ${res.status}` }));
+        const errData = await res
+          .json()
+          .catch(() => ({ error: `Failed to launch task: HTTP ${res.status}` }));
         const msg = errData.error || `Failed to launch task: HTTP ${res.status}`;
         setMessages((prev) => [
           ...prev,
@@ -721,8 +714,8 @@ export default function Home() {
             id: `msg-${Date.now()}-err`,
             role: "assistant",
             content: `Error launching task: ${msg}`,
-            timestamp: new Date().toISOString()
-          }
+            timestamp: new Date().toISOString(),
+          },
         ]);
         throw new Error(msg);
       }
@@ -743,21 +736,17 @@ export default function Home() {
         await fetch(`/api/threads/${selectedThreadId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "stop" })
+          body: JSON.stringify({ action: "stop" }),
         });
       }
       if (activeTask) {
         await fetch(`/api/tasks?taskId=${activeTask.taskId}`, { method: "DELETE" });
-        setActiveTask((prev) => prev ? { ...prev, status: "cancelled" } : null);
+        setActiveTask((prev) => (prev ? { ...prev, status: "cancelled" } : null));
       }
       fetchThreads(false);
     } catch (err) {
       console.error("Failed to stop run:", err);
     }
-  };
-
-  const handleTracesUpdate = (newTraces: ExecutionTraceItem[]) => {
-    setTraces(newTraces);
   };
 
   const handleNavigate = (view: NavView) => {
@@ -784,8 +773,8 @@ export default function Home() {
         body: JSON.stringify({
           title: initialTitle || "New session",
           model: selectedModel,
-          reasoningEffort
-        })
+          reasoningEffort,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -795,7 +784,11 @@ export default function Home() {
           setThreads((prev) => [data.thread, ...prev]);
           setSelectedThreadId(data.thread.id);
           try {
-            window.history.pushState({ threadId: data.thread.id }, "", `?thread=${encodeURIComponent(data.thread.id)}`);
+            window.history.pushState(
+              { threadId: data.thread.id },
+              "",
+              `?thread=${encodeURIComponent(data.thread.id)}`
+            );
           } catch {}
           return data.thread.id;
         }
@@ -809,618 +802,167 @@ export default function Home() {
   const currentThread = threads.find((t) => t.id === selectedThreadId) || null;
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
+  const handleModelChange = (m: string) => {
+    setSelectedModel(m);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("preferred_model", m);
+      }
+    } catch {}
+    if (selectedThreadId) {
+      fetch(`/api/threads/${selectedThreadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setModel", model: m, reasoningEffort }),
+      }).catch(() => {});
+    }
+  };
+
+  const handleReasoningChange = (e: "low" | "medium" | "xhigh") => {
+    setReasoningEffort(e);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("las.reasoningEffort", e);
+      }
+    } catch {}
+    if (selectedThreadId) {
+      fetch(`/api/threads/${selectedThreadId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "setModel",
+          model: selectedModel,
+          reasoningEffort: e,
+        }),
+      }).catch(() => {});
+    }
+  };
+
+  const handleThreadUpdated = (updatedThread: Partial<Thread> & { id: string }) => {
+    setThreads((prev) =>
+      prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
+    );
+  };
+
+  const handleAskAssistantFromBoard = (draftPrompt: string) => {
+    setDraftComposerPrompt(draftPrompt);
+    setActiveNavView("sessions");
+    setViewMode("unified");
+    void handleNewThread();
+  };
+
+  const handleRegisterProject: React.ComponentProps<
+    typeof ProjectsView
+  >["onRegisterProject"] = async (data) => {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to register project");
+    }
+    await fetchProjects();
+  };
+
+  const handleToggleAllowlist: React.ComponentProps<
+    typeof ProjectsView
+  >["onToggleAllowlist"] = async (id, allowlisted) => {
+    await fetch("/api/projects", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, allowlisted }),
+    });
+    await fetchProjects();
+  };
+
+  const handleDeleteProject: React.ComponentProps<typeof ProjectsView>["onDeleteProject"] = async (
+    id
+  ) => {
+    const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      if (selectedProjectId === id) {
+        setSelectedProjectId(null);
+      }
+      await fetchProjects();
+    }
+  };
+
   return (
-    <div className={`app-shell h-[100dvh] md:flex md:flex-row bg-white dark:bg-black text-slate-900 dark:text-zinc-100 antialiased overflow-hidden font-sans ${isSidebarOpen ? "mobile-sidebar-open" : "collapsed-sidebar"} ${isWorkspaceOpen ? "mobile-inspector-open" : "collapsed-inspector"}`}>
-      {/* Material 3 Navigation Drawer */}
-      <NavigationDrawer
-        isLoadingThreads={isLoadingThreads}
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        activeView={activeNavView}
-        onNavigate={handleNavigate}
-        onNewSession={handleNewThread}
-        pendingSkillsCount={pendingSkillsCount}
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        onSelectThread={handleSelectThread}
-        onDeleteThread={handleDeleteThread}
-        onOpenExplorer={() => {
-          setActiveNavView("sessions");
-          setViewMode("unified");
-          setIsExplorerOpen(true);
-        }}
-      />
-
-      {/* Modal Bottom Sheet for Model & Thinking Effort */}
-      <ModelBottomSheet
-        isOpen={isModelSheetOpen}
-        onClose={() => setIsModelSheetOpen(false)}
-        selectedModel={selectedModel}
-        onModelChange={(m) => {
-          setSelectedModel(m);
-          try {
-            if (typeof window !== "undefined") {
-              localStorage.setItem("preferred_model", m);
-            }
-          } catch {}
-          if (selectedThreadId) {
-            fetch(`/api/threads/${selectedThreadId}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "setModel", model: m, reasoningEffort })
-            }).catch(() => {});
-          }
-        }}
-        reasoningEffort={reasoningEffort}
-        onReasoningChange={(e) => {
-          setReasoningEffort(e);
-          try {
-            if (typeof window !== "undefined") {
-              localStorage.setItem("las.reasoningEffort", e);
-            }
-          } catch {}
-          if (selectedThreadId) {
-            fetch(`/api/threads/${selectedThreadId}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "setModel", model: selectedModel, reasoningEffort: e })
-            }).catch(() => {});
-          }
-        }}
-        installedModels={installedModels}
-      />
-
-      {/* 1. PERSISTENT LABELED LEFT NAVIGATION RAIL (82px) */}
-      <nav className="app-rail hidden md:flex flex-col w-[82px] shrink-0 border-r border-stone-200/80 dark:border-white/[0.08] bg-stone-50 dark:bg-black py-3 justify-between items-center z-20 select-none" aria-label="Primary Navigation">
-        <div className="flex flex-col items-center gap-2 w-full px-1.5">
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("sessions"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
-              activeNavView === "sessions" && viewMode === "unified"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="Chat & Sessions"
-          >
-            <MessageSquare className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold">Chat</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("board"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
-              activeNavView === "board"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="Board"
-          >
-            <Columns3 className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold">Board</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("builds"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
-              activeNavView === "builds"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="Autonomous Builds"
-          >
-            <Hammer className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold">Builds</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("projects"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
-              activeNavView === "projects"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="Projects & Folders"
-          >
-            <FolderGit2 className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold">Projects</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("morning-report"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
-              activeNavView === "morning-report"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="Morning Report"
-          >
-            <Sun className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold text-center leading-tight">Morning Report</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("skills"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all relative ${
-              activeNavView === "skills"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="Skills Flywheel"
-          >
-            <Sparkles className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold">Skills</span>
-            {pendingSkillsCount > 0 && (
-              <span className="absolute top-1 right-2 px-1.5 py-0.2 rounded-full bg-emerald-600 text-[10px] text-white font-bold tabular-nums">
-                {pendingSkillsCount}
-              </span>
-            )}
-          </button>
-        </div>
-
-        <div className="flex flex-col items-center gap-2 w-full px-1.5">
-          <button
-            type="button"
-            onClick={() => { setActiveNavView("settings"); setViewMode("unified"); }}
-            className={`rail-btn flex flex-col items-center justify-center w-full py-2.5 px-1 rounded-xl text-xs font-semibold gap-1 transition-all ${
-              activeNavView === "settings"
-                ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black border border-transparent shadow-sm"
-                : "text-stone-600 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-white/[0.07] hover:text-stone-900 dark:hover:text-stone-100 border border-transparent"
-            }`}
-            title="System Settings"
-          >
-            <Settings className="h-5 w-5 shrink-0" />
-            <span className="rail-label text-[11px] font-bold">Settings</span>
-          </button>
-        </div>
-      </nav>
-
-      {/* Main Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden relative">
-        {/* Mobile Backdrop for slide-over Drawers (Sidebar & Inspector) */}
-        <div
-          className={`mobile-backdrop ${(isSidebarOpen || isWorkspaceOpen) ? "block md:hidden" : "hidden"} fixed inset-0 bg-black/60 z-40 md:hidden`}
-          onClick={() => {
-            setIsSidebarOpen(false);
-            setIsWorkspaceOpen(false);
-          }}
-        />
-
-        {/* 3-Pane Collapsible Workbench (Sessions View) */}
-        <div className={`${((activeNavView === "sessions" || !["board", "builds", "projects", "morning-report", "skills", "settings"].includes(activeNavView)) && viewMode === "unified") ? "flex" : "hidden"} flex-1 min-h-0 flex-col md:flex-row overflow-hidden relative`}>
-          {/* Left Sessions Panel */}
-          {isSidebarOpen && (
-            <aside
-              className="app-sidebar hidden md:flex md:relative inset-y-0 left-0 md:w-80 shrink-0 h-full border-r border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-black md:z-10 flex-col overflow-hidden"
-              aria-label="Sessions Panel"
-            >
-              <ThreadsSidebar
-                isLoadingThreads={isLoadingThreads}
-                threads={threads}
-                selectedThreadId={selectedThreadId}
-                activeNavView={activeNavView}
-                onSelectThread={handleSelectThread}
-                onNewThread={handleNewThread}
-                onDeleteThread={handleDeleteThread}
-                onNavigate={handleNavigate}
-                onOpenDrawer={() => setIsDrawerOpen(true)}
-                onCollapse={() => setIsSidebarOpen(false)}
-                hideDock={true}
-              />
-            </aside>
-          )}
-
-          {/* Center Main Stage */}
-          <main
-            className="app-main flex flex-1 min-h-0 flex-col h-full overflow-hidden bg-white dark:bg-black"
-          >
-            <div className="flex flex-1 min-h-0 flex-row relative">
-            <div className="flex flex-1 min-w-0 min-h-0 flex-col relative">
-              <ChatStream
-              messages={messages}
-              draftPrompt={draftComposerPrompt}
-              onClearDraftPrompt={() => setDraftComposerPrompt(null)}
-              setMessages={setMessages}
-              onTracesUpdate={handleTracesUpdate}
-              liveTraces={traces}
-              isActiveView={activeNavView === "sessions" && viewMode === "unified"}
-              activeModel={selectedModel}
-              agentMode={agentMode}
-              reasoningEffort={reasoningEffort}
-              threadId={currentThread?.id}
-              threadTitle={currentThread?.title || "New session"}
-              supervisorState={currentThread ? {
-                needsAttention: currentThread.needsAttention,
-                stalledReason: currentThread.stalledReason,
-                autoResumeCount: currentThread.autoResumeCount,
-              } : undefined}
-              threadStatus={currentThread?.status}
-              threadScope={currentThread?.scope}
-              threadHostAccess={currentThread?.hostAccess}
-              onHostAccessChanged={(enabled, updatedThread) => {
-                if (updatedThread) {
-                  setThreads((prev) =>
-                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
-                  );
-                }
-              }}
-              activeTask={activeTask}
-              onStopTask={handleStopRun}
-              onTaskUpdated={(task, updatedThread) => {
-                if (task) setActiveTask(task);
-                if (updatedThread) {
-                  setThreads((prev) =>
-                    prev.map((t) => (t.id === updatedThread.id ? { ...t, ...updatedThread } : t))
-                  );
-                }
-              }}
-              onBackToList={handleBackToList}
-              onOpenModelSheet={() => setIsModelSheetOpen(true)}
-              onOpenSettings={() => { setActiveNavView("settings"); setViewMode("unified"); }}
-              onOpenDrawer={() => setIsDrawerOpen(true)}
-              onLaunchTask={handleLaunchTask}
-              onNewThread={handleNewThread}
-              onDeleteThread={() => currentThread && handleDeleteThread(currentThread.id)}
-              onDeployRun={handleDeployRun}
-              onEnsureThread={handleEnsureThread}
-              onViewSecurityTelemetry={() => setViewMode("security")}
-              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-              isSidebarOpen={isSidebarOpen}
-              onToggleWorkspace={() => setIsWorkspaceOpen(!isWorkspaceOpen)}
-              isWorkspaceOpen={isWorkspaceOpen}
-              onOpenProjects={() => {
-                setActiveNavView("projects");
-                setViewMode("unified");
-              }}
-              initialSimulation={initialSimulation || undefined}
-              placeholder="Message..."
-            />
-            </div>
-            <ExplorerPanel
-              open={isExplorerOpen}
-              onClose={() => setIsExplorerOpen(false)}
-            />
-            </div>
-          </main>
-
-          {/* Right Workspace Inspector Panel */}
-          {isWorkspaceOpen && (
-            <aside
-              className="app-inspector fixed md:relative inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 w-full md:w-96 lg:w-[430px] shrink-0 h-full border-l border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col z-50 md:z-20 shadow-none"
-              aria-label="Workspace Panel"
-            >
-              {/* Inspector Header */}
-              <div className="inspector-header h-12 px-4 bg-white dark:bg-black border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsWorkspaceOpen(false)}
-                    className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center -ml-2 p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 transition-colors"
-                    title="Back to chat"
-                    aria-label="Back to chat"
-                  >
-                    <ArrowLeft className="h-5 w-5" />
-                  </button>
-                  <span className="font-bold text-sm text-slate-900 dark:text-zinc-100">Workspace</span>
-                  {activeTask?.status === "completed" && (
-                    <span className="badge badge-success text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                      Verified
-                    </span>
-                  )}
-                  {activeTask?.status === "active" && (
-                    <span className="badge badge-info text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20">
-                      Running
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Inspector Tabs */}
-              <div className="inspector-tabs flex items-center gap-1.5 px-3 py-2 bg-stone-100/80 dark:bg-[#0e0e12] border-b border-stone-200 dark:border-white/[0.08] shrink-0 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceTab("diff")}
-                  className={`inspector-tab px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    workspaceTab === "diff"
-                      ? "bg-white dark:bg-[#1f1f28] text-emerald-700 dark:text-emerald-300 shadow-xs border border-stone-200 dark:border-emerald-500/35"
-                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
-                  }`}
-                >
-                  Diff
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceTab("output")}
-                  className={`inspector-tab px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    workspaceTab === "output"
-                      ? "bg-white dark:bg-[#1f1f28] text-emerald-700 dark:text-emerald-300 shadow-xs border border-stone-200 dark:border-emerald-500/35"
-                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
-                  }`}
-                >
-                  Test Output
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceTab("files")}
-                  className={`inspector-tab px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    workspaceTab === "files"
-                      ? "bg-white dark:bg-[#1f1f28] text-emerald-700 dark:text-emerald-300 shadow-xs border border-stone-200 dark:border-emerald-500/35"
-                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
-                  }`}
-                >
-                  Files
-                </button>
-              </div>
-
-              {/* Inspector Body */}
-              <div className="inspector-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-                {workspaceTab === "diff" && (() => {
-                  const taskDiff = activeTask?.milestones?.map((m) => m.diffSummary || m.diff).filter(Boolean).join("\n") || "";
-                  const activeBranch = activeTask?.branchName || (currentThread?.title ? "feature/" + currentThread.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) : "");
-                  if (!taskDiff) {
-                    return (
-                      <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
-                        No file diffs recorded for this run.
-                      </div>
-                    );
-                  }
-                  return (
-                    <DiffViewer
-                      branch={activeBranch || "feature/task-diff"}
-                      diff={taskDiff}
-                      modifiedFiles={plannedFiles.length > 0 ? plannedFiles : []}
-                    />
-                  );
-                })()}
-
-                {workspaceTab === "output" && (() => {
-                  const activeCritic = activeTask?.milestones?.find((m) => m.status === "in_progress")?.criticCritique;
-                  const lastCritic = activeTask?.milestones?.slice().reverse().find((m) => m.criticCritique)?.criticCritique;
-                  const testSummary = activeTask?.testSummary;
-                  const outputText = activeCritic || lastCritic || (testSummary ? `Passed: ${testSummary.passed}, Failed: ${testSummary.failed}${testSummary.durationMs ? ` (${testSummary.durationMs}ms)` : ""}` : "");
-
-                  return (
-                    <div className="p-3 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-slate-800">
-                      <div className="text-emerald-400 font-bold mb-2">● Active Execution Output</div>
-                      {outputText ? (
-                        <div>{outputText}</div>
-                      ) : (
-                        <div className="text-slate-400">No test output recorded yet.</div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {workspaceTab === "files" && (() => {
-                  const traceFiles: string[] = [];
-                  const activeMessages = currentThread?.messages || messages;
-                  activeMessages.forEach((m) => {
-                    m.traces?.forEach((t: any) => {
-                      if (
-                        (t.tool === "workspace_write_file" || t.tool === "workspace_patch_file") &&
-                        t.args?.path
-                      ) {
-                        traceFiles.push(t.args.path);
-                      }
-                    });
-                  });
-                  const allFiles = Array.from(new Set([...plannedFiles, ...traceFiles]));
-
-                  return (
-                    <div className="space-y-2 font-mono text-xs">
-                      <div className="text-slate-500 dark:text-zinc-400 font-bold text-[11px] uppercase tracking-wider px-1">
-                        Planned Deliverables
-                      </div>
-                      {allFiles.length > 0 ? (
-                        <>
-                          <div className="space-y-1.5">
-                            {allFiles.map((f, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => handlePreviewWorkspaceFile(f)}
-                                className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-colors shadow-2xs ${
-                                  selectedWorkspaceFile?.path === f
-                                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
-                                    : "bg-slate-50 dark:bg-zinc-800/60 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                }`}
-                              >
-                                <span className="truncate">{f}</span>
-                                <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shrink-0 ml-2">
-                                  {plannedFiles.includes(f) ? "Planned" : "Created"}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                          {selectedWorkspaceFile && (
-                            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-zinc-800">
-                              <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400 mb-1.5">
-                                <span className="font-semibold text-slate-700 dark:text-zinc-300">
-                                  Preview: {selectedWorkspaceFile.path}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedWorkspaceFile(null)}
-                                  className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                                >
-                                  Close
-                                </button>
-                              </div>
-                              <CodeBlock
-                                filename={selectedWorkspaceFile.path}
-                                code={selectedWorkspaceFile.content}
-                              />
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-850/50 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800">
-                          No workspace files modified yet.
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </aside>
-          )}
-        </div>
-
-        {/* Alternative Navigation Views */}
-        {activeNavView === "settings" && (
-          <SettingsView
-            onBack={() => setActiveNavView("sessions")}
-            selectedModel={selectedModel}
-            reasoningEffort={reasoningEffort}
-            onOpenModelSheet={() => setIsModelSheetOpen(true)}
-            selfDeployEnabled={selfDeployEnabled}
-            onToggleSelfDeploy={handleToggleSelfDeploy}
-            deployHistory={deployHistory}
-          />
-        )}
-
-        {activeNavView === "board" && (
-          <BoardView
-            items={boardItems}
-            onOpenDrawer={() => setIsDrawerOpen(true)}
-            onItemCreated={(item) => setBoardItems((prev) => [...prev, item])}
-            controlState={boardControlState}
-            stopAtBoundary={boardStopAtBoundary}
-            isControlPending={isBoardControlPending}
-            onControlAction={handleBoardControlAction}
-            onAskAssistant={(draftPrompt) => {
-              setDraftComposerPrompt(draftPrompt);
-              setActiveNavView("sessions");
-              setViewMode("unified");
-              void handleNewThread();
-            }}
-          />
-        )}
-
-        {activeNavView === "builds" && (
-          <BuildsView
-            onOpenDrawer={() => setIsDrawerOpen(true)}
-            activeTask={activeTask}
-            tasks={tasks}
-            onStopTask={handleStopRun}
-            onSelectThread={handleSelectThread}
-            onDeployRun={handleDeployRun}
-            onNavigateToProjects={() => setActiveNavView("projects")}
-          />
-        )}
-
-        {activeNavView === "projects" && (
-          <ProjectsView
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={setSelectedProjectId}
-            onRegisterProject={async (data) => {
-              const res = await fetch("/api/projects", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
-              });
-              if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || "Failed to register project");
-              }
-              await fetchProjects();
-            }}
-            onToggleAllowlist={async (id, allowlisted) => {
-              await fetch("/api/projects", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id, allowlisted })
-              });
-              await fetchProjects();
-            }}
-            onOpenDrawer={() => setIsDrawerOpen(true)}
-          />
-        )}
-
-        {activeNavView === "skills" && (
-          <SkillsView
-            onOpenDrawer={() => setIsDrawerOpen(true)}
-            pendingCount={pendingSkillsCount}
-          />
-        )}
-
-        {activeNavView === "morning-report" && (
-          <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-black overflow-y-auto">
-            <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
-              <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 shadow-sm border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsDrawerOpen(true)}
-                    className="p-1.5 rounded-full text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-                    title="Open menu"
-                    aria-label="Open navigation menu"
-                  >
-                    <Menu className="h-6 w-6" />
-                  </button>
-                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-                    Morning Report
-                  </h1>
-                </div>
-                <a
-                  href="/morning-report"
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  Permalink (/morning-report)
-                </a>
-              </div>
-              {overnightReport || morningReport ? (
-                <MorningReportView overnightReport={overnightReport} report={morningReport} />
-              ) : (
-                <div className="p-8 text-center text-slate-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-200 dark:border-zinc-800">
-                  No overnight report generated yet. Reports synthesize at completion of overnight supervisor runs.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {viewMode === "security" && (
-          <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6 max-w-5xl mx-auto w-full bg-white dark:bg-black">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-                  System Architecture &amp; Security Telemetry
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  Zero-trust container isolation and MCP hardware telemetry
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewMode("unified")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-200 transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Sessions</span>
-              </button>
-            </div>
-
-            <section>
-              <SandboxGauge securityPosture={securityPosture} />
-            </section>
-
-            <section>
-              <TraceWaterfall />
-            </section>
-
-            <section>
-              <ExecutionTrace traces={traces} />
-            </section>
-          </div>
-        )}
-      </div>
-    </div>
+    <ViewShell
+      activeNavView={activeNavView}
+      viewMode={viewMode}
+      isDrawerOpen={isDrawerOpen}
+      isSidebarOpen={isSidebarOpen}
+      isWorkspaceOpen={isWorkspaceOpen}
+      isExplorerOpen={isExplorerOpen}
+      isModelSheetOpen={isModelSheetOpen}
+      workspaceTab={workspaceTab}
+      selectedWorkspaceFile={selectedWorkspaceFile}
+      onSetActiveNavView={setActiveNavView}
+      onSetViewMode={setViewMode}
+      onSetDrawerOpen={setIsDrawerOpen}
+      onSetSidebarOpen={setIsSidebarOpen}
+      onSetWorkspaceOpen={setIsWorkspaceOpen}
+      onSetExplorerOpen={setIsExplorerOpen}
+      onSetModelSheetOpen={setIsModelSheetOpen}
+      onSetWorkspaceTab={setWorkspaceTab}
+      onSetSelectedWorkspaceFile={setSelectedWorkspaceFile}
+      onNavigate={handleNavigate}
+      onPreviewWorkspaceFile={handlePreviewWorkspaceFile}
+      threads={threads}
+      isLoadingThreads={isLoadingThreads}
+      selectedThreadId={selectedThreadId}
+      currentThread={currentThread}
+      messages={messages}
+      setMessages={setMessages}
+      draftComposerPrompt={draftComposerPrompt}
+      onClearDraftPrompt={() => setDraftComposerPrompt(null)}
+      traces={traces}
+      onTracesUpdate={handleTracesUpdate}
+      initialSimulation={initialSimulation}
+      onSelectThread={handleSelectThread}
+      onBackToList={handleBackToList}
+      onNewThread={handleNewThread}
+      onDeleteThread={handleDeleteThread}
+      onEnsureThread={handleEnsureThread}
+      onThreadUpdated={handleThreadUpdated}
+      agentMode={agentMode}
+      selectedModel={selectedModel}
+      reasoningEffort={reasoningEffort}
+      installedModels={installedModels}
+      securityPosture={securityPosture}
+      onModelChange={handleModelChange}
+      onReasoningChange={handleReasoningChange}
+      activeTask={activeTask}
+      tasks={tasks}
+      plannedFiles={plannedFiles}
+      onSetActiveTask={setActiveTask}
+      onLaunchTask={handleLaunchTask}
+      onStopRun={handleStopRun}
+      onDeployRun={handleDeployRun}
+      boardItems={boardItems}
+      boardControlState={boardControlState}
+      boardStopAtBoundary={boardStopAtBoundary}
+      isBoardControlPending={isBoardControlPending}
+      onBoardItemCreated={(item) => setBoardItems((prev) => [...prev, item])}
+      onBoardControlAction={handleBoardControlAction}
+      onAskAssistantFromBoard={handleAskAssistantFromBoard}
+      projects={projects}
+      selectedProjectId={selectedProjectId}
+      onSelectProject={setSelectedProjectId}
+      onRegisterProject={handleRegisterProject}
+      onToggleAllowlist={handleToggleAllowlist}
+      onDeleteProject={handleDeleteProject}
+      pendingSkillsCount={pendingSkillsCount}
+      selfDeployEnabled={selfDeployEnabled}
+      onToggleSelfDeploy={handleToggleSelfDeploy}
+      deployHistory={deployHistory}
+      morningReport={morningReport}
+      overnightReport={overnightReport}
+    />
   );
 }

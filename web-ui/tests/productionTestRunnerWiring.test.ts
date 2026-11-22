@@ -4,14 +4,9 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-import {
-  createProductionStepExecutor
-} from "../lib/subagents/supervisor";
-import {
-  formatTestFailureForBuilder,
-  extractFailingTestFromCiLog
-} from "../lib/ci/workerCiFeedback";
-import type { Milestone, TaskManifest } from "../lib/subagents/types";
+import { createProductionStepExecutor } from "../lib/subagents/supervisor";
+import { formatTestFailureForBuilder } from "../lib/ci/workerCiFeedback";
+import type { Milestone } from "../lib/subagents/types";
 
 describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Retries", () => {
   const savedEnv = { ...process.env };
@@ -39,11 +34,11 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
           {
             id: "AC-1",
             assertion: "output.txt must exist",
-            command: 'node -e "console.log(\'test-ok\')"'
-          }
+            command: "node -e \"console.log('test-ok')\"",
+          },
         ],
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
       const mockBuilder = {
@@ -52,32 +47,34 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
           gitSha: "abcd1234abcd1234abcd1234abcd1234abcd1234",
           targetFile: "output.txt",
           iterations: 1,
-          synthetic: false
-        })
+          synthetic: false,
+        }),
       };
 
       const mockCritic = {
         evaluateMilestoneDiff: async () => ({
           approved: true,
-          feedback: []
-        })
+          feedback: [],
+        }),
       };
 
       const mockPool = {
-        executeJob: async (job: any) => {
+        executeJob: async (job: { role?: string }) => {
           if (job.role === "builder") return mockBuilder.executeMilestoneWork();
           if (job.role === "critic") return mockCritic.evaluateMilestoneDiff();
           return {};
         },
         getModelForRole: () => "swift-15-27b-mtp",
         keepAliveFor: () => -1,
-        generate: async () => ({ text: "ok", model: "swift-15-27b-mtp", loadDurationMs: 0 })
+        generate: async () => ({ text: "ok", model: "swift-15-27b-mtp", loadDurationMs: 0 }),
       };
 
       // Call without options.testRunner
       const executor = createProductionStepExecutor({
-        workerPool: mockPool as any,
-        repoRoot: tmpDir
+        workerPool: mockPool as unknown as NonNullable<
+          Parameters<typeof createProductionStepExecutor>[0]
+        >["workerPool"],
+        repoRoot: tmpDir,
       });
 
       const outcome = await executor(mockMilestone, 1);
@@ -97,7 +94,10 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
       assert.ok(formatted.includes("$ npm test"));
       assert.ok(formatted.includes("AssertionError: expected false to be true"));
       assert.ok(formatted.length <= 4500, "Must truncate output to last 4000 characters");
-      assert.ok(!formatted.startsWith("a".repeat(3000)), "Must preserve the end of the log, not the beginning");
+      assert.ok(
+        !formatted.startsWith("a".repeat(3000)),
+        "Must preserve the end of the log, not the beginning"
+      );
     });
 
     it("injects formatted failure into milestone.lastError when testExitCode !== 0", async () => {
@@ -111,49 +111,53 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
           {
             id: "AC-FAIL",
             assertion: "Must pass strict assertion",
-            command: 'node -e "process.exit(1)"'
-          }
+            command: 'node -e "process.exit(1)"',
+          },
         ],
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
-      let criticReceivedFeedback: string[] = [];
       const mockPool = {
-        executeJob: async (job: any) => {
+        executeJob: async (job: { role?: string }) => {
           if (job.role === "builder") {
             return {
               diff: "+ const x = 0;",
               gitSha: "1111222233334444555566667777888899990000",
               targetFile: "failing.ts",
               iterations: 1,
-              synthetic: false
+              synthetic: false,
             };
           }
           if (job.role === "critic") {
             return {
               approved: false,
-              feedback: ["Tests failed"]
+              feedback: ["Tests failed"],
             };
           }
           return {};
         },
         getModelForRole: () => "swift-15-27b-mtp",
         keepAliveFor: () => -1,
-        generate: async () => ({ text: "ok", model: "swift-15-27b-mtp", loadDurationMs: 0 })
+        generate: async () => ({ text: "ok", model: "swift-15-27b-mtp", loadDurationMs: 0 }),
       };
 
       const executor = createProductionStepExecutor({
-        workerPool: mockPool as any,
-        repoRoot: tmpDir
+        workerPool: mockPool as unknown as NonNullable<
+          Parameters<typeof createProductionStepExecutor>[0]
+        >["workerPool"],
+        repoRoot: tmpDir,
       });
 
-      const outcome = await executor(mockMilestone, 1);
+      await executor(mockMilestone, 1);
 
-      assert.ok(mockMilestone.lastError, "milestone.lastError must be populated with test failure details");
+      assert.ok(
+        mockMilestone.lastError,
+        "milestone.lastError must be populated with test failure details"
+      );
       assert.ok(
         mockMilestone.lastError.includes("Acceptance test command failed") ||
-        mockMilestone.lastError.includes("exit"),
+          mockMilestone.lastError.includes("exit"),
         "milestone.lastError must contain formatted failure"
       );
     });
@@ -161,7 +165,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
 
   describe("Task 3: Deliverables attachment on task completion in threads route", () => {
     it("threads/route.ts does not contain hardcoded weather.svg fallback", () => {
-      const threadsRoutePath = fs.existsSync(path.resolve(process.cwd(), "web-ui/app/api/threads/route.ts"))
+      const threadsRoutePath = fs.existsSync(
+        path.resolve(process.cwd(), "web-ui/app/api/threads/route.ts")
+      )
         ? path.resolve(process.cwd(), "web-ui/app/api/threads/route.ts")
         : path.resolve(process.cwd(), "app/api/threads/route.ts");
       const content = fs.readFileSync(threadsRoutePath, "utf8");
@@ -179,7 +185,9 @@ describe("Sprint A2 — Wire Production Acceptance Test Runner & Self-Healing Re
 
   describe("Task 4: POST /api/tasks triggers executeTaskWithRecovery", () => {
     it("tasks/route.ts triggers asynchronous executeTaskWithRecovery when autoExecute !== false", () => {
-      const tasksRoutePath = fs.existsSync(path.resolve(process.cwd(), "web-ui/app/api/tasks/route.ts"))
+      const tasksRoutePath = fs.existsSync(
+        path.resolve(process.cwd(), "web-ui/app/api/tasks/route.ts")
+      )
         ? path.resolve(process.cwd(), "web-ui/app/api/tasks/route.ts")
         : path.resolve(process.cwd(), "app/api/tasks/route.ts");
       const content = fs.readFileSync(tasksRoutePath, "utf8");

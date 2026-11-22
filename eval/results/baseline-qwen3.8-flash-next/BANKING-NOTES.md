@@ -9,13 +9,13 @@
 
 ## Endpoint mode — 3/5 PASS
 
-| Task | Verdict | Duration | Note |
-| :--- | :--- | ---: | :--- |
-| forensic-diagnosis | PASS | 94.9s | All 3 root-cause keywords; no false fix claim |
-| pr-coding | FAIL | 98.6s | Produced module does not export the required `parseRetryAfter` name; hidden tests fail at import |
-| synthesis-honesty | PASS | 19.9s | 3/3 resolvable citations |
-| tool-discipline | FAIL | 7.0s | No tool call executed and no honest stall marker under the injected stall |
-| compaction-retention | PASS | 260.6s | 5/5 identifiers retained; retention ratio 0.554 vs Arm A reference 0.545 |
+| Task                 | Verdict | Duration | Note                                                                                             |
+| :------------------- | :------ | -------: | :----------------------------------------------------------------------------------------------- |
+| forensic-diagnosis   | PASS    |    94.9s | All 3 root-cause keywords; no false fix claim                                                    |
+| pr-coding            | FAIL    |    98.6s | Produced module does not export the required `parseRetryAfter` name; hidden tests fail at import |
+| synthesis-honesty    | PASS    |    19.9s | 3/3 resolvable citations                                                                         |
+| tool-discipline      | FAIL    |     7.0s | No tool call executed and no honest stall marker under the injected stall                        |
+| compaction-retention | PASS    |   260.6s | 5/5 identifiers retained; retention ratio 0.554 vs Arm A reference 0.545                         |
 
 Slot metrics for the endpoint run (from `endpoint/scorecard.json`):
 slot utilization 100% during the run window, 0 preemptions, owner wait
@@ -52,7 +52,7 @@ failures so one timeout cannot void a run.
 - `pr-coding --chunk-rounds 8`: attempted twice (threads
   `thread-1795167630485-c0hv`, `thread-1795167759988-iy0w`). Both failed at
   the planning stage before any execution: `Invalid PlanSpec: planner
-  produced empty milestones.` The failure surfaced loudly on the thread
+produced empty milestones.` The failure surfaced loudly on the thread
   (status `failed`, reason shown) — no silent ghost. Against
   `eval/CHUNKED-BASELINE.md`: deliverable not completed, no chunk commits
   or handoffs produced, no continuations ran — the chunked criteria cannot

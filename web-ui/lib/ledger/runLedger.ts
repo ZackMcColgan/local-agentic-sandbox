@@ -2,19 +2,13 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createRequire } from "module";
-import { MORNING_REPORT_CHECKPOINT_DIR, getCanonicalCheckpointDir } from "../subagents/morningReport";
+import { getCanonicalCheckpointDir } from "../subagents/morningReport";
 import type { SlotUtilizationMetrics } from "../slotScheduler";
 
 const requireModule = createRequire(import.meta.url);
 
 export type RunLedgerStatus =
-  | "running"
-  | "paused"
-  | "stopped"
-  | "crashed"
-  | "completed"
-  | "parked"
-  | "failed";
+  "running" | "paused" | "stopped" | "crashed" | "completed" | "parked" | "failed";
 
 export interface LedgerMilestoneItem {
   id: string;
@@ -173,7 +167,7 @@ export class RunLedger {
       ["status", input.status],
       ["startedAt", input.startedAt],
       ["model", input.model],
-      ["deploymentRef", input.deploymentRef]
+      ["deploymentRef", input.deploymentRef],
     ];
 
     for (const [key, val] of requiredStrings) {
@@ -230,7 +224,7 @@ export class RunLedger {
       checkpointPath: row.checkpoint_path ? String(row.checkpoint_path) : undefined,
       resumable: Number(row.resumable) === 1,
       errorMessage: row.error_message ? String(row.error_message) : undefined,
-      slotMetrics
+      slotMetrics,
     };
   }
 
@@ -345,8 +339,7 @@ export class RunLedger {
     const nextDeployRef = update.deploymentRef ?? existing.deploymentRef;
     const nextCheckpoint =
       update.checkpointPath !== undefined ? update.checkpointPath : existing.checkpointPath;
-    const nextResumable =
-      update.resumable !== undefined ? update.resumable : existing.resumable;
+    const nextResumable = update.resumable !== undefined ? update.resumable : existing.resumable;
     const nextError =
       update.errorMessage !== undefined ? update.errorMessage : existing.errorMessage;
 
@@ -392,7 +385,10 @@ export class RunLedger {
     return this.getRun(runId)!;
   }
 
-  public recordHeartbeat(runId: string, nowIso: string = new Date().toISOString()): RunLedgerEntry | null {
+  public recordHeartbeat(
+    runId: string,
+    nowIso: string = new Date().toISOString()
+  ): RunLedgerEntry | null {
     const existing = this.getRun(runId);
     if (!existing) return null;
     return this.updateRunProgress(runId, { lastHeartbeatAt: nowIso });
@@ -408,14 +404,11 @@ export class RunLedger {
       status: "stopped",
       resumable: true,
       errorMessage: reason,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
     });
   }
 
-  public pauseRun(
-    runId: string,
-    checkpointPayload?: Record<string, unknown>
-  ): RunLedgerEntry {
+  public pauseRun(runId: string, checkpointPayload?: Record<string, unknown>): RunLedgerEntry {
     const existing = this.getRun(runId);
     if (!existing) {
       throw new Error(`Run not found in ledger: ${runId}`);
@@ -438,7 +431,7 @@ export class RunLedger {
       status: "paused",
       completedMilestoneIds,
       milestoneSummary: existing.milestoneSummary,
-      savedAt: new Date().toISOString()
+      savedAt: new Date().toISOString(),
     };
 
     fs.writeFileSync(checkpointPath, JSON.stringify(payloadToSave, null, 2), "utf8");
@@ -446,7 +439,7 @@ export class RunLedger {
     return this.updateRunProgress(runId, {
       status: "paused",
       checkpointPath,
-      resumable: true
+      resumable: true,
     });
   }
 
@@ -467,7 +460,7 @@ export class RunLedger {
       throw new Error(`Run ${runId} is in status '${existing.status}' and cannot be resumed`);
     }
 
-    let completedIdsFromCheckpoint = new Set<string>(
+    const completedIdsFromCheckpoint = new Set<string>(
       existing.milestoneSummary.filter((m) => m.status === "completed").map((m) => m.id)
     );
 
@@ -487,7 +480,7 @@ export class RunLedger {
     // Mark running immediately
     let current = this.updateRunProgress(runId, {
       status: "running",
-      resumable: false
+      resumable: false,
     });
 
     if (!milestoneExecutor) {
@@ -506,7 +499,7 @@ export class RunLedger {
 
       updatedMilestones[i] = { ...m, status: "in_progress" };
       this.updateRunProgress(runId, {
-        milestoneSummary: updatedMilestones
+        milestoneSummary: updatedMilestones,
       });
 
       const execResult = await milestoneExecutor(updatedMilestones[i]);
@@ -516,12 +509,12 @@ export class RunLedger {
       updatedMilestones[i] = {
         ...updatedMilestones[i],
         status: "completed",
-        commitSha: execResult?.commitSha ?? updatedMilestones[i].commitSha
+        commitSha: execResult?.commitSha ?? updatedMilestones[i].commitSha,
       };
 
       current = this.updateRunProgress(runId, {
         gitShas: updatedShas,
-        milestoneSummary: updatedMilestones
+        milestoneSummary: updatedMilestones,
       });
     }
 
@@ -530,7 +523,7 @@ export class RunLedger {
       completedAt: new Date().toISOString(),
       gitShas: updatedShas,
       milestoneSummary: updatedMilestones,
-      resumable: false
+      resumable: false,
     });
   }
 
@@ -547,7 +540,7 @@ export class RunLedger {
     const freshMilestones: LedgerMilestoneItem[] = original.milestoneSummary.map((m) => ({
       id: m.id,
       title: m.title,
-      status: "pending"
+      status: "pending",
     }));
 
     return this.recordRunStart({
@@ -562,7 +555,7 @@ export class RunLedger {
       gitShas: [],
       milestoneSummary: freshMilestones,
       deploymentRef: "pending",
-      resumable: false
+      resumable: false,
     });
   }
 
@@ -570,8 +563,7 @@ export class RunLedger {
     staleThresholdSeconds?: number;
     nowMs?: number;
   }): RunLedgerEntry[] {
-    const thresholdSec =
-      options?.staleThresholdSeconds ?? this.defaultStaleThresholdSeconds;
+    const thresholdSec = options?.staleThresholdSeconds ?? this.defaultStaleThresholdSeconds;
     const nowMs = options?.nowMs ?? Date.now();
 
     const runningEntries = this.listRuns({ status: "running" });
@@ -579,15 +571,13 @@ export class RunLedger {
 
     for (const entry of runningEntries) {
       const hbMs = Date.parse(entry.lastHeartbeatAt || entry.startedAt);
-      const elapsedSeconds = Number.isNaN(hbMs)
-        ? thresholdSec + 1
-        : (nowMs - hbMs) / 1000;
+      const elapsedSeconds = Number.isNaN(hbMs) ? thresholdSec + 1 : (nowMs - hbMs) / 1000;
 
       if (elapsedSeconds > thresholdSec) {
         const updated = this.updateRunProgress(entry.runId, {
           status: "crashed",
           resumable: true,
-          errorMessage: `No heartbeat for ${Math.round(elapsedSeconds)}s (threshold: ${thresholdSec}s). Marked crashed for resume.`
+          errorMessage: `No heartbeat for ${Math.round(elapsedSeconds)}s (threshold: ${thresholdSec}s). Marked crashed for resume.`,
         });
         crashed.push(updated);
       }
@@ -633,4 +623,3 @@ export function closeSharedRunLedger(): void {
     startupScanCompleted = false;
   }
 }
-

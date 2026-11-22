@@ -7,7 +7,10 @@ const componentsDir = path.join(process.cwd(), "components");
 const appDir = path.join(process.cwd(), "app");
 const sidebar = fs.readFileSync(path.join(componentsDir, "ThreadsSidebar.tsx"), "utf8");
 const drawer = fs.readFileSync(path.join(componentsDir, "NavigationDrawer.tsx"), "utf8");
-const page = fs.readFileSync(path.join(appDir, "page.tsx"), "utf8");
+const page =
+  fs.readFileSync(path.join(appDir, "page.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.join(componentsDir, "ViewShell.tsx"), "utf8");
 
 function segment(src: string, startMarker: string, length = 1600): string {
   const i = src.indexOf(startMarker);
@@ -78,13 +81,10 @@ describe("parity PR3 — session cards (#15151b, rounded-2xl, mono meta, status 
   });
 
   it("running card gets the cyan border, inset bar, and actions", () => {
-    assert.ok(
-      sidebar.includes("border-cyan-500/40"),
-      "running border cyan-500/40",
-    );
+    assert.ok(sidebar.includes("border-cyan-500/40"), "running border cyan-500/40");
     assert.ok(
       sidebar.includes("shadow-[inset_3px_0_0_#22d3ee]"),
-      "running card has the inset 3px cyan left bar",
+      "running card has the inset 3px cyan left bar"
     );
     assert.ok(sidebar.includes("Open settings"), "ghost action label");
   });
@@ -103,7 +103,7 @@ describe("parity PR3 — drawer rows + rail (secondary surfaces)", () => {
   it("the selected rail button is emerald with high-contrast text", () => {
     assert.ok(
       page.includes("bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black"),
-      "rail selection is emerald with high-contrast text",
+      "rail selection is emerald with high-contrast text"
     );
   });
 });

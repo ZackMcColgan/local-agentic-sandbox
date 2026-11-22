@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Eye,
   Code,
@@ -11,12 +11,11 @@ import {
   Minimize2,
   ZoomIn,
   ZoomOut,
-  RotateCcw,
   Loader2,
   AlertCircle,
   FileCode,
   Sparkles,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react";
 import { sanitizeSvg, isDrawioXml } from "../lib/svgUtils";
 import { copyText } from "../lib/clipboard";
@@ -41,7 +40,7 @@ export function SvgViewer({
   initialTab = "preview",
   allowFullscreen = true,
   embeddedInCanvas = false,
-  className = ""
+  className = "",
 }: SvgViewerProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "code">(initialTab);
   const [rawSvg, setRawSvg] = useState<string>(initialCode || "");
@@ -108,7 +107,11 @@ export function SvgViewer({
   }, [rawSvg]);
 
   const isDrawio = useMemo(() => {
-    return isDrawioXml(rawSvg) || (url ? url.includes(".drawio") : false) || (title ? title.includes(".drawio") : false);
+    return (
+      isDrawioXml(rawSvg) ||
+      (url ? url.includes(".drawio") : false) ||
+      (title ? title.includes(".drawio") : false)
+    );
   }, [rawSvg, url, title]);
 
   // Extract dimensions or viewBox if available
@@ -160,7 +163,7 @@ export function SvgViewer({
   const bgClasses: Record<BgMode, string> = {
     white: "bg-white",
     dark: "bg-black",
-    grid: "bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#3f3f46_1px,transparent_1px)] [background-size:16px_16px] bg-slate-50 dark:bg-zinc-900"
+    grid: "bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#3f3f46_1px,transparent_1px)] [background-size:16px_16px] bg-slate-50 dark:bg-zinc-900",
   };
 
   const contentMarkup = (
@@ -173,192 +176,197 @@ export function SvgViewer({
     >
       {/* 1. Header Toolbar */}
       {!embeddedInCanvas && (
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
-        {/* Left: Title & Metadata Badge */}
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-zinc-100 min-w-0">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="line-clamp-2" title={title}>{title}</span>
-          </div>
-          {isDrawio && (
-            <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold">
-              Draw.io
-            </span>
-          )}
-          {dimensions && (
-            <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
-              {dimensions}
-            </span>
-          )}
-        </div>
-
-
-        {/* Center / Right: Action controls */}
-        <div className="flex items-center gap-1.5 flex-wrap ml-auto">
-          {/* Tab Switcher */}
-          <div className="flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[11px] font-medium">
-            <button
-              type="button"
-              onClick={() => setActiveTab("preview")}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
-                activeTab === "preview"
-                  ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300 shadow-xs font-semibold"
-                  : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-              }`}
-            >
-              <Eye className="h-3 w-3" />
-              <span>Preview</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("code")}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
-                activeTab === "code"
-                  ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300 shadow-xs font-semibold"
-                  : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
-              }`}
-            >
-              <Code className="h-3 w-3" />
-              <span>Code</span>
-            </button>
-          </div>
-
-          {/* Background Mode Toggle (only relevant in preview) */}
-          {activeTab === "preview" && (
-            <div className="hidden sm:flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[10px]">
-              <button
-                type="button"
-                onClick={() => setBgMode("white")}
-                title="Crisp White Canvas"
-                className={`px-1.5 py-0.5 rounded ${
-                  bgMode === "white"
-                    ? "bg-white text-slate-900 shadow-xs font-bold"
-                    : "text-slate-500 hover:text-slate-800 dark:text-zinc-400"
-                }`}
-              >
-                White
-              </button>
-              <button
-                type="button"
-                onClick={() => setBgMode("dark")}
-                title="Dark Canvas"
-                className={`px-1.5 py-0.5 rounded ${
-                  bgMode === "dark"
-                    ? "bg-zinc-950 text-white shadow-xs font-bold"
-                    : "text-slate-500 hover:text-slate-800 dark:text-zinc-400"
-                }`}
-              >
-                Dark
-              </button>
-              <button
-                type="button"
-                onClick={() => setBgMode("grid")}
-                title="Transparency Grid"
-                className={`px-1.5 py-0.5 rounded ${
-                  bgMode === "grid"
-                    ? "bg-slate-300 dark:bg-zinc-600 text-slate-900 dark:text-white shadow-xs font-bold"
-                    : "text-slate-500 hover:text-slate-800 dark:text-zinc-400"
-                }`}
-              >
-                Grid
-              </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs">
+          {/* Left: Title & Metadata Badge */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-zinc-100 min-w-0">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="line-clamp-2" title={title}>
+                {title}
+              </span>
             </div>
-          )}
-
-          {/* Zoom controls (preview mode only) */}
-          {activeTab === "preview" && (
-            <div className="flex items-center gap-0.5 bg-slate-200/70 dark:bg-zinc-800 rounded-lg p-0.5 text-[11px] font-mono">
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                disabled={zoom <= 0.5}
-                title="Zoom Out"
-                className="p-1 rounded hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 disabled:opacity-40"
-              >
-                <ZoomOut className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                onClick={handleResetZoom}
-                title="Reset Zoom to 100%"
-                className="px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-[10px]"
-              >
-                {Math.round(zoom * 100)}%
-              </button>
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                disabled={zoom >= 3.0}
-                title="Zoom In"
-                className="p-1 rounded hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 disabled:opacity-40"
-              >
-                <ZoomIn className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Copy Button */}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
-            title="Copy SVG"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3 w-3 text-slate-500" />
-                <span className="hidden sm:inline text-[10px]">Copy</span>
-              </>
+            {isDrawio && (
+              <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold">
+                Draw.io
+              </span>
             )}
-          </button>
+            {dimensions && (
+              <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
+                {dimensions}
+              </span>
+            )}
+          </div>
 
-          {/* Open in Diagrams.net Button for Draw.io diagrams */}
-          {isDrawio && rawSvg && (
-            <a
-              href={`https://viewer.diagrams.net/?highlight=0000ff&edit=_blank&layers=1&nav=1#R${encodeURIComponent(rawSvg)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] transition-colors"
-              title="Open in Diagrams.net"
-            >
-              <ExternalLink className="h-3 w-3" />
-              <span className="hidden sm:inline text-[10px]">Diagrams.net</span>
-            </a>
-          )}
+          {/* Center / Right: Action controls */}
+          <div className="flex items-center gap-1.5 flex-wrap ml-auto">
+            {/* Tab Switcher */}
+            <div className="flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[11px] font-medium">
+              <button
+                type="button"
+                onClick={() => setActiveTab("preview")}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
+                  activeTab === "preview"
+                    ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                }`}
+              >
+                <Eye className="h-3 w-3" />
+                <span>Preview</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("code")}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
+                  activeTab === "code"
+                    ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300 shadow-xs font-semibold"
+                    : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
+                }`}
+              >
+                <Code className="h-3 w-3" />
+                <span>Code</span>
+              </button>
+            </div>
 
-          {/* Download Button */}
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
-            title={isDrawio && !rawSvg.startsWith("<svg") ? "Download Draw.io XML file" : "Download SVG file"}
-          >
-            <Download className="h-3 w-3 text-slate-500" />
-            <span className="hidden sm:inline text-[10px]">Download</span>
-          </button>
+            {/* Background Mode Toggle (only relevant in preview) */}
+            {activeTab === "preview" && (
+              <div className="hidden sm:flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setBgMode("white")}
+                  title="Crisp White Canvas"
+                  className={`px-1.5 py-0.5 rounded ${
+                    bgMode === "white"
+                      ? "bg-white text-slate-900 shadow-xs font-bold"
+                      : "text-slate-500 hover:text-slate-800 dark:text-zinc-400"
+                  }`}
+                >
+                  White
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBgMode("dark")}
+                  title="Dark Canvas"
+                  className={`px-1.5 py-0.5 rounded ${
+                    bgMode === "dark"
+                      ? "bg-zinc-950 text-white shadow-xs font-bold"
+                      : "text-slate-500 hover:text-slate-800 dark:text-zinc-400"
+                  }`}
+                >
+                  Dark
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBgMode("grid")}
+                  title="Transparency Grid"
+                  className={`px-1.5 py-0.5 rounded ${
+                    bgMode === "grid"
+                      ? "bg-slate-300 dark:bg-zinc-600 text-slate-900 dark:text-white shadow-xs font-bold"
+                      : "text-slate-500 hover:text-slate-800 dark:text-zinc-400"
+                  }`}
+                >
+                  Grid
+                </button>
+              </div>
+            )}
 
-          {/* Fullscreen Toggle */}
-          {allowFullscreen && (
+            {/* Zoom controls (preview mode only) */}
+            {activeTab === "preview" && (
+              <div className="flex items-center gap-0.5 bg-slate-200/70 dark:bg-zinc-800 rounded-lg p-0.5 text-[11px] font-mono">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={zoom <= 0.5}
+                  title="Zoom Out"
+                  className="p-1 rounded hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 disabled:opacity-40"
+                >
+                  <ZoomOut className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetZoom}
+                  title="Reset Zoom to 100%"
+                  className="px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-[10px]"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={zoom >= 3.0}
+                  title="Zoom In"
+                  className="p-1 rounded hover:bg-white dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 disabled:opacity-40"
+                >
+                  <ZoomIn className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
+            {/* Copy Button */}
             <button
               type="button"
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
-              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Preview"}
+              onClick={handleCopy}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
+              title="Copy SVG"
             >
-              {isFullscreen ? (
-                <Minimize2 className="h-3 w-3" />
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">Copied</span>
+                </>
               ) : (
-                <Maximize2 className="h-3 w-3" />
+                <>
+                  <Copy className="h-3 w-3 text-slate-500" />
+                  <span className="hidden sm:inline text-[10px]">Copy</span>
+                </>
               )}
             </button>
-          )}
+
+            {/* Open in Diagrams.net Button for Draw.io diagrams */}
+            {isDrawio && rawSvg && (
+              <a
+                href={`https://viewer.diagrams.net/?highlight=0000ff&edit=_blank&layers=1&nav=1#R${encodeURIComponent(rawSvg)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] transition-colors"
+                title="Open in Diagrams.net"
+              >
+                <ExternalLink className="h-3 w-3" />
+                <span className="hidden sm:inline text-[10px]">Diagrams.net</span>
+              </a>
+            )}
+
+            {/* Download Button */}
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
+              title={
+                isDrawio && !rawSvg.startsWith("<svg")
+                  ? "Download Draw.io XML file"
+                  : "Download SVG file"
+              }
+            >
+              <Download className="h-3 w-3 text-slate-500" />
+              <span className="hidden sm:inline text-[10px]">Download</span>
+            </button>
+
+            {/* Fullscreen Toggle */}
+            {allowFullscreen && (
+              <button
+                type="button"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-750 text-slate-700 dark:text-zinc-300 text-[11px] transition-colors"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Preview"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="h-3 w-3" />
+                ) : (
+                  <Maximize2 className="h-3 w-3" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
       )}
 
       {/* 2. Main Content Viewport */}
@@ -416,7 +424,9 @@ export function SvgViewer({
           <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-rose-600 dark:text-rose-400">
             <AlertCircle className="h-6 w-6" />
             <span className="text-xs font-medium">Failed to render SVG</span>
-            <span className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-sm">{fetchError}</span>
+            <span className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-sm">
+              {fetchError}
+            </span>
           </div>
         ) : activeTab === "preview" ? (
           <div
@@ -429,7 +439,7 @@ export function SvgViewer({
                 style={{
                   transform: `scale(${zoom})`,
                   transformOrigin: "center center",
-                  transition: "transform 0.15s ease-out"
+                  transition: "transform 0.15s ease-out",
                 }}
                 className="flex items-center justify-center w-full max-w-full [&>svg]:w-full [&>svg]:max-w-[760px] [&>svg]:max-h-[520px] [&>svg]:h-auto [&>svg]:min-w-[40px] [&>svg]:min-h-[40px] [&>svg]:block"
                 dangerouslySetInnerHTML={{ __html: sanitized }}
@@ -464,18 +474,17 @@ export function SvgViewer({
 
       {/* 3. Footer Bar */}
       {!embeddedInCanvas && (
-      <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-2">
-        <span className="font-mono truncate">
-          {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
-        </span>
-        {activeTab === "preview" && (
-          <span className="hidden sm:inline text-slate-400 dark:text-zinc-400 shrink-0">
-            Click +/- or zoom buttons to inspect details
+        <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-2">
+          <span className="font-mono truncate">
+            {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
           </span>
-        )}
-      </div>
+          {activeTab === "preview" && (
+            <span className="hidden sm:inline text-slate-400 dark:text-zinc-400 shrink-0">
+              Click +/- or zoom buttons to inspect details
+            </span>
+          )}
+        </div>
       )}
-
     </div>
   );
 
@@ -498,25 +507,12 @@ export function SvgViewer({
 /**
  * File link card for markdown links pointing to SVG files
  */
-export function SvgFileCard({
-  src,
-  alt,
-  title
-}: {
-  src: string;
-  alt?: string;
-  title?: string;
-}) {
+export function SvgFileCard({ src, alt, title }: { src: string; alt?: string; title?: string }) {
   const displayTitle = title || alt || src.split("/").pop() || "Vector Graphic";
 
   return (
     <div className="my-3">
-      <SvgViewer
-        url={src}
-        title={displayTitle}
-        initialTab="preview"
-        allowFullscreen={true}
-      />
+      <SvgViewer url={src} title={displayTitle} initialTab="preview" allowFullscreen={true} />
     </div>
   );
 }
@@ -527,7 +523,7 @@ export function SvgFileCard({
 export function SvgFileLink({
   href,
   rawHref,
-  children
+  children,
 }: {
   href: string;
   rawHref?: string;
@@ -535,13 +531,16 @@ export function SvgFileLink({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [showInline, setShowInline] = useState(false);
-  const title = typeof children === "string" ? children : rawHref || href.split("/").pop() || "SVG File";
+  const title =
+    typeof children === "string" ? children : rawHref || href.split("/").pop() || "SVG File";
 
   return (
     <span className="inline-flex flex-col my-1 max-w-full align-middle">
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs shadow-xs font-mono">
         <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        <span className="font-semibold line-clamp-2" title={title}>{title}</span>
+        <span className="font-semibold line-clamp-2" title={title}>
+          {title}
+        </span>
         <button
           type="button"
           onClick={() => setShowInline(!showInline)}
@@ -560,11 +559,7 @@ export function SvgFileLink({
 
       {showInline && (
         <span className="mt-2 block w-full max-w-xl">
-          <SvgViewer
-            url={href}
-            title={title}
-            initialTab="preview"
-          />
+          <SvgViewer url={href} title={title} initialTab="preview" />
         </span>
       )}
 
@@ -590,4 +585,3 @@ export function SvgFileLink({
     </span>
   );
 }
-

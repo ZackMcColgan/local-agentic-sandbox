@@ -37,18 +37,23 @@ export function useTheme(initialTheme?: Theme) {
       const queryTheme = urlParams.get("theme");
       if (queryTheme === "light" || queryTheme === "dark") return queryTheme;
 
-      const saved = localStorage.getItem("theme") || localStorage.getItem("app-theme") || localStorage.getItem("las_mockup_theme");
+      const saved =
+        localStorage.getItem("theme") ||
+        localStorage.getItem("app-theme") ||
+        localStorage.getItem("las_mockup_theme");
       if (saved === "light" || saved === "dark" || saved === "system") return saved as Theme;
     } catch {}
 
     return "dark";
   });
 
-  const resolvedTheme: ResolvedTheme = theme === "system" ? getSystemTheme() : (theme as ResolvedTheme);
+  const resolvedTheme: ResolvedTheme =
+    theme === "system" ? getSystemTheme() : (theme as ResolvedTheme);
 
   const setTheme = useCallback((nextTheme: Theme) => {
     setThemeState(nextTheme);
-    const resolved: ResolvedTheme = nextTheme === "system" ? getSystemTheme() : (nextTheme as ResolvedTheme);
+    const resolved: ResolvedTheme =
+      nextTheme === "system" ? getSystemTheme() : (nextTheme as ResolvedTheme);
     applyThemeToDom(resolved);
 
     try {
@@ -96,6 +101,6 @@ export function useTheme(initialTheme?: Theme) {
     resolvedTheme,
     setTheme,
     toggleTheme,
-    isDark: resolvedTheme === "dark"
+    isDark: resolvedTheme === "dark",
   };
 }

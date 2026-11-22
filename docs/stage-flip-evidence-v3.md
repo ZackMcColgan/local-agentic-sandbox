@@ -65,10 +65,10 @@ bundle flips a flag or promotes a branch; those are owner decisions.
   pipeline machinery (ITEM-7 orchestrator + ITEM-9 shadow stages) is live;
   the unattended-drain proof is still outstanding.
 - Agreement ledger: 0 comparisons accumulated. ITEM-9's ledger starts empty;
-  >=10 shadow reviewerGate comparisons with >=95% agreement and 0 escapes
-  are required before stage3Eligible can read true. Accumulation requires
-  production drain wiring (real gh polling + reviewer-thread deps in the
-  drain route) plus real PR flow through drains — future work, owner-paced.
+  > =10 shadow reviewerGate comparisons with >=95% agreement and 0 escapes
+  > are required before stage3Eligible can read true. Accumulation requires
+  > production drain wiring (real gh polling + reviewer-thread deps in the
+  > drain route) plus real PR flow through drains — future work, owner-paced.
 
 ## 4. Decisions requested of the owner
 

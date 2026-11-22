@@ -38,8 +38,8 @@ describe("P0.3 — Data-loss fixes", () => {
         timestamp: new Date().toISOString(),
         roundPromptTokens: 1234,
         outputTokens: 567,
-        phaseTimings: { thinkingMs: 100, generationMs: 200 }
-      } as any);
+        phaseTimings: { thinkingMs: 100, generationMs: 200 },
+      } as unknown as Parameters<typeof store.upsertMessage>[1]);
 
       // Client completion upserts with undefined token/timing fields
       await store.upsertMessage(t.id, {
@@ -49,11 +49,15 @@ describe("P0.3 — Data-loss fixes", () => {
         timestamp: new Date().toISOString(),
         roundPromptTokens: undefined,
         outputTokens: undefined,
-        phaseTimings: undefined
-      } as any);
+        phaseTimings: undefined,
+      } as unknown as Parameters<typeof store.upsertMessage>[1]);
 
       const updated = await store.getThread(t.id);
-      const msg = updated?.messages.find((m) => m.id === "msg-1") as any;
+      const msg = updated?.messages.find((m) => m.id === "msg-1") as unknown as {
+        roundPromptTokens?: number;
+        outputTokens?: number;
+        phaseTimings?: { thinkingMs?: number; generationMs?: number };
+      };
       assert.equal(msg.roundPromptTokens, 1234);
       assert.equal(msg.outputTokens, 567);
       assert.deepEqual(msg.phaseTimings, { thinkingMs: 100, generationMs: 200 });

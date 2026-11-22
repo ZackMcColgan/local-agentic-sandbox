@@ -16,11 +16,11 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -47,18 +47,18 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
     let launchTaskCalled = false;
     let launchedGoal = "";
 
-    globalThis.fetch = (async (url: any, init?: any) => {
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/threads/test-thread-1")) {
         try {
-          const body = JSON.parse(init?.body || "{}");
+          const body = JSON.parse(String(init?.body || "{}"));
           if (body.action === "addMessage") {
             addMessageDispatched = true;
           }
         } catch {}
       }
-      return new (win as any).Response(JSON.stringify({ ok: true }), { status: 200 });
-    }) as any;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof globalThis.fetch;
 
     root = createRoot(container);
     await act(async () => {
@@ -72,7 +72,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           onLaunchTask: async (goal: string) => {
             launchTaskCalled = true;
             launchedGoal = goal;
-          }
+          },
         })
       );
     });
@@ -87,14 +87,25 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
 
     await act(async () => {
       const textareaPropsKey = Object.keys(textarea).find((k) => k.startsWith("__reactProps"));
-      if (textareaPropsKey && (textarea as any)[textareaPropsKey]?.onChange) {
-        (textarea as any)[textareaPropsKey].onChange({ target: { value: builderPrompt } });
+      const textareaProps = textareaPropsKey
+        ? (
+            textarea as unknown as Record<
+              string,
+              { onChange?: (e: { target: { value: string } }) => void } | undefined
+            >
+          )[textareaPropsKey]
+        : undefined;
+      if (textareaProps?.onChange) {
+        textareaProps.onChange({ target: { value: builderPrompt } });
       } else {
-        const tracker = (textarea as any)._valueTracker;
+        const tracker = (
+          textarea as unknown as { _valueTracker?: { setValue: (v: string) => void } }
+        )._valueTracker;
         if (tracker) tracker.setValue("");
         textarea.value = builderPrompt;
-        textarea.dispatchEvent(new (win as any).Event("input", { bubbles: true }));
-        textarea.dispatchEvent(new (win as any).Event("change", { bubbles: true }));
+        const WinEvent = (win as unknown as { Event: typeof Event }).Event;
+        textarea.dispatchEvent(new WinEvent("input", { bubbles: true }));
+        textarea.dispatchEvent(new WinEvent("change", { bubbles: true }));
       }
     });
 
@@ -103,15 +114,28 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
 
     await act(async () => {
       const formPropsKey = Object.keys(sendForm).find((k) => k.startsWith("__reactProps"));
-      if (formPropsKey && (sendForm as any)[formPropsKey]?.onSubmit) {
-        (sendForm as any)[formPropsKey].onSubmit({ preventDefault: () => {} });
+      const formProps = formPropsKey
+        ? (
+            sendForm as unknown as Record<
+              string,
+              { onSubmit?: (e: { preventDefault: () => void }) => void } | undefined
+            >
+          )[formPropsKey]
+        : undefined;
+      if (formProps?.onSubmit) {
+        formProps.onSubmit({ preventDefault: () => {} });
       } else {
-        sendForm.dispatchEvent(new (win as any).Event("submit", { bubbles: true, cancelable: true }));
+        const WinEvent = (win as unknown as { Event: typeof Event }).Event;
+        sendForm.dispatchEvent(new WinEvent("submit", { bubbles: true, cancelable: true }));
       }
     });
 
     assert.equal(launchTaskCalled, true, "onLaunchTask must be called for builder prompt");
-    assert.equal(launchedGoal, expectedGoal, "Goal passed to onLaunchTask must match input prompt with the /build prefix stripped");
+    assert.equal(
+      launchedGoal,
+      expectedGoal,
+      "Goal passed to onLaunchTask must match input prompt with the /build prefix stripped"
+    );
     assert.equal(
       addMessageDispatched,
       false,
@@ -135,35 +159,35 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           acceptanceCriteria: [],
           status: "in_progress",
           builderIterations: 1,
-          criticRounds: 0
-        }
+          criticRounds: 0,
+        },
       ],
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     const messages = [
       {
         id: "msg-user-1",
         role: "user" as const,
-        content: "Build vector search"
+        content: "Build vector search",
       },
       {
         id: "msg-assistant-1",
         role: "assistant" as const,
         content: "Started autonomous engineering run.",
-        taskId: "task-multi-msg-123"
+        taskId: "task-multi-msg-123",
       },
       {
         id: "msg-assistant-2",
         role: "assistant" as const,
         content: "Completed milestone 1.",
-        taskId: "task-multi-msg-123"
-      }
+        taskId: "task-multi-msg-123",
+      },
     ];
 
     root = createRoot(container);
@@ -175,14 +199,12 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           reasoningEffort: "medium",
           threadId: "test-thread-1",
           activeTask: mockTask,
-          messages
+          messages,
         })
       );
     });
 
-    // Count instances of LiveRunBlock (rendered via milestone checklist or live-run indicators)
-    const liveRunBlocks = container.querySelectorAll('[data-testid="live-run-block"], .border-slate-200.rounded-3xl');
-    // More specifically, check how many times "Milestone checklist" is present in the DOM
+    // Check how many times "Milestone checklist" is present in the DOM
     const checklistHeaders = Array.from(container.querySelectorAll("*")).filter(
       (el) => el.textContent?.trim() === "Milestone checklist"
     );
@@ -210,25 +232,26 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           status: "in_progress",
           builderIterations: 1,
           criticRounds: 0,
-          plannedFiles: ["docs/architecture.svg"]
-        }
+          plannedFiles: ["docs/architecture.svg"],
+        },
       ],
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     const messages = [
       {
         id: "msg-assistant-task",
         role: "assistant" as const,
-        content: "Started autonomous engineering run.\n```xml\n<svg viewBox='0 0 100 100'></svg>\n```",
+        content:
+          "Started autonomous engineering run.\n```xml\n<svg viewBox='0 0 100 100'></svg>\n```",
         taskId: "task-host-suppress-456",
-        thought: "Planning out the SVG architecture diagram..."
-      }
+        thought: "Planning out the SVG architecture diagram...",
+      },
     ];
 
     root = createRoot(container);
@@ -240,7 +263,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           reasoningEffort: "medium",
           threadId: "test-thread-1",
           activeTask: mockTask,
-          messages
+          messages,
         })
       );
     });
@@ -263,14 +286,17 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
         React.createElement(ThinkingPanel, {
           rawThought: "Thinking through the architecture design...",
           isStreaming: true,
-          defaultExpanded: true
+          defaultExpanded: true,
         })
       );
     });
 
     // While streaming, streaming badge shows Streaming
     const badge = container.querySelector('[data-testid="streaming-badge"]');
-    assert.ok(badge?.textContent?.includes("Streaming"), "Badge shows Streaming while isStreaming is true");
+    assert.ok(
+      badge?.textContent?.includes("Streaming"),
+      "Badge shows Streaming while isStreaming is true"
+    );
 
     // Transition isStreaming to false
     await act(async () => {
@@ -278,14 +304,18 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
         React.createElement(ThinkingPanel, {
           rawThought: "Thinking through the architecture design...",
           isStreaming: false,
-          defaultExpanded: true
+          defaultExpanded: true,
         })
       );
     });
 
     // After transition, badge shows Thought process or Complete, and the phase cards / expanded body is collapsed
     const phaseCard = container.querySelector('[data-testid="phase-card-planning"]');
-    assert.equal(phaseCard, null, "ThinkingPanel should auto-collapse when generation completes (isStreaming becomes false)");
+    assert.equal(
+      phaseCard,
+      null,
+      "ThinkingPanel should auto-collapse when generation completes (isStreaming becomes false)"
+    );
   });
 
   describe("Sprint U3 — Simple Chat | Build Mode Toggle, Historical Thinking Collapse & Model Deduplication", () => {
@@ -297,16 +327,31 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
             onTracesUpdate: () => {},
             activeModel: "swift-15-27b-mtp",
             reasoningEffort: "medium",
-            messages: []
+            messages: [],
           })
         );
       });
-      const chatBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Chat");
-      const buildBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Build");
-      assert.equal(chatBtn, undefined, "Must NOT render a 'Chat' toggle button (uir-0 header/composer diet)");
-      assert.equal(buildBtn, undefined, "Must NOT render a 'Build' toggle button (uir-0 header/composer diet)");
+      const chatBtn = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "Chat"
+      );
+      const buildBtn = Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "Build"
+      );
+      assert.equal(
+        chatBtn,
+        undefined,
+        "Must NOT render a 'Chat' toggle button (uir-0 header/composer diet)"
+      );
+      assert.equal(
+        buildBtn,
+        undefined,
+        "Must NOT render a 'Build' toggle button (uir-0 header/composer diet)"
+      );
       // Build routing survives the toggle: dispatch still honors the /build prefix
-      const chatStreamSrc = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
+      const chatStreamSrc = fs.readFileSync(
+        path.resolve(__dirname, "../components/ChatStream.tsx"),
+        "utf8"
+      );
       assert.ok(
         chatStreamSrc.includes('composerMode === "build" || isBuildPrefix'),
         "Build dispatch must still route via composerMode or the /build prefix"
@@ -323,14 +368,17 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
           React.createElement(ThinkingPanel, {
             rawThought: "Thinking about the architecture...",
             isStreaming: false,
-            defaultExpanded: false
+            defaultExpanded: false,
           })
         );
       });
       // Should be collapsed by default
       const narrative = container.querySelector('[data-testid="phase-card-planning"]');
       assert.equal(narrative, null, "Historical thinking panel must be collapsed by default");
-      assert.ok(!container.innerHTML.includes("85%"), "Must not contain fake 85% progress indicator");
+      assert.ok(
+        !container.innerHTML.includes("85%"),
+        "Must not contain fake 85% progress indicator"
+      );
     });
 
     it("Task 3: threadStore auto-titles 'New session' from first user message up to 48 chars and honest status in ThreadsSidebar", async () => {
@@ -342,7 +390,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
         id: "msg-1",
         role: "user",
         content: "Create a complete weather dashboard application in React with Tailwind CSS",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       store.reconcileThread(thread);
       assert.equal(
@@ -364,7 +412,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
             installedModels: ["swift-15-27b-mtp:latest", "custom-model:latest", "custom-model"],
             onModelChange: () => {},
             reasoningEffort: "medium",
-            onReasoningEffortChange: () => {}
+            onReasoningEffortChange: () => {},
           })
         );
       });
@@ -391,7 +439,7 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
             status: "completed",
             builderIterations: 1,
             criticRounds: 1,
-            acceptanceCriteria: []
+            acceptanceCriteria: [],
           },
           {
             id: "m2",
@@ -400,8 +448,8 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
             status: "in_progress",
             builderIterations: 1,
             criticRounds: 0,
-            acceptanceCriteria: []
-          }
+            acceptanceCriteria: [],
+          },
         ],
         journal: [],
         toolchain: "node:22",
@@ -409,13 +457,13 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
         checkpoints: [],
         ambiguityFlags: [],
         updatedAt: new Date().toISOString(),
-        status: "active"
+        status: "active",
       };
 
       await act(async () => {
         root!.render(
           React.createElement(liveRunModule.LiveRunBlock, {
-            task: mockTask
+            task: mockTask,
           })
         );
       });
@@ -423,7 +471,10 @@ describe("Sprint 14 — UI State, Message Dedup, & LiveRunBlock Single-Host Suit
       const html = container.innerHTML;
       assert.ok(html.includes("50%"), "Progress must be strictly 50% (1/2 completed)");
       assert.ok(!html.includes("Score 92/100"), "Must not contain fake 92 critic score fallback");
-      assert.ok(!html.includes('console.log("Hello, World!");'), "Must not contain fake Hello World code fallback");
+      assert.ok(
+        !html.includes('console.log("Hello, World!");'),
+        "Must not contain fake Hello World code fallback"
+      );
     });
   });
 });

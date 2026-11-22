@@ -91,7 +91,11 @@ test("shadow mode (default OFF) prepares and verifies readiness but NEVER execut
   assert.equal(result.mode, "shadow");
   assert.equal(result.status, "shadow_prepared");
   assert.equal(result.rollbackTarget, "local-agentic-sandbox:v1.0.0-prev");
-  assert.equal(calls.some((c) => c.startsWith("S3:")), false, "setImage must NEVER be called in shadow mode");
+  assert.equal(
+    calls.some((c) => c.startsWith("S3:")),
+    false,
+    "setImage must NEVER be called in shadow mode"
+  );
   assert.ok(calls.includes("S2:local-agentic-sandbox:v1.1.0-dev:dryRun=true"));
 });
 
@@ -226,4 +230,101 @@ test("sprint report names PR, merge SHA, deploy tag, status, and evidence per it
   assert.match(report.markdown, /3e0a866/);
   assert.match(report.markdown, /v1\.0\.0/);
   assert.match(report.markdown, /needs-attention/);
+});
+
+test("primary S3 setImage failure aborts before S4 without rollback", async () => {
+  const calls: string[] = [];
+  const deps = makeBaseDeps({
+    setImage: async (tag) => {
+      calls.push(`S3:${tag}`);
+      return { ok: false, detail: "kubectl set image exited 1" };
+    },
+    verifyDeployment: async (tag) => {
+      calls.push(`S4:${tag}`);
+      return {
+        ok: true,
+        rolloutSuccess: true,
+        podRunningZeroRestarts: true,
+        gatewayStatus: 200,
+        threadListLoads: true,
+        observedTag: tag,
+      };
+    },
+  });
+
+  const result = await runSelfDeployVerified(BASE_INPUT, deps, { stageEnabled: true });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.needsAttention, true);
+  assert.match(result.evidence ?? "", /kubectl set image exited 1/);
+  assert.equal(calls.filter((c) => c.startsWith("S3:")).length, 1, "no rollback setImage");
+  assert.equal(
+    calls.some((c) => c.startsWith("S4:")),
+    false,
+    "S4 must not run after S3 failure"
+  );
+});
+
+test("rollback S3 setImage failure surfaces rollbackVerified=false and failure in evidence", async () => {
+  let setCount = 0;
+  const deps = makeBaseDeps({
+    setImage: async () => {
+      setCount++;
+      if (setCount === 1) return { ok: true };
+      return { ok: false, detail: "rollback kubectl error" };
+    },
+    verifyDeployment: async (expectedTag) => ({
+      ok: false,
+      rolloutSuccess: true,
+      podRunningZeroRestarts: false,
+      gatewayStatus: 502,
+      threadListLoads: false,
+      observedTag: expectedTag,
+      failedStep: "gateway_200",
+      observed: "gateway returned 502",
+    }),
+  });
+
+  const result = await runSelfDeployVerified(BASE_INPUT, deps, { stageEnabled: true });
+
+  assert.equal(result.status, "rolled_back_suspended");
+  assert.equal(result.rollbackVerified, false);
+  assert.equal(result.needsAttention, true);
+  assert.match(result.evidence ?? "", /rollback kubectl error/);
+});
+
+test("S3 setImage and S4 verifyDeployment use buildAndImport builtTag instead of input targetTag", async () => {
+  let setTag = "";
+  let verifiedTag = "";
+  const deps = makeBaseDeps({
+    buildAndImport: async () => ({
+      built: true,
+      imported: true,
+      imagePresentInNode: true,
+      builtTag: "local-agentic-sandbox-web-ui:v-abc1234-xyz",
+      detail: "built v-abc1234-xyz",
+    }),
+    setImage: async (tag) => {
+      setTag = tag;
+      return { ok: true };
+    },
+    verifyDeployment: async (tag) => {
+      verifiedTag = tag;
+      return {
+        ok: true,
+        rolloutSuccess: true,
+        podRunningZeroRestarts: true,
+        gatewayStatus: 200,
+        threadListLoads: true,
+        observedTag: tag,
+      };
+    },
+  });
+
+  const result = await runSelfDeployVerified(BASE_INPUT, deps, { stageEnabled: true });
+
+  assert.equal(result.status, "deployed");
+  assert.equal(setTag, "local-agentic-sandbox-web-ui:v-abc1234-xyz");
+  assert.equal(verifiedTag, "local-agentic-sandbox-web-ui:v-abc1234-xyz");
+  assert.equal(result.deployTag, "local-agentic-sandbox-web-ui:v-abc1234-xyz");
 });

@@ -66,10 +66,12 @@ The local agentic sandbox web UI is accessible over the local area network (LAN)
 ## Mode Switch: Gateway vs Legacy Port-Forward
 
 The system supports two access path modes controlled by environment variable `ACCESS_PATH_MODE`:
+
 1. `gateway` (default): Runs `kind-gateway` container; bypasses `kubectl port-forward`.
 2. `legacy-port-forward`: Runs legacy `kubectl port-forward svc/web-ui 3001:3000` child process.
 
 ### Operational Switching via Repo Gateway & Bridge Scripts
+
 ```powershell
 # Default: Start kind-gateway and launch LAN bridge in gateway mode
 .\scripts\kind-gateway\start-gateway.ps1
@@ -89,6 +91,7 @@ node scripts/lan-bridge.js
 ## Gateway Watchdog & Auto-Healing
 
 [`scripts/lan-bridge.js`](../scripts/lan-bridge.js) includes an active `GatewayWatchdog` class:
+
 - **Active Only in Gateway Mode**: Ignored when `ACCESS_PATH_MODE=legacy-port-forward`.
 - **Health Probing**: Sends an HTTP HEAD request to `http://127.0.0.1:<TARGET_PORT>/` every 5 seconds with a 3-second timeout.
 - **Healing Trigger**: Triggered after **2 consecutive failures** (total detection budget ≤ 11 seconds).

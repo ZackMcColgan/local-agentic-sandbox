@@ -24,11 +24,11 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     if (!fs.existsSync(supervisorTempDir)) fs.mkdirSync(supervisorTempDir, { recursive: true });
 
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -47,7 +47,8 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
     }
     try {
       if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-      if (fs.existsSync(supervisorTempDir)) fs.rmSync(supervisorTempDir, { recursive: true, force: true });
+      if (fs.existsSync(supervisorTempDir))
+        fs.rmSync(supervisorTempDir, { recursive: true, force: true });
     } catch {}
   });
 
@@ -55,16 +56,27 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
     it("deletes a thread and removes it from disk and list", async () => {
       const store = new ThreadStore(tempDir);
       const thread = store.createThread({
-        initialPrompt: "Test thread to delete"
+        initialPrompt: "Test thread to delete",
       });
-      assert.ok(fs.existsSync(store.getFilePath(thread.id)), "Thread file must exist before delete");
+      assert.ok(
+        fs.existsSync(store.getFilePath(thread.id)),
+        "Thread file must exist before delete"
+      );
 
       const deleted = await store.deleteThread(thread.id);
       assert.equal(deleted, true, "deleteThread should return true");
-      assert.equal(fs.existsSync(store.getFilePath(thread.id)), false, "Thread file must be unlinked from disk");
+      assert.equal(
+        fs.existsSync(store.getFilePath(thread.id)),
+        false,
+        "Thread file must be unlinked from disk"
+      );
 
       const remaining = await store.listThreads();
-      assert.equal(remaining.some((t) => t.id === thread.id), false, "Deleted thread must not appear in list");
+      assert.equal(
+        remaining.some((t) => t.id === thread.id),
+        false,
+        "Deleted thread must not appear in list"
+      );
     });
 
     it("deleting an active run halts execution first, then removes the thread", async () => {
@@ -85,13 +97,13 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
         checkpoints: [],
         ambiguityFlags: [],
         startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
       supervisor.saveCheckpoint(task);
 
       const thread = store.createThread({
         initialPrompt: "Active task to delete",
-        taskId
+        taskId,
       });
       thread.status = "active";
       store.saveThread(thread);
@@ -106,14 +118,30 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       assert.equal(deleted, true);
 
       // Verify active execution set was cleaned
-      assert.equal(activeExecutionSet.has(taskId), false, "Task execution must be halted from activeExecutionSet");
-      assert.equal(activeExecutionSet.has(thread.id), false, "Thread execution must be halted from activeExecutionSet");
+      assert.equal(
+        activeExecutionSet.has(taskId),
+        false,
+        "Task execution must be halted from activeExecutionSet"
+      );
+      assert.equal(
+        activeExecutionSet.has(thread.id),
+        false,
+        "Thread execution must be halted from activeExecutionSet"
+      );
 
       // Verify task status was updated to cancelled/stopped in checkpoint
       const resumed = await supervisor.resumeTaskFromCheckpoint(taskId);
       assert.ok(resumed);
-      assert.equal(resumed?.status, "cancelled", "Checkpoint must record cancelled status upon deletion");
-      assert.equal(fs.existsSync(store.getFilePath(thread.id)), false, "Thread file must be deleted");
+      assert.equal(
+        resumed?.status,
+        "cancelled",
+        "Checkpoint must record cancelled status upon deletion"
+      );
+      assert.equal(
+        fs.existsSync(store.getFilePath(thread.id)),
+        false,
+        "Thread file must be deleted"
+      );
     });
 
     it("threads list renders zero ⋮ buttons on session rows", () => {
@@ -126,7 +154,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
           updatedAt: new Date().toISOString(),
           model: "qwen3.8",
           reasoningEffort: "medium",
-          messages: []
+          messages: [],
         },
         {
           id: "t2",
@@ -136,8 +164,8 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
           updatedAt: new Date().toISOString(),
           model: "qwen3.8",
           reasoningEffort: "medium",
-          messages: []
-        }
+          messages: [],
+        },
       ];
 
       root = createRoot(container);
@@ -148,18 +176,23 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
             selectedThreadId: "t1",
             onSelectThread: () => {},
             onNewThread: () => {},
-            onDeleteThread: () => {}
+            onDeleteThread: () => {},
           })
         );
       });
 
       const buttons = container.querySelectorAll("button");
       // Check that no button in the row represents a per-row vertical dots menu (⋮ / MoreVertical)
-      const moreVerticalButtons = Array.from(buttons).filter((b) =>
-        b.getAttribute("title")?.toLowerCase().includes("options") ||
-        b.innerHTML.includes("lucide-more-vertical")
+      const moreVerticalButtons = Array.from(buttons).filter(
+        (b) =>
+          b.getAttribute("title")?.toLowerCase().includes("options") ||
+          b.innerHTML.includes("lucide-more-vertical")
       );
-      assert.equal(moreVerticalButtons.length, 0, "There must be zero per-row ⋮ buttons in the threads list");
+      assert.equal(
+        moreVerticalButtons.length,
+        0,
+        "There must be zero per-row ⋮ buttons in the threads list"
+      );
     });
 
     it("thread-view overflow menu provides a delete session action", () => {
@@ -176,13 +209,15 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
             },
             onTracesUpdate: () => {},
             activeModel: "swift-27b-mtp",
-            reasoningEffort: "medium"
+            reasoningEffort: "medium",
           })
         );
       });
 
       // Find overflow menu button (MoreHorizontal)
-      const moreBtn = container.querySelector("header button[title='More options']") as HTMLButtonElement;
+      const moreBtn = container.querySelector(
+        "header button[title='More options']"
+      ) as HTMLButtonElement;
       assert.ok(moreBtn, "Header must have overflow options button");
 
       act(() => {
@@ -190,9 +225,10 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       });
 
       // Find 'Delete session' button in overflow menu
-      const deleteBtn = Array.from(container.querySelectorAll("button")).find((b) =>
-        b.textContent?.toLowerCase().includes("delete session") ||
-        b.textContent?.toLowerCase().includes("delete thread")
+      const deleteBtn = Array.from(container.querySelectorAll("button")).find(
+        (b) =>
+          b.textContent?.toLowerCase().includes("delete session") ||
+          b.textContent?.toLowerCase().includes("delete thread")
       );
       assert.ok(deleteBtn, "Overflow menu must provide a Delete session action");
 
@@ -201,7 +237,11 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       });
 
       // Deletion is gated by a confirmation dialog: the click alone must not delete
-      assert.equal(deleteCalled, false, "Clicking delete action must not delete before confirmation");
+      assert.equal(
+        deleteCalled,
+        false,
+        "Clicking delete action must not delete before confirmation"
+      );
       const dialog = container.querySelector("[data-testid='thread-delete-dialog']");
       assert.ok(dialog, "Clicking delete action must open the confirmation dialog");
 
@@ -223,7 +263,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       const store = new ThreadStore(tempDir);
       const thread = store.createThread({
         initialPrompt: "Task interrupted by system crash",
-        taskId: "task-phantom-read-test"
+        taskId: "task-phantom-read-test",
       });
       thread.status = "active";
       store.saveThread(thread);
@@ -239,7 +279,11 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
 
       // Verify the persisted file on disk was also updated to stopped
       const rawOnDisk = JSON.parse(fs.readFileSync(store.getFilePath(thread.id), "utf8"));
-      assert.equal(rawOnDisk.status, "stopped", "Persisted file on disk must be corrected to 'stopped'");
+      assert.equal(
+        rawOnDisk.status,
+        "stopped",
+        "Persisted file on disk must be corrected to 'stopped'"
+      );
 
       // Read via listThreads
       const all = await store.listThreads();
@@ -251,7 +295,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       const store = new ThreadStore(tempDir);
       const thread = store.createThread({
         initialPrompt: "Genuinely running task",
-        taskId: "task-genuine-active"
+        taskId: "task-genuine-active",
       });
       thread.status = "active";
       store.saveThread(thread);
@@ -272,7 +316,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       // Create a test session
       const testThread = store.createThread({
         initialPrompt: "Automated test probe",
-        isTest: true
+        isTest: true,
       });
       assert.equal(testThread.isTest, true, "Thread must be marked as test session");
 
@@ -297,9 +341,10 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
 
     it("derives title from the first user message, truncated at a word boundary (UI-008)", () => {
       const store = new ThreadStore(tempDir);
-      const longPrompt = "How does the critic handle crashes in workerPool when model is unreachable during startup?";
+      const longPrompt =
+        "How does the critic handle crashes in workerPool when model is unreachable during startup?";
       const thread = store.createThread({
-        initialPrompt: longPrompt
+        initialPrompt: longPrompt,
       });
       // UI-008: titles must never cut mid-word; truncation lands on the last word boundary <= 80.
       assert.equal(
@@ -319,7 +364,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
         id: "msg-1",
         role: "user",
         content: "What is the status of the OTEL waterfall spans?",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       store.saveThread(thread);
 
@@ -349,7 +394,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
         id: "msg-user-1",
         role: "user",
         content: "Explain the kubernetes rollout strategy for web-ui",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
       thread.messages.push(userMsg);
       if (
@@ -373,7 +418,7 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
         role: "assistant",
         content: "Here is how the rollout strategy works...",
         thought: "Analyzing deployment manifest...",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
       afterUser.messages.push(assistantMsg);
       afterUser.status = "completed";
@@ -391,15 +436,18 @@ describe("Sprint 1 — Session List Integrity Suite", () => {
       const candidates = [
         path.resolve(process.cwd(), "app/page.tsx"),
         path.resolve(process.cwd(), "web-ui/app/page.tsx"),
-        path.resolve(process.cwd(), "../web-ui/app/page.tsx")
+        path.resolve(process.cwd(), "../web-ui/app/page.tsx"),
       ];
       const pagePath = candidates.find((p) => fs.existsSync(p));
       assert.ok(pagePath, "Could not find app/page.tsx in candidate paths");
-      const pageCode = fs.readFileSync(pagePath, "utf8");
+      const viewShellPath = path.resolve(path.dirname(pagePath), "../components/ViewShell.tsx");
+      const pageCode =
+        fs.readFileSync(pagePath, "utf8") +
+        "\n" +
+        (fs.existsSync(viewShellPath) ? fs.readFileSync(viewShellPath, "utf8") : "");
       // Check that ChatStream is not unmounted on view switches or replaced with ternary null
       assert.ok(pageCode.includes("<ChatStream"), "page.tsx must mount <ChatStream />");
       assert.ok(pageCode.includes("<ThreadsSidebar"), "page.tsx must mount <ThreadsSidebar />");
     });
   });
 });
-

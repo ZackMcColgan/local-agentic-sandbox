@@ -11,7 +11,10 @@ import { POST as postThreadAction } from "../app/api/threads/[id]/route";
 import { ThreadStore } from "../lib/threads/threadStore";
 
 function makeTempDir(prefix: string): string {
-  const dir = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const dir = path.join(
+    os.tmpdir(),
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  );
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -74,12 +77,12 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
     let statusWhenGateRan: string | undefined;
     let stampWhenGateRan: string | undefined;
 
-    const fakeGitOps: any = {
+    const fakeGitOps = {
       ensureTaskBranch: async () => ({ success: true, branchName: task.branchName }),
       runGateTest: async () => ({ exitCode: 1, stdout: "", stderr: "gate failed" }),
       isPushConfigured: async () => ({ configured: false, reason: "test" }),
       pushBranch: async () => ({ success: false }),
-    };
+    } as unknown as NonNullable<Parameters<typeof supervisor.executeTaskWithRecovery>[1]>["gitOps"];
 
     const result = await supervisor.executeTaskWithRecovery(task, {
       gitOps: fakeGitOps,
@@ -96,14 +99,31 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
       }),
     });
 
-    assert.notEqual(statusWhenGateRan, "completed", "test:gate must run BEFORE task.status is stamped completed");
-    assert.equal(stampWhenGateRan, undefined, "test:gate must run BEFORE completionStamp is written");
+    assert.notEqual(
+      statusWhenGateRan,
+      "completed",
+      "test:gate must run BEFORE task.status is stamped completed"
+    );
+    assert.equal(
+      stampWhenGateRan,
+      undefined,
+      "test:gate must run BEFORE completionStamp is written"
+    );
     assert.equal(result.gatePassed, false, "gatePassed must be false");
-    assert.notEqual(result.status, "completed", "failed gate must never leave task status as completed");
+    assert.notEqual(
+      result.status,
+      "completed",
+      "failed gate must never leave task status as completed"
+    );
     assert.equal(result.status, "failed", "failed gate must transition task to failed");
-    assert.equal(result.completionStamp, "completed-unverified", "completionStamp must be completed-unverified on gate failure");
+    assert.equal(
+      result.completionStamp,
+      "completed-unverified",
+      "completionStamp must be completed-unverified on gate failure"
+    );
     assert.ok(
-      Array.isArray(result.verificationGaps) && result.verificationGaps.some((g) => g.kind === "gate"),
+      Array.isArray(result.verificationGaps) &&
+        result.verificationGaps.some((g) => g.kind === "gate"),
       "verificationGaps must include a gate gap"
     );
   });
@@ -158,21 +178,37 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
       assert.ok(threadId, "response must include threadId");
 
       const store = new ThreadStore(tmpThreads);
-      let terminalMsg: any = null;
+      let terminalMsg: {
+        completionStamp?: string;
+        verificationGaps?: Array<{ kind?: string }>;
+      } | null = null;
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline) {
         const t = await store.getThread(threadId);
         if (t && t.status === "failed") {
-          terminalMsg = [...t.messages].reverse().find((m) => m.role === "assistant" && m.id.endsWith("-term"));
+          terminalMsg =
+            ([...t.messages]
+              .reverse()
+              .find((m) => m.role === "assistant" && m.id.endsWith("-term")) as
+              | {
+                  completionStamp?: string;
+                  verificationGaps?: Array<{ kind?: string }>;
+                }
+              | undefined) ?? null;
           if (terminalMsg) break;
         }
         await new Promise((r) => setTimeout(r, 30));
       }
 
       assert.ok(terminalMsg, "terminal assistant message must be recorded");
-      assert.equal(terminalMsg.completionStamp, "completed-unverified", "terminal message must carry completionStamp");
+      assert.equal(
+        terminalMsg.completionStamp,
+        "completed-unverified",
+        "terminal message must carry completionStamp"
+      );
       assert.ok(
-        Array.isArray(terminalMsg.verificationGaps) && terminalMsg.verificationGaps.some((g: any) => g.kind === "gate"),
+        Array.isArray(terminalMsg.verificationGaps) &&
+          terminalMsg.verificationGaps.some((g) => g.kind === "gate"),
         "terminal message must carry verificationGaps with the gate failure"
       );
     } finally {
@@ -242,7 +278,9 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "stop" }),
       });
-      const stopRes = await postThreadAction(stopReq, { params: Promise.resolve({ id: threadId }) });
+      const stopRes = await postThreadAction(stopReq, {
+        params: Promise.resolve({ id: threadId }),
+      });
       assert.equal(stopRes.status, 200);
 
       // Give abort handler a moment to settle BEFORE releasing the stuck planner promise
@@ -251,7 +289,11 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
       const deadline = Date.now() + 2000;
       while (Date.now() < deadline) {
         const t = await store.getThread(threadId);
-        if (t && t.status === "stopped" && t.messages.some((m) => /abort|cancel/i.test(m.content))) {
+        if (
+          t &&
+          t.status === "stopped" &&
+          t.messages.some((m) => /abort|cancel/i.test(m.content))
+        ) {
           settledStopped = true;
           break;
         }
@@ -263,9 +305,20 @@ describe("AUD-04: test:gate before completion stamp, terminal evidence, and plan
       await new Promise((r) => setTimeout(r, 100));
 
       const finalThread = await store.getThread(threadId);
-      assert.ok(settledStopped, "Stop during planning must abort planning promptly before planner resolves");
-      assert.equal(executeCalled, false, "executeTaskWithRecovery must NOT be called after Stop during planning");
-      assert.notEqual(finalThread?.status, "completed", "thread must never be stamped completed after Stop");
+      assert.ok(
+        settledStopped,
+        "Stop during planning must abort planning promptly before planner resolves"
+      );
+      assert.equal(
+        executeCalled,
+        false,
+        "executeTaskWithRecovery must NOT be called after Stop during planning"
+      );
+      assert.notEqual(
+        finalThread?.status,
+        "completed",
+        "thread must never be stamped completed after Stop"
+      );
     } finally {
       releasePlan();
       OvernightSupervisor.prototype.executeTaskWithRecovery = origExecute;

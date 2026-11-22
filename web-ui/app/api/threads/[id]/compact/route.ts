@@ -27,25 +27,28 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
             model: activeModel,
             messages: [
               { role: "system", content: sumReq.prompt },
-              { role: "user", content: sumReq.digest }
+              { role: "user", content: sumReq.digest },
             ],
             keep_alive: -1,
             signal: sumReq.signal,
-            options: { temperature: sumReq.temperature, num_predict: sumReq.maxTokens }
+            options: { temperature: sumReq.temperature, num_predict: sumReq.maxTokens },
           })) {
             sumReq.onProgress?.();
             if (chunk.message?.content) text += chunk.message.content;
             if (chunk.finish_reason === "length") truncated = true;
           }
           return { text, truncated };
-        }
+        },
       });
       return NextResponse.json(result);
     }
 
     const result = threadStore.compactThreadIncremental(thread);
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

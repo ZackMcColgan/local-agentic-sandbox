@@ -19,6 +19,7 @@ export interface BoardItem {
   title: string;
   brief: string;
   dependencies: string[];
+  allowlist?: string[];
   status: BoardStatus;
   author: "Owner";
   source: BoardSource;
@@ -37,6 +38,7 @@ export interface CreateBoardItemInput {
   title: string;
   brief: string;
   dependencies?: string[];
+  allowlist?: string[];
   status?: BoardStatus;
   author: "Owner";
   source: BoardSource;
@@ -52,6 +54,7 @@ export interface UpdateBoardItemInput {
   title?: string;
   brief?: string;
   dependencies?: string[];
+  allowlist?: string[];
   status?: BoardStatus;
   parkedReason?: string;
   needsAttention?: boolean;
@@ -82,6 +85,20 @@ export function isItemEligible(item: BoardItem, allItems: BoardItem[]): boolean 
     const dep = byId.get(depId);
     return dep?.status === "done";
   });
+}
+
+function allocateNextKey(items: BoardItem[]): string {
+  let maxKey = 0;
+  for (const item of items) {
+    const match = /^#(\d+)$/.exec(item.key.trim());
+    if (match) {
+      const num = Number.parseInt(match[1], 10);
+      if (Number.isFinite(num) && num > maxKey) {
+        maxKey = num;
+      }
+    }
+  }
+  return `#${maxKey + 1}`;
 }
 
 export const BOARD_STORE_VERSION = 2;
@@ -123,7 +140,10 @@ export class BoardStore {
     const migrated = items.map((item) => {
       const seed = seedById.get(item.id);
       if (!seed) return item;
-      if (item.status !== seed.status || JSON.stringify(item.evidence) !== JSON.stringify(seed.evidence)) {
+      if (
+        item.status !== seed.status ||
+        JSON.stringify(item.evidence) !== JSON.stringify(seed.evidence)
+      ) {
         changed = true;
         return {
           ...item,
@@ -137,7 +157,11 @@ export class BoardStore {
     if (changed) {
       fs.writeFileSync(this.filePath, JSON.stringify(migrated, null, 2), "utf8");
     }
-    fs.writeFileSync(this.metaPath, JSON.stringify({ version: BOARD_STORE_VERSION }, null, 2), "utf8");
+    fs.writeFileSync(
+      this.metaPath,
+      JSON.stringify({ version: BOARD_STORE_VERSION }, null, 2),
+      "utf8"
+    );
   }
 
   private readAll(): BoardItem[] {
@@ -187,7 +211,13 @@ export class BoardStore {
     const items = this.readAll();
     const now = new Date().toISOString();
     const id = input.id || `item-${crypto.randomBytes(4).toString("hex")}`;
-    const key = input.key || `#${items.length + 1}`;
+    const key = input.key || allocateNextKey(items);
+
+    const normalizedAllowlist = Array.isArray(input.allowlist)
+      ? input.allowlist
+          .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          .map((entry) => entry.trim())
+      : undefined;
 
     const item: BoardItem = {
       id,
@@ -195,6 +225,9 @@ export class BoardStore {
       title: input.title.trim(),
       brief: input.brief.trim(),
       dependencies: input.dependencies ?? [],
+      ...(normalizedAllowlist && normalizedAllowlist.length > 0
+        ? { allowlist: normalizedAllowlist }
+        : {}),
       status,
       author: "Owner",
       source: input.source,
@@ -220,8 +253,7 @@ export class BoardStore {
 
     const current = items[idx];
     const nextStatus = patch.status ?? current.status;
-    const nextReason =
-      patch.parkedReason !== undefined ? patch.parkedReason : current.parkedReason;
+    const nextReason = patch.parkedReason !== undefined ? patch.parkedReason : current.parkedReason;
 
     if (nextStatus === "parked" && (!nextReason || !nextReason.trim())) {
       throw new Error("Parked board item requires a reason string");

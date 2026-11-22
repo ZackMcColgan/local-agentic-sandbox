@@ -55,10 +55,10 @@ describe("Artifact download naming & MIME", () => {
     let root: Root | null = null;
 
     beforeEach(() => {
-      (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+      (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
       win = new GlobalWindow({ url: "http://localhost:3000" });
-      globalThis.window = win as any;
-      globalThis.document = win.document as any;
+      globalThis.window = win as unknown as Window & typeof globalThis;
+      globalThis.document = win.document as unknown as Document;
 
       const div = win.document.createElement("div");
       win.document.body.appendChild(div);
@@ -81,21 +81,22 @@ describe("Artifact download naming & MIME", () => {
       let createdBlob: Blob | null = null;
       let clickedDownloadName = "";
 
-      const origCreateObjectURL = (globalThis as any).URL.createObjectURL;
-      const origRevokeObjectURL = (globalThis as any).URL.revokeObjectURL;
-      (globalThis as any).URL.createObjectURL = (blob: Blob) => {
+      const origCreateObjectURL = globalThis.URL.createObjectURL;
+      const origRevokeObjectURL = globalThis.URL.revokeObjectURL;
+      globalThis.URL.createObjectURL = (blob: Blob) => {
         createdBlob = blob;
         return "blob:mock-url";
       };
-      (globalThis as any).URL.revokeObjectURL = () => {};
+      globalThis.URL.revokeObjectURL = () => {};
 
       const origAppendChild = win.document.body.appendChild.bind(win.document.body);
-      win.document.body.appendChild = ((node: any) => {
-        if (node.tagName === "A" && node.download) {
-          clickedDownloadName = node.download;
+      win.document.body.appendChild = ((node: unknown) => {
+        const el = node as { tagName?: string; download?: string };
+        if (el.tagName === "A" && el.download) {
+          clickedDownloadName = el.download;
         }
-        return origAppendChild(node);
-      }) as any;
+        return origAppendChild(node as Parameters<typeof origAppendChild>[0]);
+      }) as typeof win.document.body.appendChild;
 
       try {
         root = createRoot(container);
@@ -104,13 +105,14 @@ describe("Artifact download naming & MIME", () => {
             React.createElement(CodeBlock, {
               code: "<html><body><h1>Hello</h1></body></html>",
               language: "html",
-              filename: "page.html"
+              filename: "page.html",
             })
           );
         });
 
         const dlBtn = Array.from(container.querySelectorAll("button")).find(
-          (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+          (b) =>
+            b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
         );
         assert.ok(dlBtn !== undefined, "HTML CodeBlock must render Download button");
 
@@ -119,10 +121,10 @@ describe("Artifact download naming & MIME", () => {
         });
 
         assert.equal(clickedDownloadName, "page.html");
-        assert.equal((createdBlob as any)?.type, "text/html;charset=utf-8");
+        assert.equal((createdBlob as Blob | null)?.type, "text/html;charset=utf-8");
       } finally {
-        (globalThis as any).URL.createObjectURL = origCreateObjectURL;
-        (globalThis as any).URL.revokeObjectURL = origRevokeObjectURL;
+        globalThis.URL.createObjectURL = origCreateObjectURL;
+        globalThis.URL.revokeObjectURL = origRevokeObjectURL;
         win.document.body.appendChild = origAppendChild;
       }
     });
@@ -131,21 +133,22 @@ describe("Artifact download naming & MIME", () => {
       let createdBlob: Blob | null = null;
       let clickedDownloadName = "";
 
-      const origCreateObjectURL = (globalThis as any).URL.createObjectURL;
-      const origRevokeObjectURL = (globalThis as any).URL.revokeObjectURL;
-      (globalThis as any).URL.createObjectURL = (blob: Blob) => {
+      const origCreateObjectURL = globalThis.URL.createObjectURL;
+      const origRevokeObjectURL = globalThis.URL.revokeObjectURL;
+      globalThis.URL.createObjectURL = (blob: Blob) => {
         createdBlob = blob;
         return "blob:mock-url";
       };
-      (globalThis as any).URL.revokeObjectURL = () => {};
+      globalThis.URL.revokeObjectURL = () => {};
 
       const origAppendChild = win.document.body.appendChild.bind(win.document.body);
-      win.document.body.appendChild = ((node: any) => {
-        if (node.tagName === "A" && node.download) {
-          clickedDownloadName = node.download;
+      win.document.body.appendChild = ((node: unknown) => {
+        const el = node as { tagName?: string; download?: string };
+        if (el.tagName === "A" && el.download) {
+          clickedDownloadName = el.download;
         }
-        return origAppendChild(node);
-      }) as any;
+        return origAppendChild(node as Parameters<typeof origAppendChild>[0]);
+      }) as typeof win.document.body.appendChild;
 
       try {
         root = createRoot(container);
@@ -154,13 +157,14 @@ describe("Artifact download naming & MIME", () => {
             React.createElement(CodeBlock, {
               code: "print('hello world')",
               language: "python",
-              filename: "script.py"
+              filename: "script.py",
             })
           );
         });
 
         const dlBtn = Array.from(container.querySelectorAll("button")).find(
-          (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+          (b) =>
+            b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
         );
         assert.ok(dlBtn !== undefined, "Generic CodeBlock must render Download button");
 
@@ -169,10 +173,10 @@ describe("Artifact download naming & MIME", () => {
         });
 
         assert.equal(clickedDownloadName, "script.py");
-        assert.equal((createdBlob as any)?.type, "text/x-python;charset=utf-8");
+        assert.equal((createdBlob as Blob | null)?.type, "text/x-python;charset=utf-8");
       } finally {
-        (globalThis as any).URL.createObjectURL = origCreateObjectURL;
-        (globalThis as any).URL.revokeObjectURL = origRevokeObjectURL;
+        globalThis.URL.createObjectURL = origCreateObjectURL;
+        globalThis.URL.revokeObjectURL = origRevokeObjectURL;
         win.document.body.appendChild = origAppendChild;
       }
     });

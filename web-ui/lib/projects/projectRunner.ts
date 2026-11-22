@@ -8,8 +8,7 @@ import {
   createProjectTask,
   completeProjectTask,
   parkProjectTask,
-  cancelProjectTask,
-  getProjectTask
+  getProjectTask,
 } from "./projectStore";
 import { runGit } from "./projectGit";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
@@ -48,7 +47,7 @@ export async function isEngineRunning(): Promise<boolean> {
     const res = await fetch(`${supervisorUrl}/control/status`, {
       method: "GET",
       headers,
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
 
@@ -80,26 +79,34 @@ export interface StartProjectTaskInput {
 export async function startProjectTask(input: StartProjectTaskInput): Promise<ProjectTaskRecord> {
   const project = getProject(input.projectId);
   if (!project) {
-    const err: any = new Error(`Project not found: ${input.projectId}`);
+    const err = new Error(`Project not found: ${input.projectId}`) as Error & {
+      statusCode?: number;
+    };
     err.statusCode = 404;
     throw err;
   }
 
   if (project.allowlisted !== 1) {
-    const err: any = new Error(`Project '${project.name}' is revoked. Execution forbidden.`);
+    const err = new Error(`Project '${project.name}' is revoked. Execution forbidden.`) as Error & {
+      statusCode?: number;
+    };
     err.statusCode = 403;
     throw err;
   }
 
   const engineUp = await isEngineRunning();
   if (!engineUp) {
-    const err: any = new Error("Agent engine is stopped. Start engine to run overnight tasks.");
+    const err = new Error(
+      "Agent engine is stopped. Start engine to run overnight tasks."
+    ) as Error & { statusCode?: number };
     err.statusCode = 503;
     throw err;
   }
 
   if (project.active_task_id) {
-    const err: any = new Error(`Project already has an active task running: ${project.active_task_id}`);
+    const err = new Error(
+      `Project already has an active task running: ${project.active_task_id}`
+    ) as Error & { statusCode?: number };
     err.statusCode = 409;
     throw err;
   }
@@ -108,7 +115,7 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
   let baseSha = "";
   try {
     baseSha = runGit(project, ["rev-parse", "HEAD"]);
-  } catch (err: any) {
+  } catch (err: unknown) {
     // If fresh repo with 0 commits, auto-initialize initial base commit so HEAD exists
     try {
       const readmePath = path.join(project.root_path, "README.md");
@@ -121,7 +128,8 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
       runGit(project, ["commit", "-m", "Initial base commit"]);
       baseSha = runGit(project, ["rev-parse", "HEAD"]);
     } catch {
-      throw new Error(`Failed to determine baseSha from repository: ${err.message}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to determine baseSha from repository: ${msg}`);
     }
   }
 
@@ -132,8 +140,9 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
   // 3. Create and switch to worker branch
   try {
     runGit(project, ["checkout", "-B", branch]);
-  } catch (err: any) {
-    throw new Error(`Failed to create task branch ${branch}: ${err.message}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to create task branch ${branch}: ${msg}`);
   }
 
   // 4. Create task in project_tasks table and assign active_task_id
@@ -143,11 +152,12 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
       projectId: project.project_id,
       prompt: input.prompt,
       baseSha,
-      branch
+      branch,
     });
-  } catch (err: any) {
-    if (err.message && /active task/i.test(err.message)) {
-      const conflictErr: any = new Error(err.message);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg && /active task/i.test(msg)) {
+      const conflictErr = new Error(msg) as Error & { statusCode?: number };
       conflictErr.statusCode = 409;
       throw conflictErr;
     }
@@ -159,7 +169,7 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
   activeRunners.set(task.task_id, {
     controller,
     project,
-    task
+    task,
   });
 
   // If inline execution is requested (e.g. testing or immediate run)
@@ -174,14 +184,14 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
           goal: input.prompt,
           toolchain: project.toolchain as ToolchainType,
           scope: "PROJECT",
-          model: DEFAULT_PRIMARY_MODEL
+          model: DEFAULT_PRIMARY_MODEL,
         });
 
         const supervisor = new OvernightSupervisor();
         const stepExecutor = createProductionStepExecutor({
           repoRoot: project.root_path,
           model: DEFAULT_PRIMARY_MODEL,
-          signal: controller.signal
+          signal: controller.signal,
         });
 
         for (let i = 0; i < plan.milestones.length; i++) {
@@ -205,22 +215,18 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
             currentMilestoneIndex: i,
             checkpoints: [],
             ambiguityFlags: [],
-            journal: []
+            journal: [],
           };
 
-          await supervisor.executeMilestoneWithTelemetry(
-            taskManifest,
-            i,
-            async (m) => {
-              const res = await stepExecutor(m, 1);
-              return {
-                diff: res.diff || "",
-                gitSha: res.gitSha || baseSha,
-                approved: res.status === "completed",
-                feedback: res.reason ? [res.reason] : []
-              };
-            }
-          );
+          await supervisor.executeMilestoneWithTelemetry(taskManifest, i, async (m) => {
+            const res = await stepExecutor(m, 1);
+            return {
+              diff: res.diff || "",
+              gitSha: res.gitSha || baseSha,
+              approved: res.status === "completed",
+              feedback: res.reason ? [res.reason] : [],
+            };
+          });
         }
       }
 
@@ -228,8 +234,9 @@ export async function startProjectTask(input: StartProjectTaskInput): Promise<Pr
       const completed = completeProjectTask(task.task_id, headSha);
       activeRunners.delete(task.task_id);
       return completed;
-    } catch (err: any) {
-      if (controller.signal.aborted || /abort/i.test(err.message)) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (controller.signal.aborted || /abort/i.test(msg)) {
         const parked = parkProjectTask(task.task_id, "Aborted mid-run");
         activeRunners.delete(task.task_id);
         return parked;

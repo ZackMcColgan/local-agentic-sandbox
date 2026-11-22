@@ -5,7 +5,10 @@ import path from "path";
 import os from "node:os";
 import { spawn, execSync } from "node:child_process";
 import * as hostModeLib from "../lib/hostMode";
-import { GET as hostApprovalsGet, POST as hostApprovalsPost } from "../app/api/host/approvals/route";
+import {
+  GET as hostApprovalsGet,
+  POST as hostApprovalsPost,
+} from "../app/api/host/approvals/route";
 import { ThreadStore } from "../lib/threads/threadStore";
 import { getBridgeManifest, PROTOCOL_VERSION } from "../../host-bridge/manifest";
 
@@ -20,13 +23,13 @@ const {
   HOST_TOOLS_DEFINITIONS,
   executeHostTool,
   checkHostRunnerHealth,
-  getHostRunnerBaseUrl
-} = hostModeLib as any;
+  getHostRunnerBaseUrl,
+} = hostModeLib;
 
 describe("Host Mode & Destructive Action Gate Suite", () => {
   it("defines all 6 standard host tools with valid schemas", () => {
     assert.equal(HOST_TOOLS_DEFINITIONS.length, 6);
-    const names = HOST_TOOLS_DEFINITIONS.map((t: any) => t.function.name);
+    const names = HOST_TOOLS_DEFINITIONS.map((t) => t.function.name);
     assert.ok(names.includes("host_run_powershell"));
     assert.ok(names.includes("host_read_file"));
     assert.ok(names.includes("host_write_file"));
@@ -46,57 +49,196 @@ describe("Host Mode & Destructive Action Gate Suite", () => {
     assert.equal(delPath.isDestructive, true);
 
     // 2. Remove-* cmdlets
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Remove-Item -Recurse -Force ./build" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "remove-item ./file.txt" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Remove-ItemProperty -Path HKLM:\\Software\\App -Name Test" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Remove-EventLog -LogName MyApp" }).isDestructive, true);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: "Remove-Item -Recurse -Force ./build",
+      }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "remove-item ./file.txt" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: "Remove-ItemProperty -Path HKLM:\\Software\\App -Name Test",
+      }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Remove-EventLog -LogName MyApp" })
+        .isDestructive,
+      true
+    );
 
     // 3. Destructive disk/computer cmdlets
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Format-Volume -DriveLetter D -FileSystem NTFS" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Clear-Disk -Number 1 -RemoveData" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Initialize-Disk -Number 1" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Restart-Computer -Force" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Stop-Computer -Force" }).isDestructive, true);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: "Format-Volume -DriveLetter D -FileSystem NTFS",
+      }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: "Clear-Disk -Number 1 -RemoveData",
+      }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Initialize-Disk -Number 1" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Restart-Computer -Force" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Stop-Computer -Force" })
+        .isDestructive,
+      true
+    );
 
     // 4. shutdown / shutdown.exe in command position
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "shutdown /s /t 0" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "shutdown.exe -r -t 60" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-Process; shutdown /r" }).isDestructive, true);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "shutdown /s /t 0" }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "shutdown.exe -r -t 60" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-Process; shutdown /r" })
+        .isDestructive,
+      true
+    );
 
     // 5. Aliases (del, erase, rd, rmdir, ri, rm) in command position
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "del C:\\temp\\junk.txt" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-Process; erase junk.log" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-ChildItem | rd ./junk" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-Process & rmdir /s /q temp" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "(ri ./file.txt)" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Write-Host 'hello'\nrm -rf ./build" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "& rm ./build" }).isDestructive, true);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-Process; & del foo.txt" }).isDestructive, true);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "del C:\\temp\\junk.txt" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-Process; erase junk.log" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-ChildItem | rd ./junk" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-Process & rmdir /s /q temp" })
+        .isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "(ri ./file.txt)" }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: "Write-Host 'hello'\nrm -rf ./build",
+      }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "& rm ./build" }).isDestructive,
+      true
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-Process; & del foo.txt" })
+        .isDestructive,
+      true
+    );
   });
 
   it("does not gate safe commands, variables, quoted strings, or removed patterns (negative cases)", () => {
     // Read-only cmdlets
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-Process | Select-Object -First 5" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-ChildItem -Recurse" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Get-Content ./README.md" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Test-Path ./package.json" }).isDestructive, false);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: "Get-Process | Select-Object -First 5",
+      }).isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-ChildItem -Recurse" })
+        .isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Get-Content ./README.md" })
+        .isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Test-Path ./package.json" })
+        .isDestructive,
+      false
+    );
 
     // Variable or property names containing del, rm, format
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "$delta = 5; Write-Output $delta" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "$item.Delete()" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "$format = 'json'" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "$rm = 10" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "delay 5" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "echo shutdown" }).isDestructive, false);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "$delta = 5; Write-Output $delta" })
+        .isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "$item.Delete()" }).isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "$format = 'json'" }).isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "$rm = 10" }).isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "delay 5" }).isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "echo shutdown" }).isDestructive,
+      false
+    );
 
     // String literals containing words
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: 'Write-Output "del"' }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: 'Write-Output "Remove-Item is a cmdlet"' }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "Write-Output 'rm -rf /'" }).isDestructive, false);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: 'Write-Output "del"' })
+        .isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", {
+        command: 'Write-Output "Remove-Item is a cmdlet"',
+      }).isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "Write-Output 'rm -rf /'" })
+        .isDestructive,
+      false
+    );
 
     // Removed non-contract patterns (must not gate)
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "taskkill /F /IM node.exe" }).isDestructive, false);
-    assert.equal(isDestructiveHostAction("host_run_powershell", { command: "git reset --hard HEAD~1" }).isDestructive, false);
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "taskkill /F /IM node.exe" })
+        .isDestructive,
+      false
+    );
+    assert.equal(
+      isDestructiveHostAction("host_run_powershell", { command: "git reset --hard HEAD~1" })
+        .isDestructive,
+      false
+    );
   });
 });
 
@@ -118,18 +260,42 @@ describe("Host Mode F2.2 Single-Use & Expiring Approvals Suite", () => {
 
   it("getPendingApprovals purges expired records", () => {
     const t0 = 1700000000000;
-    const req1 = createPendingApproval("thread-purge-1", "host_delete_path", { path: "A" }, "risk", t0);
-    const req2 = createPendingApproval("thread-purge-1", "host_delete_path", { path: "B" }, "risk", t0 + 20 * 60 * 1000);
+    const req1 = createPendingApproval(
+      "thread-purge-1",
+      "host_delete_path",
+      { path: "A" },
+      "risk",
+      t0
+    );
+    const req2 = createPendingApproval(
+      "thread-purge-1",
+      "host_delete_path",
+      { path: "B" },
+      "risk",
+      t0 + 20 * 60 * 1000
+    );
 
     // At t0 + 11 minutes, req1 should be expired and purged
     const activeAt11Min = getPendingApprovals("thread-purge-1", t0 + 11 * 60 * 1000);
-    assert.equal(activeAt11Min.some((a: any) => a.id === req1.id), false);
-    assert.equal(activeAt11Min.some((a: any) => a.id === req2.id), true);
+    assert.equal(
+      activeAt11Min.some((a) => a.id === req1.id),
+      false
+    );
+    assert.equal(
+      activeAt11Min.some((a) => a.id === req2.id),
+      true
+    );
   });
 
   it("consumePendingApproval is single-use and handles replay and concurrency", async () => {
     const t0 = 1700000000000;
-    const req = createPendingApproval("thread-single-use", "host_run_powershell", { command: "del file.txt" }, "risk", t0);
+    const req = createPendingApproval(
+      "thread-single-use",
+      "host_run_powershell",
+      { command: "del file.txt" },
+      "risk",
+      t0
+    );
 
     // Unknown ID
     const notFound = consumePendingApproval("non-existent-id", "approved", t0);
@@ -145,19 +311,31 @@ describe("Host Mode F2.2 Single-Use & Expiring Approvals Suite", () => {
     assert.equal(second.status, "conflict");
 
     // Concurrent consumption via Promise.all
-    const concReq = createPendingApproval("thread-concurrent", "host_delete_path", { path: "C:\\foo" }, "risk", t0);
+    const concReq = createPendingApproval(
+      "thread-concurrent",
+      "host_delete_path",
+      { path: "C:\\foo" },
+      "risk",
+      t0
+    );
     const results = await Promise.all([
       Promise.resolve().then(() => consumePendingApproval(concReq.id, "approved", t0)),
-      Promise.resolve().then(() => consumePendingApproval(concReq.id, "approved", t0))
+      Promise.resolve().then(() => consumePendingApproval(concReq.id, "approved", t0)),
     ]);
 
-    const statuses = results.map((r: any) => r.status).sort();
+    const statuses = results.map((r) => r.status).sort();
     assert.deepEqual(statuses, ["approved", "conflict"]);
   });
 
   it("consumePendingApproval returns expired when now >= expiresAt", () => {
     const t0 = 1700000000000;
-    const req = createPendingApproval("thread-expired", "host_delete_path", { path: "C:\\old" }, "risk", t0);
+    const req = createPendingApproval(
+      "thread-expired",
+      "host_delete_path",
+      { path: "C:\\old" },
+      "risk",
+      t0
+    );
 
     const expiredResult = consumePendingApproval(req.id, "approved", t0 + 11 * 60 * 1000);
     assert.equal(expiredResult.status, "expired");
@@ -179,7 +357,7 @@ describe("Host Mode F2.4 Continuation Buffer Suite", () => {
         tool: "host_run_powershell",
         args: { command: "del a.txt" },
         status: "executed",
-        result: { stdout: "deleted" }
+        result: { stdout: "deleted" },
       },
       t0
     );
@@ -214,7 +392,7 @@ describe("Host Mode F2.4 Continuation Buffer Suite", () => {
         threadId: "thread-c-2",
         tool: "host_delete_path",
         args: { path: "C:\\junk" },
-        status: "rejected"
+        status: "rejected",
       },
       t0
     );
@@ -229,17 +407,23 @@ describe("POST /api/host/approvals Route Suite", () => {
   it("approves pending action, returns 200, executes tool, and writes to continuation buffer", async () => {
     const origFetch = global.fetch;
     try {
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, stdout: "cleared" })
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, stdout: "cleared" }),
+        }) as unknown as Response) as typeof fetch;
 
-      const approval = createPendingApproval("route-thread-1", "host_run_powershell", { command: "del file.txt" }, "risk");
+      const approval = createPendingApproval(
+        "route-thread-1",
+        "host_run_powershell",
+        { command: "del file.txt" },
+        "risk"
+      );
       const req = new Request("http://localhost:3000/api/host/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId: approval.id, action: "approved" })
+        body: JSON.stringify({ approvalId: approval.id, action: "approved" }),
       });
 
       const res = await hostApprovalsPost(req);
@@ -260,11 +444,16 @@ describe("POST /api/host/approvals Route Suite", () => {
   });
 
   it("returns 409 on replay of consumed approval", async () => {
-    const approval = createPendingApproval("route-thread-replay", "host_delete_path", { path: "C:\\test" }, "risk");
+    const approval = createPendingApproval(
+      "route-thread-replay",
+      "host_delete_path",
+      { path: "C:\\test" },
+      "risk"
+    );
     const req1 = new Request("http://localhost:3000/api/host/approvals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approvalId: approval.id, action: "rejected" })
+      body: JSON.stringify({ approvalId: approval.id, action: "rejected" }),
     });
     const res1 = await hostApprovalsPost(req1);
     assert.equal(res1.status, 200);
@@ -272,7 +461,7 @@ describe("POST /api/host/approvals Route Suite", () => {
     const req2 = new Request("http://localhost:3000/api/host/approvals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approvalId: approval.id, action: "approved" })
+      body: JSON.stringify({ approvalId: approval.id, action: "approved" }),
     });
     const res2 = await hostApprovalsPost(req2);
     assert.equal(res2.status, 409);
@@ -282,7 +471,13 @@ describe("POST /api/host/approvals Route Suite", () => {
 
   it("returns 410 on expired approval and stores expired status in continuation buffer", async () => {
     const t0 = 1700000000000;
-    const approval = createPendingApproval("route-thread-exp", "host_delete_path", { path: "C:\\test" }, "risk", t0);
+    const approval = createPendingApproval(
+      "route-thread-exp",
+      "host_delete_path",
+      { path: "C:\\test" },
+      "risk",
+      t0
+    );
 
     // Stub Date.now to simulate 11 minutes later
     const origNow = Date.now;
@@ -291,7 +486,7 @@ describe("POST /api/host/approvals Route Suite", () => {
       const req = new Request("http://localhost:3000/api/host/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId: approval.id, action: "approved" })
+        body: JSON.stringify({ approvalId: approval.id, action: "approved" }),
       });
       const res = await hostApprovalsPost(req);
       assert.equal(res.status, 410);
@@ -310,7 +505,7 @@ describe("POST /api/host/approvals Route Suite", () => {
     const req = new Request("http://localhost:3000/api/host/approvals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approvalId: "non-existent-approval-id", action: "approved" })
+      body: JSON.stringify({ approvalId: "non-existent-approval-id", action: "approved" }),
     });
     const res = await hostApprovalsPost(req);
     assert.equal(res.status, 404);
@@ -341,7 +536,11 @@ describe("Subagent Isolation Architecture Suite", () => {
     const violatingFiles: string[] = [];
     for (const filePath of allSubagentFiles) {
       const content = fs.readFileSync(filePath, "utf-8");
-      if (content.includes("hostMode") || content.includes("@/lib/hostMode") || content.includes("../hostMode")) {
+      if (
+        content.includes("hostMode") ||
+        content.includes("@/lib/hostMode") ||
+        content.includes("../hostMode")
+      ) {
         violatingFiles.push(filePath);
       }
     }
@@ -374,13 +573,13 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
 
     try {
       process.env.HOST_RUNNER_SHARED_SECRET = "secret-test-token-xyz";
-      global.fetch = (async (_url: any, init?: any) => {
+      global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
         capturedHeaders = (init?.headers as Record<string, string>) || {};
         return {
           ok: true,
           status: 200,
-          json: async () => ({ success: true })
-        } as Response;
+          json: async () => ({ success: true }),
+        } as unknown as Response;
       }) as typeof fetch;
 
       await executeHostTool("host_list_dir", { path: "." });
@@ -406,23 +605,36 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
         return origTimeout.call(AbortSignal, ms);
       };
 
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true })
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true }),
+        }) as unknown as Response) as typeof fetch;
 
       // 1. Default timeout (120s + 5s buffer = 125s = 125,000ms)
       await executeHostTool("host_run_powershell", { command: "Get-Date" });
-      assert.equal(timeoutsUsed[timeoutsUsed.length - 1], 125000, "Default timeout should be (120 + 5) * 1000 ms");
+      assert.equal(
+        timeoutsUsed[timeoutsUsed.length - 1],
+        125000,
+        "Default timeout should be (120 + 5) * 1000 ms"
+      );
 
       // 2. Custom timeout within range (30s + 5s buffer = 35s = 35,000ms)
       await executeHostTool("host_run_powershell", { command: "Get-Date", timeoutSeconds: 30 });
-      assert.equal(timeoutsUsed[timeoutsUsed.length - 1], 35000, "30s timeout should be (30 + 5) * 1000 ms");
+      assert.equal(
+        timeoutsUsed[timeoutsUsed.length - 1],
+        35000,
+        "30s timeout should be (30 + 5) * 1000 ms"
+      );
 
       // 3. Custom timeout capped at 600s (600s + 5s buffer = 605s = 605,000ms)
       await executeHostTool("host_run_powershell", { command: "Get-Date", timeoutSeconds: 999 });
-      assert.equal(timeoutsUsed[timeoutsUsed.length - 1], 605000, "Capped timeout should be (600 + 5) * 1000 ms");
+      assert.equal(
+        timeoutsUsed[timeoutsUsed.length - 1],
+        605000,
+        "Capped timeout should be (600 + 5) * 1000 ms"
+      );
 
       // 4. File / list calls use fixed 30s (30,000ms)
       await executeHostTool("host_read_file", { path: "C:\\test.txt" });
@@ -450,53 +662,66 @@ describe("Host Mode F1 Client Execution & Auth Suite", () => {
       };
 
       // Case 1: Healthy 200 {"status":"ok"}
-      global.fetch = (async (url: any, init?: any) => {
+      global.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         lastUrl = String(url);
         lastMethod = init?.method || "GET";
         return {
           ok: true,
           status: 200,
-          json: async () => ({ status: "ok" })
-        } as Response;
+          json: async () => ({ status: "ok" }),
+        } as unknown as Response;
       }) as typeof fetch;
 
       const healthy = await checkHostRunnerHealth();
       assert.equal(healthy, true, "checkHostRunnerHealth must return true on 200 ok");
       assert.equal(lastTimeoutMs, 1500, "checkHostRunnerHealth must use 1500ms timeout");
       assert.equal(lastMethod, "GET", "checkHostRunnerHealth must use GET");
-      assert.ok(String(lastUrl ?? "").endsWith("/health"), "checkHostRunnerHealth must target /health");
+      assert.ok(
+        String(lastUrl ?? "").endsWith("/health"),
+        "checkHostRunnerHealth must target /health"
+      );
 
       // Case 2: HTTP 500 error
-      global.fetch = (async () => ({
-        ok: false,
-        status: 500,
-        json: async () => ({ error: "internal server error" })
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "internal server error" }),
+        }) as unknown as Response) as typeof fetch;
       const unhealthy500 = await checkHostRunnerHealth();
       assert.equal(unhealthy500, false, "checkHostRunnerHealth must return false on HTTP 500");
 
       // Case 3: Bad JSON payload {"status":"error"}
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: "error" })
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "error" }),
+        }) as unknown as Response) as typeof fetch;
       const unhealthyBadPayload = await checkHostRunnerHealth();
-      assert.equal(unhealthyBadPayload, false, "checkHostRunnerHealth must return false on bad payload");
+      assert.equal(
+        unhealthyBadPayload,
+        false,
+        "checkHostRunnerHealth must return false on bad payload"
+      );
 
       // Case 4: Network rejection
       global.fetch = (async () => {
         throw new TypeError("Failed to fetch");
-      }) as any;
+      }) as typeof fetch;
       const unhealthyNetwork = await checkHostRunnerHealth();
-      assert.equal(unhealthyNetwork, false, "checkHostRunnerHealth must return false on network error");
+      assert.equal(
+        unhealthyNetwork,
+        false,
+        "checkHostRunnerHealth must return false on network error"
+      );
 
       // Case 5: Timeout rejection
       global.fetch = (async () => {
         const err = new Error("The operation was aborted due to timeout");
         err.name = "TimeoutError";
         throw err;
-      }) as any;
+      }) as typeof fetch;
       const unhealthyTimeout = await checkHostRunnerHealth();
       assert.equal(unhealthyTimeout, false, "checkHostRunnerHealth must return false on timeout");
     } finally {
@@ -528,15 +753,16 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
       threadStore.saveThread(thread);
 
       const manifest = getBridgeManifest();
-      global.fetch = (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          status: "ok",
-          protocolVersion: PROTOCOL_VERSION,
-          bridgeSourceSha256: manifest.bridgeSourceSha256
-        })
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: "ok",
+            protocolVersion: PROTOCOL_VERSION,
+            bridgeSourceSha256: manifest.bridgeSourceSha256,
+          }),
+        }) as unknown as Response) as typeof fetch;
 
       const req2 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
       const res2 = await hostStatusGet(req2);
@@ -546,11 +772,12 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
       assert.equal(json2.runnerAvailable, true);
 
       // 3. Mock unhealthy runner (500)
-      global.fetch = (async () => ({
-        ok: false,
-        status: 500,
-        json: async () => ({ error: "offline" })
-      })) as any;
+      global.fetch = (async () =>
+        ({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "offline" }),
+        }) as unknown as Response) as typeof fetch;
 
       const req3 = new Request(`http://localhost:3000/api/host/status?threadId=${thread.id}`);
       const res3 = await hostStatusGet(req3);
@@ -582,159 +809,188 @@ describe("Host Mode F3 Status, Tool Gating, Approval & Scratch File Acceptance S
     assert.deepEqual(resolveTools(true, true), HOST_TOOLS_DEFINITIONS);
   });
 
-  it("live host runner scratch file acceptance (F3.4 items 1-8)", { timeout: 35000, skip: process.platform !== "win32" ? "Windows-only live PowerShell host runner test" : false }, async () => {
-    const exePath = fs.existsSync("C:\\AI\\ai-control\\bin\\host-runner.exe")
-      ? "C:\\AI\\ai-control\\bin\\host-runner.exe"
-      : path.resolve(__dirname, "../../host-bridge/dist/host-runner.exe");
-    const testPort = 8769;
-    const testSecret = `f3-live-secret-32-chars-long-at-least-${Date.now()}`;
-    let runnerProc: ReturnType<typeof spawn> | null = null;
+  it(
+    "live host runner scratch file acceptance (F3.4 items 1-8)",
+    {
+      timeout: 35000,
+      skip: process.platform !== "win32" ? "Windows-only live PowerShell host runner test" : false,
+    },
+    async () => {
+      const exePath = fs.existsSync("C:\\AI\\ai-control\\bin\\host-runner.exe")
+        ? "C:\\AI\\ai-control\\bin\\host-runner.exe"
+        : path.resolve(__dirname, "../../host-bridge/dist/host-runner.exe");
+      const testPort = 8769;
+      const testSecret = `f3-live-secret-32-chars-long-at-least-${Date.now()}`;
+      let runnerProc: ReturnType<typeof spawn> | null = null;
 
-    function stopRunner() {
-      if (runnerProc && runnerProc.pid) {
-        try {
-          execSync(`taskkill /PID ${runnerProc.pid} /T /F`, { stdio: "ignore" });
-        } catch {}
-        try {
-          runnerProc.kill();
-        } catch {}
-        runnerProc = null;
+      function stopRunner() {
+        if (runnerProc && runnerProc.pid) {
+          try {
+            execSync(`taskkill /PID ${runnerProc.pid} /T /F`, { stdio: "ignore" });
+          } catch {}
+          try {
+            runnerProc.kill();
+          } catch {}
+          runnerProc = null;
+        }
       }
-    }
 
-    const origUrl = process.env.HOST_RUNNER_URL;
-    const origSecret = process.env.HOST_RUNNER_SHARED_SECRET;
-    let scratchPath: string | null = null;
+      const origUrl = process.env.HOST_RUNNER_URL;
+      const origSecret = process.env.HOST_RUNNER_SHARED_SECRET;
+      let scratchPath: string | null = null;
 
-    try {
-      process.env.HOST_RUNNER_URL = `http://127.0.0.1:${testPort}`;
-      process.env.HOST_RUNNER_SHARED_SECRET = testSecret;
+      try {
+        process.env.HOST_RUNNER_URL = `http://127.0.0.1:${testPort}`;
+        process.env.HOST_RUNNER_SHARED_SECRET = testSecret;
 
-      // 1. Spawn native compiled binary on loopback port with test secret
-      runnerProc = spawn(
-        exePath,
-        [],
-        {
+        // 1. Spawn native compiled binary on loopback port with test secret
+        runnerProc = spawn(exePath, [], {
           cwd: os.tmpdir(),
           env: {
             ...process.env,
             PORT: String(testPort),
-            HOST_RUNNER_SHARED_SECRET: testSecret
+            HOST_RUNNER_SHARED_SECRET: testSecret,
           },
-          stdio: "pipe"
+          stdio: "pipe",
+        });
+
+        // Poll until healthy
+        let healthy = false;
+        for (let attempt = 0; attempt < 20; attempt++) {
+          if (await checkHostRunnerHealth()) {
+            healthy = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 250));
         }
-      );
+        assert.ok(healthy, "Host runner failed to start and report healthy");
 
-      // Poll until healthy
-      let healthy = false;
-      for (let attempt = 0; attempt < 20; attempt++) {
-        if (await checkHostRunnerHealth()) {
-          healthy = true;
-          break;
+        // 2. Execute host_list_dir against Documents
+        const docsDir = path.join(os.homedir(), "Documents");
+        if (!fs.existsSync(docsDir)) {
+          fs.mkdirSync(docsDir, { recursive: true });
         }
-        await new Promise((r) => setTimeout(r, 250));
-      }
-      assert.ok(healthy, "Host runner failed to start and report healthy");
+        const listRes = await executeHostTool("host_list_dir", { path: docsDir });
+        assert.equal(listRes.success, true);
+        assert.ok(Array.isArray(listRes.items));
 
-      // 2. Execute host_list_dir against Documents
-      const docsDir = path.join(os.homedir(), "Documents");
-      if (!fs.existsSync(docsDir)) {
-        fs.mkdirSync(docsDir, { recursive: true });
-      }
-      const listRes = await executeHostTool("host_list_dir", { path: docsDir });
-      assert.equal(listRes.success, true);
-      assert.ok(Array.isArray(listRes.items));
+        // 3. Execute host_write_file to create scratch file, then host_read_file
+        const timestamp = Date.now();
+        const scratchFileName = `host-mode-test-${timestamp}.txt`;
+        scratchPath = path.join(docsDir, scratchFileName);
+        const testContent = `Host mode live test content at ${timestamp}`;
 
-      // 3. Execute host_write_file to create scratch file, then host_read_file
-      const timestamp = Date.now();
-      const scratchFileName = `host-mode-test-${timestamp}.txt`;
-      scratchPath = path.join(docsDir, scratchFileName);
-      const testContent = `Host mode live test content at ${timestamp}`;
+        const writeRes = await executeHostTool("host_write_file", {
+          path: scratchPath,
+          content: testContent,
+        });
+        assert.equal(writeRes.success, true);
 
-      const writeRes = await executeHostTool("host_write_file", {
-        path: scratchPath,
-        content: testContent
-      });
-      assert.equal(writeRes.success, true);
+        const readRes = await executeHostTool("host_read_file", { path: scratchPath });
+        assert.equal(readRes.success, true);
+        assert.equal(readRes.content, `1 | ${testContent}`);
 
-      const readRes = await executeHostTool("host_read_file", { path: scratchPath });
-      assert.equal(readRes.success, true);
-      assert.equal(readRes.content, `1 | ${testContent}`);
+        // 4. Verify destructive action gate + create pending approval + reject via POST /api/host/approvals
+        const checkResult = isDestructiveHostAction("host_delete_path", { path: scratchPath });
+        assert.equal(checkResult.isDestructive, true);
 
-      // 4. Verify destructive action gate + create pending approval + reject via POST /api/host/approvals
-      const checkResult = isDestructiveHostAction("host_delete_path", { path: scratchPath });
-      assert.equal(checkResult.isDestructive, true);
+        const app1 = createPendingApproval(
+          "live-thread-f3",
+          "host_delete_path",
+          { path: scratchPath },
+          "Delete scratch file 1"
+        );
 
-      const app1 = createPendingApproval("live-thread-f3", "host_delete_path", { path: scratchPath }, "Delete scratch file 1");
+        const getApprovalsRes = await hostApprovalsGet(
+          new Request("http://localhost:3000/api/host/approvals?threadId=live-thread-f3")
+        );
+        assert.equal(getApprovalsRes.status, 200);
+        const getApprovalsJson = await getApprovalsRes.json();
+        assert.ok(
+          (getApprovalsJson.approvals as Array<{ id: string }>).some((a) => a.id === app1.id)
+        );
 
-      const getApprovalsRes = await hostApprovalsGet(new Request("http://localhost:3000/api/host/approvals?threadId=live-thread-f3"));
-      assert.equal(getApprovalsRes.status, 200);
-      const getApprovalsJson = await getApprovalsRes.json();
-      assert.ok(getApprovalsJson.approvals.some((a: any) => a.id === app1.id));
+        const rejectReq = new Request("http://localhost:3000/api/host/approvals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approvalId: app1.id, action: "rejected" }),
+        });
+        const rejectRes = await hostApprovalsPost(rejectReq);
+        assert.equal(rejectRes.status, 200);
+        assert.equal(
+          fs.existsSync(scratchPath),
+          true,
+          "Scratch file must still exist after rejection"
+        );
 
-      const rejectReq = new Request("http://localhost:3000/api/host/approvals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId: app1.id, action: "rejected" })
-      });
-      const rejectRes = await hostApprovalsPost(rejectReq);
-      assert.equal(rejectRes.status, 200);
-      assert.equal(fs.existsSync(scratchPath), true, "Scratch file must still exist after rejection");
+        const contReject = consumeContinuationEntry(app1.id, "live-thread-f3");
+        assert.equal(contReject.ok, true);
+        if (contReject.ok) {
+          assert.equal(contReject.entry.status, "rejected");
+        }
 
-      const contReject = consumeContinuationEntry(app1.id, "live-thread-f3");
-      assert.equal(contReject.ok, true);
-      if (contReject.ok) {
-        assert.equal(contReject.entry.status, "rejected");
-      }
+        // 5. Create second pending approval and approve -> verify execution against live runner and deletion
+        const app2 = createPendingApproval(
+          "live-thread-f3",
+          "host_delete_path",
+          { path: scratchPath },
+          "Delete scratch file 2"
+        );
 
-      // 5. Create second pending approval and approve -> verify execution against live runner and deletion
-      const app2 = createPendingApproval("live-thread-f3", "host_delete_path", { path: scratchPath }, "Delete scratch file 2");
+        const approveReq = new Request("http://localhost:3000/api/host/approvals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approvalId: app2.id, action: "approved" }),
+        });
+        const approveRes = await hostApprovalsPost(approveReq);
+        assert.equal(approveRes.status, 200);
+        assert.equal(
+          fs.existsSync(scratchPath),
+          false,
+          "Scratch file must be deleted after approval"
+        );
 
-      const approveReq = new Request("http://localhost:3000/api/host/approvals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId: app2.id, action: "approved" })
-      });
-      const approveRes = await hostApprovalsPost(approveReq);
-      assert.equal(approveRes.status, 200);
-      assert.equal(fs.existsSync(scratchPath), false, "Scratch file must be deleted after approval");
+        const contApprove = consumeContinuationEntry(app2.id, "live-thread-f3");
+        assert.equal(contApprove.ok, true);
+        if (contApprove.ok) {
+          assert.equal(contApprove.entry.status, "executed");
+        }
 
-      const contApprove = consumeContinuationEntry(app2.id, "live-thread-f3");
-      assert.equal(contApprove.ok, true);
-      if (contApprove.ok) {
-        assert.equal(contApprove.entry.status, "executed");
-      }
+        // 6. Replay same approvalId -> verify HTTP 409
+        const replayReq = new Request("http://localhost:3000/api/host/approvals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approvalId: app2.id, action: "approved" }),
+        });
+        const replayRes = await hostApprovalsPost(replayReq);
+        assert.equal(replayRes.status, 409);
 
-      // 6. Replay same approvalId -> verify HTTP 409
-      const replayReq = new Request("http://localhost:3000/api/host/approvals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId: app2.id, action: "approved" })
-      });
-      const replayRes = await hostApprovalsPost(replayReq);
-      assert.equal(replayRes.status, 409);
-
-      // 7. Stop runner and verify checkHostRunnerHealth() returns false
-      stopRunner();
-      const healthyAfterStop = await checkHostRunnerHealth();
-      assert.equal(healthyAfterStop, false, "checkHostRunnerHealth must return false after runner stops");
-    } finally {
-      stopRunner();
-      if (scratchPath && fs.existsSync(scratchPath)) {
-        try {
-          fs.unlinkSync(scratchPath);
-        } catch {}
-      }
-      if (origUrl !== undefined) {
-        process.env.HOST_RUNNER_URL = origUrl;
-      } else {
-        delete process.env.HOST_RUNNER_URL;
-      }
-      if (origSecret !== undefined) {
-        process.env.HOST_RUNNER_SHARED_SECRET = origSecret;
-      } else {
-        delete process.env.HOST_RUNNER_SHARED_SECRET;
+        // 7. Stop runner and verify checkHostRunnerHealth() returns false
+        stopRunner();
+        const healthyAfterStop = await checkHostRunnerHealth();
+        assert.equal(
+          healthyAfterStop,
+          false,
+          "checkHostRunnerHealth must return false after runner stops"
+        );
+      } finally {
+        stopRunner();
+        if (scratchPath && fs.existsSync(scratchPath)) {
+          try {
+            fs.unlinkSync(scratchPath);
+          } catch {}
+        }
+        if (origUrl !== undefined) {
+          process.env.HOST_RUNNER_URL = origUrl;
+        } else {
+          delete process.env.HOST_RUNNER_URL;
+        }
+        if (origSecret !== undefined) {
+          process.env.HOST_RUNNER_SHARED_SECRET = origSecret;
+        } else {
+          delete process.env.HOST_RUNNER_SHARED_SECRET;
+        }
       }
     }
-  });
+  );
 });

@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { copyText } from "../lib/clipboard";
 
@@ -10,21 +10,33 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
   afterEach(() => {
     // Restore globals
     if (originalNavigator !== undefined) {
-      Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true, writable: true });
+      Object.defineProperty(globalThis, "navigator", {
+        value: originalNavigator,
+        configurable: true,
+        writable: true,
+      });
     } else {
-      delete (globalThis as any).navigator;
+      delete (globalThis as unknown as { navigator?: unknown }).navigator;
     }
 
     if (originalDocument !== undefined) {
-      Object.defineProperty(globalThis, "document", { value: originalDocument, configurable: true, writable: true });
+      Object.defineProperty(globalThis, "document", {
+        value: originalDocument,
+        configurable: true,
+        writable: true,
+      });
     } else {
-      delete (globalThis as any).document;
+      delete (globalThis as unknown as { document?: unknown }).document;
     }
 
     if (originalWindow !== undefined) {
-      Object.defineProperty(globalThis, "window", { value: originalWindow, configurable: true, writable: true });
+      Object.defineProperty(globalThis, "window", {
+        value: originalWindow,
+        configurable: true,
+        writable: true,
+      });
     } else {
-      delete (globalThis as any).window;
+      delete (globalThis as unknown as { window?: unknown }).window;
     }
   });
 
@@ -36,11 +48,11 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
         clipboard: {
           writeText: async (text: string) => {
             written = text;
-          }
-        }
+          },
+        },
       },
       configurable: true,
-      writable: true
+      writable: true,
     });
 
     const result = await copyText("secure context text");
@@ -49,8 +61,8 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
   });
 
   it("falls back to document.execCommand when navigator.clipboard is unavailable (plain HTTP LAN)", async () => {
-    let appendedChild: any = null;
-    let removedChild: any = null;
+    let appendedChild: { value?: string } | null = null;
+    let removedChild: unknown = null;
     let executedCommand = "";
     let selected = false;
     let focused = false;
@@ -59,30 +71,38 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
     Object.defineProperty(globalThis, "navigator", {
       value: {}, // no clipboard property on insecure HTTP
       configurable: true,
-      writable: true
+      writable: true,
     });
 
     Object.defineProperty(globalThis, "document", {
       value: {
-        createElement: (tag: string) => ({
+        createElement: (_tag: string) => ({
           style: {},
           value: "",
           setAttribute: () => {},
-          focus: () => { focused = true; },
-          select: () => { selected = true; },
-          setSelectionRange: () => {}
+          focus: () => {
+            focused = true;
+          },
+          select: () => {
+            selected = true;
+          },
+          setSelectionRange: () => {},
         }),
         body: {
-          appendChild: (el: any) => { appendedChild = el; },
-          removeChild: (el: any) => { removedChild = el; }
+          appendChild: (el: { value?: string }) => {
+            appendedChild = el;
+          },
+          removeChild: (el: unknown) => {
+            removedChild = el;
+          },
         },
         execCommand: (cmd: string) => {
           executedCommand = cmd;
           return true;
-        }
+        },
       },
       configurable: true,
-      writable: true
+      writable: true,
     });
 
     const result = await copyText("http://192.168.50.254 LAN content");
@@ -90,7 +110,10 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
     assert.equal(executedCommand, "copy");
     assert.equal(selected, true);
     assert.equal(focused, true);
-    assert.equal(appendedChild.value, "http://192.168.50.254 LAN content");
+    assert.equal(
+      (appendedChild as { value?: string } | null)?.value,
+      "http://192.168.50.254 LAN content"
+    );
     assert.equal(removedChild, appendedChild);
   });
 
@@ -103,11 +126,11 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
         clipboard: {
           writeText: async () => {
             throw new Error("Clipboard permission denied or insecure context");
-          }
-        }
+          },
+        },
       },
       configurable: true,
-      writable: true
+      writable: true,
     });
 
     Object.defineProperty(globalThis, "document", {
@@ -118,19 +141,19 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
           setAttribute: () => {},
           focus: () => {},
           select: () => {},
-          setSelectionRange: () => {}
+          setSelectionRange: () => {},
         }),
         body: {
           appendChild: () => {},
-          removeChild: () => {}
+          removeChild: () => {},
         },
         execCommand: (cmd: string) => {
           executedCommand = cmd;
           return true;
-        }
+        },
       },
       configurable: true,
-      writable: true
+      writable: true,
     });
 
     const result = await copyText("fallback on error");
@@ -140,15 +163,19 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
 
   it("returns false gracefully when both clipboard and execCommand fail", async () => {
     Object.defineProperty(globalThis, "window", { value: {}, configurable: true, writable: true });
-    Object.defineProperty(globalThis, "navigator", { value: {}, configurable: true, writable: true });
+    Object.defineProperty(globalThis, "navigator", {
+      value: {},
+      configurable: true,
+      writable: true,
+    });
     Object.defineProperty(globalThis, "document", {
       value: {
         createElement: () => {
           throw new Error("DOM access restricted");
-        }
+        },
       },
       configurable: true,
-      writable: true
+      writable: true,
     });
 
     const result = await copyText("doomed copy");
@@ -156,7 +183,7 @@ describe("Phase B — Robust Clipboard Utility Suite", () => {
   });
 
   it("returns false in SSR environment where window is undefined", async () => {
-    delete (globalThis as any).window;
+    delete (globalThis as unknown as { window?: unknown }).window;
     const result = await copyText("ssr text");
     assert.equal(result, false);
   });

@@ -4,14 +4,13 @@ import fs from "fs";
 import path from "path";
 import {
   MAX_WEB_RESEARCH_CALLS,
-  WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   WEB_RESEARCH_TOOL_NAMES,
   isWebResearchTool,
   filterToolsForWebBudget,
   hasArtifactCreationIntent,
   buildSynthesisDirective,
   shouldRunPostToolSynthesis,
-  FINAL_ROUND_SYNTHESIS_DIRECTIVE
+  FINAL_ROUND_SYNTHESIS_DIRECTIVE,
 } from "../lib/contextBudget.js";
 
 describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
@@ -21,7 +20,10 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       { type: "function", function: { name: "fetch_webpage_markdown", description: "Fetch page" } },
       { type: "function", function: { name: "workspace_write_file", description: "Write file" } },
       { type: "function", function: { name: "workspace_read_file", description: "Read file" } },
-      { type: "function", function: { name: "execute_sandboxed_python", description: "Run python" } }
+      {
+        type: "function",
+        function: { name: "execute_sandboxed_python", description: "Run python" },
+      },
     ];
 
     it("defines MAX_WEB_RESEARCH_CALLS = 100 and WEB_RESEARCH_TOOL_NAMES", () => {
@@ -43,7 +45,7 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       for (const calls of [0, 1, 2, 50, 99]) {
         const filtered = filterToolsForWebBudget(sampleTools, calls);
         assert.equal(filtered.length, 5, `Expected 5 tools for ${calls} calls used`);
-        const names = filtered.map((t) => t.function?.name || t.name);
+        const names = filtered.map((t) => t.function?.name);
         assert.ok(names.includes("search_web"));
         assert.ok(names.includes("fetch_webpage_markdown"));
         assert.ok(names.includes("workspace_write_file"));
@@ -56,12 +58,18 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       for (const calls of [100, 101, 150]) {
         const filtered = filterToolsForWebBudget(sampleTools, calls);
         assert.equal(filtered.length, 3, `Expected 3 tools for ${calls} calls used`);
-        const names = filtered.map((t) => t.function?.name || t.name);
+        const names = filtered.map((t) => t.function?.name);
         assert.ok(!names.includes("search_web"), "search_web must be withheld");
-        assert.ok(!names.includes("fetch_webpage_markdown"), "fetch_webpage_markdown must be withheld");
+        assert.ok(
+          !names.includes("fetch_webpage_markdown"),
+          "fetch_webpage_markdown must be withheld"
+        );
         assert.ok(names.includes("workspace_write_file"), "workspace_write_file must be preserved");
         assert.ok(names.includes("workspace_read_file"), "workspace_read_file must be preserved");
-        assert.ok(names.includes("execute_sandboxed_python"), "execute_sandboxed_python must be preserved");
+        assert.ok(
+          names.includes("execute_sandboxed_python"),
+          "execute_sandboxed_python must be preserved"
+        );
       }
     });
   });
@@ -73,13 +81,17 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         "draw an architecture diagram of the cluster",
         "design a flowchart for user login",
         "make an infographic showing quarterly revenue",
-        "render a vector graphic of the system topology"
+        "render a vector graphic of the system topology",
       ];
 
       for (const prompt of svgPrompts) {
         const result = hasArtifactCreationIntent(prompt);
         assert.equal(result.wantsSvg, true, `Prompt should want SVG: "${prompt}"`);
-        assert.equal(result.isArtifactRequest, true, `Prompt should be artifact request: "${prompt}"`);
+        assert.equal(
+          result.isArtifactRequest,
+          true,
+          `Prompt should be artifact request: "${prompt}"`
+        );
       }
     });
 
@@ -88,13 +100,17 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         "what is the weather in Spanish Fort AL?",
         "how does the supervisor manage tasks?",
         "explain zero-trust architecture",
-        "summarize the README file"
+        "summarize the README file",
       ];
 
       for (const prompt of infoPrompts) {
         const result = hasArtifactCreationIntent(prompt);
         assert.equal(result.wantsSvg, false, `Prompt should not want SVG: "${prompt}"`);
-        assert.equal(result.isArtifactRequest, false, `Prompt should not be artifact request: "${prompt}"`);
+        assert.equal(
+          result.isArtifactRequest,
+          false,
+          `Prompt should not be artifact request: "${prompt}"`
+        );
       }
     });
 
@@ -103,15 +119,24 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       assert.ok(directive.includes("<svg"), "Must require <svg deliverable");
       assert.ok(directive.includes("```svg"), "Must require ```svg code block");
       assert.ok(directive.includes("Do not invoke any more tools"), "Must prohibit more tools");
-      assert.ok(directive.includes("do not reply with a text-only summary"), "Must instruct not to reply with text-only summary");
+      assert.ok(
+        directive.includes("do not reply with a text-only summary"),
+        "Must instruct not to reply with text-only summary"
+      );
     });
 
     it("builds standard Markdown directive when wantsSvg is false", () => {
       const directive = buildSynthesisDirective("what is the weather in Spanish Fort AL?");
-      assert.ok(directive.includes("synthesize all the tool results"), "Should be standard Markdown synthesis");
+      assert.ok(
+        directive.includes("synthesize all the tool results"),
+        "Should be standard Markdown synthesis"
+      );
       assert.ok(!directive.includes("```svg"), "Should not mention ```svg block");
 
-      const finalRoundDirective = buildSynthesisDirective("what is the weather in Spanish Fort AL?", true);
+      const finalRoundDirective = buildSynthesisDirective(
+        "what is the weather in Spanish Fort AL?",
+        true
+      );
       assert.equal(finalRoundDirective, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     });
   });
@@ -122,17 +147,22 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         userPrompt: "create an SVG of the weather in Spanish Fort AL",
         assistantContent: "The weather in Spanish Fort is 75F and sunny with mild humidity.",
         lingeringToolCallsCount: 0,
-        traces: [{ tool: "search_web", args: { query: "weather spanish fort" }, result: {} }]
+        traces: [{ tool: "search_web", args: { query: "weather spanish fort" }, result: {} }],
       });
-      assert.equal(shouldRun, true, "Must trigger post-tool synthesis when SVG is missing from response");
+      assert.equal(
+        shouldRun,
+        true,
+        "Must trigger post-tool synthesis when SVG is missing from response"
+      );
     });
 
     it("returns false when assistant content already contains an SVG block", () => {
       const shouldRun = shouldRunPostToolSynthesis({
         userPrompt: "create an SVG of the weather in Spanish Fort AL",
-        assistantContent: "Here is your vector graphic:\n\n```svg\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"gold\"/></svg>\n```",
+        assistantContent:
+          'Here is your vector graphic:\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="gold"/></svg>\n```',
         lingeringToolCallsCount: 0,
-        traces: [{ tool: "search_web", args: {}, result: {} }]
+        traces: [{ tool: "search_web", args: {}, result: {} }],
       });
       assert.equal(shouldRun, false, "Should not trigger synthesis if SVG is already present");
     });
@@ -145,12 +175,16 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         traces: [
           {
             tool: "workspace_write_file",
-            args: { path: "weather.svg", content: "<svg viewBox=\"0 0 100 100\"></svg>" },
-            result: { status: "SUCCESS" }
-          }
-        ]
+            args: { path: "weather.svg", content: '<svg viewBox="0 0 100 100"></svg>' },
+            result: { status: "SUCCESS" },
+          },
+        ],
       });
-      assert.equal(shouldRun, false, "Should not trigger synthesis if SVG was written to workspace");
+      assert.equal(
+        shouldRun,
+        false,
+        "Should not trigger synthesis if SVG was written to workspace"
+      );
     });
 
     it("returns true when assistant content is empty or has lingering tool calls", () => {
@@ -158,7 +192,7 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         userPrompt: "what is the weather?",
         assistantContent: "",
         lingeringToolCallsCount: 0,
-        traces: [{ tool: "search_web", args: {}, result: {} }]
+        traces: [{ tool: "search_web", args: {}, result: {} }],
       });
       assert.equal(emptyContentRun, true, "Must trigger synthesis when assistant content is empty");
 
@@ -166,7 +200,7 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
         userPrompt: "what is the weather?",
         assistantContent: "I found this info.",
         lingeringToolCallsCount: 1,
-        traces: [{ tool: "search_web", args: {}, result: {} }]
+        traces: [{ tool: "search_web", args: {}, result: {} }],
       });
       assert.equal(lingeringRun, true, "Must trigger synthesis when lingering tool calls exist");
     });
@@ -176,7 +210,13 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
     it("route.ts enforces MAX_WEB_RESEARCH_CALLS, calls filterToolsForWebBudget, buildSynthesisDirective, and shouldRunPostToolSynthesis", () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
       assert.ok(fs.existsSync(routePath), "route.ts must exist");
-      const routeSource = fs.readFileSync(routePath, "utf8");
+      const routeSource =
+        fs.readFileSync(routePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       assert.ok(
         routeSource.includes("MAX_WEB_RESEARCH_CALLS"),
@@ -200,33 +240,47 @@ describe("Chat Action Discipline & Artifact Synthesis Suite", () => {
       );
     });
 
-    it("route.ts sets up 10s SSE keepalive heartbeat and instructs model to output chat SVGs directly without duplicate workspace_write_file", () => {
+    it("route.ts sets up 10s SSE keepalive heartbeat and instructs model to output chat SVGs directly without duplicate workspace_write_file", async () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const routeSource = fs.readFileSync(routePath, "utf8");
+      const routeSource =
+        fs.readFileSync(routePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
+      const { createSseEventWriter } = await import("../lib/chat/turnEngine");
 
-      // 1. SSE keepalive heartbeat assertion
-      assert.ok(
-        routeSource.includes("heartbeatInterval") || routeSource.includes("setInterval"),
-        "route.ts must establish a periodic keepalive interval"
-      );
-      assert.ok(
-        routeSource.includes('type: "ping"') || routeSource.includes("type: 'ping'"),
-        "route.ts must send ping keepalive event over SSE"
-      );
-      assert.ok(
-        routeSource.includes("clearInterval"),
-        "route.ts must clear keepalive interval in finally block"
-      );
-
-      // Match interval frequency <= 15000 ms
-      const intervalMatch = routeSource.match(/setInterval\s*\([\s\S]*?,\s*(\d+(_\d+)?)\)/);
-      assert.ok(intervalMatch, "route.ts must specify numeric interval for keepalive");
-      const intervalMs = Number(intervalMatch[1].replace(/_/g, ""));
-      assert.ok(intervalMs > 0 && intervalMs <= 15000, `Keepalive interval must be <= 15000 ms, got ${intervalMs}`);
+      // 1. SSE keepalive heartbeat real call test (extracted into lib/chat/turnEngine.ts)
+      const stream = new TransformStream<Uint8Array, Uint8Array>();
+      const ac = new AbortController();
+      const sse = createSseEventWriter({
+        stream,
+        signal: ac.signal,
+        activeThreadId: "heartbeat-test",
+        heartbeatIntervalMs: 20,
+        log: () => {},
+      });
+      const reader = stream.readable.getReader();
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      const firstChunk = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          guardTimer = setTimeout(() => reject(new Error("heartbeat ping timeout")), 1000);
+        }),
+      ]);
+      if (guardTimer !== undefined) clearTimeout(guardTimer);
+      sse.stopHeartbeat();
+      await sse.closeWriterWithTimeout(200);
+      ac.signal.removeEventListener("abort", sse.cleanupClientSignal);
+      const text = new TextDecoder().decode(firstChunk.value);
+      assert.ok(text.includes('"type":"ping"'), "SSE keepalive must emit ping events");
 
       // 2. SYSTEM_PROMPT SVG action discipline instruction
       assert.ok(
-        routeSource.includes("When asked to create, draw, or generate an SVG, diagram, or visual card in chat"),
+        routeSource.includes(
+          "When asked to create, draw, or generate an SVG, diagram, or visual card in chat"
+        ),
         "SYSTEM_PROMPT must guide chat SVG deliverable format"
       );
       assert.ok(

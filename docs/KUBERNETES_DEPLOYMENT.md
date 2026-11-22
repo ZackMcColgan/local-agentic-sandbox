@@ -5,15 +5,15 @@ Docker Compose is **not** used for the live deployment.
 
 ## Architecture
 
-| Component | Location | Notes |
-|-----------|----------|-------|
-| web-ui | K8s (`local-agentic-sandbox`) | NodePort 30300; image `local-agentic-sandbox-web-ui:v-<sha>-<timestamp>` (built & imported by `scripts/deploy-cluster.js`) with `imagePullPolicy: Never` |
-| browser-mcp | K8s | Web search + page fetch |
-| mcp-runner | K8s | Sandboxed code execution |
-| qdrant | K8s | Semantic memory |
-| otel-collector | K8s | Observability |
-| strata | **Host** (native, not K8s) | K8s reaches it via `strata-service` (`host.docker.internal:8080`) |
-| host-bridge | **Host** (native, not K8s) | K8s reaches it via `host-runner-service` (`host.docker.internal:8765`) |
+| Component      | Location                      | Notes                                                                                                                                                    |
+| -------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| web-ui         | K8s (`local-agentic-sandbox`) | NodePort 30300; image `local-agentic-sandbox-web-ui:v-<sha>-<timestamp>` (built & imported by `scripts/deploy-cluster.js`) with `imagePullPolicy: Never` |
+| browser-mcp    | K8s                           | Web search + page fetch                                                                                                                                  |
+| mcp-runner     | K8s                           | Sandboxed code execution                                                                                                                                 |
+| qdrant         | K8s                           | Semantic memory                                                                                                                                          |
+| otel-collector | K8s                           | Observability                                                                                                                                            |
+| strata         | **Host** (native, not K8s)    | K8s reaches it via `strata-service` (`host.docker.internal:8080`)                                                                                        |
+| host-bridge    | **Host** (native, not K8s)    | K8s reaches it via `host-runner-service` (`host.docker.internal:8765`)                                                                                   |
 
 Strata and host-bridge run natively on the host for GPU and OS keyring access.
 
@@ -24,6 +24,7 @@ Strata and host-bridge run natively on the host for GPU and OS keyring access.
 K8s pods reach Strata on `:8080` and host-bridge on `:8765` via `host.docker.internal`.
 
 **Verify:**
+
 ```powershell
 netstat -an | Select-String "LISTENING" | Select-String "8080|8765"
 
@@ -59,6 +60,7 @@ make k8s-deploy
 ```
 
 Manual equivalent (Windows — run from repo root so workspace `COPY` paths resolve, then import into the `desktop-control-plane` containerd node because `imagePullPolicy: Never` reads from `k8s.io` containerd storage):
+
 ```powershell
 docker build -t local-agentic-sandbox-web-ui:manual -f web-ui/Dockerfile .
 docker save local-agentic-sandbox-web-ui:manual -o web-ui.tar
@@ -73,12 +75,12 @@ kubectl rollout status deployment/web-ui -n local-agentic-sandbox --timeout=300s
 
 ## Access
 
-| Method | URL | Notes |
-|--------|-----|-------|
-| LAN / Gateway bridge (recommended) | `http://<host-ip>/` | Run `.\scripts\kind-gateway\start-gateway.ps1` + `node scripts/lan-bridge.js`; see [access-path.md](./access-path.md) |
-| Ingress (with controller) | `http://<host-ip>/` | No port needed |
-| Port-forward | `kubectl port-forward svc/web-ui 3001:3000 -n local-agentic-sandbox --address 0.0.0.0` | Then `http://<host-ip>:3001` |
-| NodePort direct | `http://<host-ip>:30300` | Unreliable on Docker Desktop |
+| Method                             | URL                                                                                    | Notes                                                                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| LAN / Gateway bridge (recommended) | `http://<host-ip>/`                                                                    | Run `.\scripts\kind-gateway\start-gateway.ps1` + `node scripts/lan-bridge.js`; see [access-path.md](./access-path.md) |
+| Ingress (with controller)          | `http://<host-ip>/`                                                                    | No port needed                                                                                                        |
+| Port-forward                       | `kubectl port-forward svc/web-ui 3001:3000 -n local-agentic-sandbox --address 0.0.0.0` | Then `http://<host-ip>:3001`                                                                                          |
+| NodePort direct                    | `http://<host-ip>:30300`                                                               | Unreliable on Docker Desktop                                                                                          |
 
 For persistent phone access without manual port-forward, create a Windows
 Scheduled Task that runs the port-forward command at logon.
@@ -95,10 +97,10 @@ node scripts/deploy-cluster.js all
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `Strata / host-bridge unreachable` | Host service not running or bound to loopback | Start Strata (`:8080`) / host-bridge (`:8765`) on host |
-| Tasks stuck at 25%, milestones `pending` | Old image (pre-fix) | `make k8s-deploy` to rebuild |
-| `kubectl` connection refused | Docker Desktop not running | Start Docker Desktop, wait for whale icon |
-| UI not loading after deploy | Port-forward died | Restart port-forward |
-| `make` not recognized (Windows) | No make on Windows | Use manual docker/kubectl commands above |
+| Symptom                                  | Cause                                         | Fix                                                    |
+| ---------------------------------------- | --------------------------------------------- | ------------------------------------------------------ |
+| `Strata / host-bridge unreachable`       | Host service not running or bound to loopback | Start Strata (`:8080`) / host-bridge (`:8765`) on host |
+| Tasks stuck at 25%, milestones `pending` | Old image (pre-fix)                           | `make k8s-deploy` to rebuild                           |
+| `kubectl` connection refused             | Docker Desktop not running                    | Start Docker Desktop, wait for whale icon              |
+| UI not loading after deploy              | Port-forward died                             | Restart port-forward                                   |
+| `make` not recognized (Windows)          | No make on Windows                            | Use manual docker/kubectl commands above               |

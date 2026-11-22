@@ -11,6 +11,12 @@ import {
   type JobExecutionOutcome,
 } from "../lib/board/boardOrchestrator";
 import { BoardStore } from "../lib/board/boardStore";
+import { composeDispatcherBrief } from "../lib/board/dispatcher";
+import {
+  classifyJobSummary,
+  createProductionIssueAndWait,
+  createProductionWorkingItemLivenessCheck,
+} from "../lib/board/productionDrain";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import { POST as drainPost } from "../app/api/board/drain/route";
 
@@ -319,3 +325,431 @@ test("(c) extractJobOutcomeMetadata parses PR, headSha, mergeSha, and deployTag 
   assert.deepEqual(empty, {});
 });
 
+test("Fix 2: issueAndWait returns host-checkout-unavailable and creates no thread when bridge check fails", async () => {
+  let createThreadCalls = 0;
+  let dispatchCalls = 0;
+
+  const issueAndWait = createProductionIssueAndWait({
+    hostCheckoutPath: "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox",
+    executeHostTool: async () => ({
+      ok: false,
+      exitCode: 128,
+      stderr: "fatal: not a git repository",
+    }),
+    threadStore: {
+      createThread: () => {
+        createThreadCalls += 1;
+        throw new Error("should not create thread");
+      },
+      getThread: async () => null,
+    },
+    dispatchChatTurn: async () => {
+      dispatchCalls += 1;
+      return { ok: true, status: 200, rawStream: "" };
+    },
+  });
+
+  const outcome = await issueAndWait({
+    item: {
+      id: "item-grounding-fail",
+      key: "#54",
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    },
+    brief: "Test brief",
+  });
+
+  assert.equal(outcome.status, "failed");
+  if (outcome.status === "failed") {
+    assert.equal(outcome.issue?.code, "host-checkout-unavailable");
+    assert.equal(outcome.issue?.autoFixable, false);
+  }
+  assert.equal(createThreadCalls, 0, "No thread may be created when host checkout check fails");
+  assert.equal(dispatchCalls, 0, "No chat turn may be dispatched when host checkout check fails");
+});
+
+test("Fix 2: issueAndWait issues thread when bridge check succeeds", async () => {
+  let createThreadCalls = 0;
+  let bridgeToolName = "";
+  let bridgeArgs: Record<string, unknown> = {};
+
+  const issueAndWait = createProductionIssueAndWait({
+    hostCheckoutPath: "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox",
+    executeHostTool: async (tool, args) => {
+      bridgeToolName = tool;
+      bridgeArgs = args;
+      return { ok: true, exitCode: 0, stdout: "develop\n" };
+    },
+    threadStore: {
+      createThread: () => {
+        createThreadCalls += 1;
+        return {
+          id: "thread-grounded-1",
+          title: "#54 Eval harness fix",
+          status: "active",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:00.000Z",
+        };
+      },
+      getThread: async () => ({
+        id: "thread-grounded-1",
+        title: "#54 Eval harness fix",
+        status: "completed",
+        model: "test-model",
+        reasoningEffort: "medium",
+        messages: [
+          {
+            id: "msg-1",
+            role: "assistant",
+            content: "Opened PR #204 and verified.",
+            timestamp: "2026-11-21T00:00:01.000Z",
+          },
+        ],
+        createdAt: "2026-11-21T00:00:00.000Z",
+        updatedAt: "2026-11-21T00:00:00.000Z",
+      }),
+    },
+    dispatchChatTurn: async () => ({ ok: true, status: 200, rawStream: "" }),
+  });
+
+  const outcome = await issueAndWait({
+    item: {
+      id: "item-grounding-ok",
+      key: "#54",
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    },
+    brief: "Test brief",
+  });
+
+  assert.equal(bridgeToolName, "host_run_powershell");
+  assert.equal(bridgeArgs.command, "git rev-parse --abbrev-ref HEAD");
+  assert.equal(bridgeArgs.cwd, "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox");
+  assert.equal(createThreadCalls, 1);
+  assert.equal(outcome.status, "completed");
+  if (outcome.status === "completed") {
+    assert.equal(outcome.threadId, "thread-grounded-1");
+    assert.equal(outcome.prNumber, 204);
+  }
+});
+
+test("Fix 2: composeDispatcherBrief includes concrete hostCheckoutPath when resolved", () => {
+  const concretePath = "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox";
+  const brief = composeDispatcherBrief(
+    {
+      id: "item-brief-path",
+      key: "#54",
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    },
+    { operatorMemory: "", hostCheckoutPath: concretePath }
+  );
+
+  assert.ok(
+    brief.includes(concretePath),
+    `Expected composed brief to include concrete hostCheckoutPath ${concretePath}`
+  );
+  assert.ok(
+    !brief.includes("the configured host checkout"),
+    "Composed brief must not fall back to generic placeholder when hostCheckoutPath is set"
+  );
+});
+
+test("Fix 3: classifyJobSummary distinguishes blocked, turn-ended, and completed summaries", () => {
+  assert.equal(
+    classifyJobSummary(
+      "**BLOCKED — target files are not present in this sandbox checkout, and host access is withheld.**\n\nDetails follow."
+    ),
+    "blocked"
+  );
+  assert.equal(
+    classifyJobSummary("Partial output...\n\n⚠️ [Turn ended: maximum tool rounds reached]"),
+    "turn-ended"
+  );
+  assert.equal(
+    classifyJobSummary(
+      "Opened PR #205. Resolved the issue that previously blocked the nightly eval run."
+    ),
+    "completed"
+  );
+});
+
+test("Fix 3: orchestrator marks item needs-attention and counts failed when job summary declares BLOCKED", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const item = store.create({
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    const blockedFirstLine =
+      "**BLOCKED — target files are not present in this sandbox checkout, and host access is withheld.**";
+
+    const issueAndWait = createProductionIssueAndWait({
+      hostCheckoutPath: "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox",
+      executeHostTool: async () => ({ ok: true, exitCode: 0, stdout: "develop\n" }),
+      threadStore: {
+        createThread: () => ({
+          id: "thread-blocked-54",
+          title: "#1 Eval harness fix",
+          status: "active",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:00.000Z",
+        }),
+        getThread: async () => ({
+          id: "thread-blocked-54",
+          title: "#1 Eval harness fix",
+          status: "completed",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [
+            {
+              id: "msg-blocked-1",
+              role: "assistant",
+              content: `${blockedFirstLine}\n\nStopping per standing job protocol.`,
+              timestamp: "2026-11-21T00:00:01.000Z",
+            },
+          ],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:00.000Z",
+        }),
+      },
+      dispatchChatTurn: async () => ({ ok: true, status: 200, rawStream: "" }),
+    });
+
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      boardDir: env.boardDir,
+      maxItems: 1,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      issueAndWait,
+    });
+
+    const report = await orchestrator.drain();
+    const afterItem = store.get(item.id);
+
+    assert.equal(afterItem?.status, "needs-attention");
+    assert.equal(afterItem?.needsAttention, true);
+    assert.equal(afterItem?.parkedReason, blockedFirstLine);
+    assert.equal(report.failedCount, 1);
+    assert.equal(report.completedCount, 0);
+    assert.equal(report.surfacedIssues[0]?.code, "job-blocked");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("Fix 1: orphaned working item (stopped thread + no live job) is marked needs-attention and drain issues next queued item", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const orphaned = store.create({
+      title: "Interrupted job",
+      brief: "Died during container OOMKill.",
+      status: "working",
+      threadLink: "/?thread=thread-orphaned-1",
+      author: "Owner",
+      source: "manual",
+    });
+    const nextQueued = store.create({
+      title: "Next queued job",
+      brief: "Should run after orphaned item is recovered.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    const issuedIds: string[] = [];
+    const checkWorkingItemLiveness = createProductionWorkingItemLivenessCheck({
+      threadStore: {
+        createThread: () => {
+          throw new Error("unexpected createThread");
+        },
+        getThread: async (id: string) =>
+          id === "thread-orphaned-1"
+            ? {
+                id: "thread-orphaned-1",
+                title: "#1 Interrupted job",
+                status: "stopped",
+                model: "test-model",
+                reasoningEffort: "medium",
+                messages: [],
+                error: "Turn incomplete: Server restarted or turn interrupted",
+                createdAt: "2026-11-21T00:00:00.000Z",
+                updatedAt: "2026-11-21T00:00:05.000Z",
+              }
+            : null,
+      },
+      isThreadLive: () => false,
+    });
+
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      maxItems: 1,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      checkWorkingItemLiveness,
+      issueAndWait: async ({ item }): Promise<JobExecutionOutcome> => {
+        issuedIds.push(item.id);
+        return {
+          status: "completed",
+          threadId: `thread-${item.id}`,
+          summary: "Completed next queued job.",
+        };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    const afterOrphaned = store.get(orphaned.id);
+    const afterNext = store.get(nextQueued.id);
+
+    assert.equal(afterOrphaned?.status, "needs-attention");
+    assert.equal(afterOrphaned?.needsAttention, true);
+    assert.match(afterOrphaned?.parkedReason ?? "", /without an outcome|restart/i);
+    assert.deepEqual(issuedIds, [nextQueued.id]);
+    assert.equal(afterNext?.status, "done");
+    assert.equal(report.completedCount, 1);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("Fix 1: working item with a live job stops the drain and issues nothing", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const liveItem = store.create({
+      title: "Live running job",
+      brief: "Still actively executing.",
+      status: "working",
+      threadLink: "/?thread=thread-live-1",
+      author: "Owner",
+      source: "manual",
+    });
+    const queued = store.create({
+      title: "Queued next job",
+      brief: "Must wait while live job runs.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    let issuedCount = 0;
+    const checkWorkingItemLiveness = createProductionWorkingItemLivenessCheck({
+      threadStore: {
+        createThread: () => {
+          throw new Error("unexpected createThread");
+        },
+        getThread: async () => ({
+          id: "thread-live-1",
+          title: "#1 Live running job",
+          status: "active",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:05.000Z",
+        }),
+      },
+      isThreadLive: (id) => id === "thread-live-1",
+    });
+
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      maxItems: 2,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      checkWorkingItemLiveness,
+      issueAndWait: async () => {
+        issuedCount += 1;
+        return { status: "completed", threadId: "t-unexpected" };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    assert.equal(issuedCount, 0);
+    assert.equal(store.get(liveItem.id)?.status, "working");
+    assert.equal(store.get(queued.id)?.status, "queued");
+    assert.equal(report.stopReason, "job-already-running");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("Fix 1: working item whose liveness check errors stops the drain (fail-safe)", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const workingItem = store.create({
+      title: "Unknown liveness job",
+      brief: "Liveness check throws.",
+      status: "working",
+      threadLink: "/?thread=thread-err-1",
+      author: "Owner",
+      source: "manual",
+    });
+    const queued = store.create({
+      title: "Queued next job",
+      brief: "Must not start when liveness check errors.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    let issuedCount = 0;
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      maxItems: 2,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      checkWorkingItemLiveness: async () => {
+        throw new Error("thread store read failed");
+      },
+      issueAndWait: async () => {
+        issuedCount += 1;
+        return { status: "completed", threadId: "t-unexpected" };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    assert.equal(issuedCount, 0);
+    assert.equal(store.get(workingItem.id)?.status, "working");
+    assert.equal(store.get(queued.id)?.status, "queued");
+    assert.equal(report.stopReason, "job-already-running");
+  } finally {
+    env.cleanup();
+  }
+});

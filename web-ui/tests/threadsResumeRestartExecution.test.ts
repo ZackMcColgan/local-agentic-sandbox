@@ -11,7 +11,10 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
     let receivedTaskId = "";
 
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
-    OvernightSupervisor.prototype.executeTaskWithRecovery = async function(task: TaskManifest, options?: any) {
+    OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
+      task: TaskManifest,
+      _options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
+    ) {
       executeCalled = true;
       receivedTaskId = task.taskId;
       return task;
@@ -29,24 +32,34 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       currentMilestoneIndex: 0,
-      milestones: [{ id: "M1", title: "M1", status: "pending", description: "M1", acceptanceCriteria: [], builderIterations: 0, criticRounds: 0 }],
+      milestones: [
+        {
+          id: "M1",
+          title: "M1",
+          status: "pending",
+          description: "M1",
+          acceptanceCriteria: [],
+          builderIterations: 0,
+          criticRounds: 0,
+        },
+      ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
     supervisor.saveCheckpoint(manifest);
 
     const thread = threadStore.createThread({
       title: "Test Resume Thread",
       model: "swift-27b-mtp",
-      taskId
+      taskId,
     });
 
     try {
       const req = new Request(`http://localhost:3000/api/threads/${thread.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "resume" })
+        body: JSON.stringify({ action: "resume" }),
       });
 
       const res = await POST(req, { params: Promise.resolve({ id: thread.id }) });
@@ -69,7 +82,10 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
     let receivedTaskId = "";
 
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
-    OvernightSupervisor.prototype.executeTaskWithRecovery = async function(task: TaskManifest, options?: any) {
+    OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
+      task: TaskManifest,
+      _options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
+    ) {
       executeCalled = true;
       receivedTaskId = task.taskId;
       return task;
@@ -87,24 +103,34 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       currentMilestoneIndex: 1,
-      milestones: [{ id: "M1", title: "M1", status: "completed", description: "M1", acceptanceCriteria: [], builderIterations: 1, criticRounds: 1 }],
+      milestones: [
+        {
+          id: "M1",
+          title: "M1",
+          status: "completed",
+          description: "M1",
+          acceptanceCriteria: [],
+          builderIterations: 1,
+          criticRounds: 1,
+        },
+      ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
     supervisor.saveCheckpoint(manifest);
 
     const thread = threadStore.createThread({
       title: "Test Restart Thread",
       model: "swift-27b-mtp",
-      taskId
+      taskId,
     });
 
     try {
       const req = new Request(`http://localhost:3000/api/threads/${thread.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restart" })
+        body: JSON.stringify({ action: "restart" }),
       });
 
       const res = await POST(req, { params: Promise.resolve({ id: thread.id }) });
@@ -124,11 +150,15 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
 
   it("preserves scope='PROJECT' on manifest and passes scope='PROJECT' on resume and restart", async () => {
     let executedTask: TaskManifest | null = null;
-    let executedOptions: any = null;
+    let executedOptions: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1] | null =
+      null;
     const originalExecute = OvernightSupervisor.prototype.executeTaskWithRecovery;
-    OvernightSupervisor.prototype.executeTaskWithRecovery = async function(task: TaskManifest, options?: any) {
+    OvernightSupervisor.prototype.executeTaskWithRecovery = async function (
+      task: TaskManifest,
+      options?: Parameters<OvernightSupervisor["executeTaskWithRecovery"]>[1]
+    ) {
       executedTask = task;
-      executedOptions = options;
+      executedOptions = options ?? null;
       return task;
     };
 
@@ -145,17 +175,27 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       currentMilestoneIndex: 0,
-      milestones: [{ id: "M1", title: "M1", status: "pending", description: "M1", acceptanceCriteria: [], builderIterations: 0, criticRounds: 0 }],
+      milestones: [
+        {
+          id: "M1",
+          title: "M1",
+          status: "pending",
+          description: "M1",
+          acceptanceCriteria: [],
+          builderIterations: 0,
+          criticRounds: 0,
+        },
+      ],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
     supervisor.saveCheckpoint(manifest);
 
     const thread = threadStore.createThread({
       title: "Test Scope Resume Thread",
       model: "swift-15-27b-mtp",
-      taskId
+      taskId,
     });
 
     try {
@@ -163,7 +203,7 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       const reqResume = new Request(`http://localhost:3000/api/threads/${thread.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "resume" })
+        body: JSON.stringify({ action: "resume" }),
       });
 
       const resResume = await POST(reqResume, { params: Promise.resolve({ id: thread.id }) });
@@ -175,8 +215,16 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       }
 
       assert.ok(executedTask, "executeTaskWithRecovery must be called on resume");
-      assert.equal((executedTask as TaskManifest).scope, "PROJECT", "Resumed task must preserve scope === 'PROJECT'");
-      assert.equal((executedOptions?.stepExecutor as any)?.scope, "PROJECT", "Resumed stepExecutor must receive scope === 'PROJECT'");
+      assert.equal(
+        (executedTask as TaskManifest).scope,
+        "PROJECT",
+        "Resumed task must preserve scope === 'PROJECT'"
+      );
+      assert.equal(
+        (executedOptions as { stepExecutor?: { scope?: string } } | null)?.stepExecutor?.scope,
+        "PROJECT",
+        "Resumed stepExecutor must receive scope === 'PROJECT'"
+      );
 
       // 2. Restart
       executedTask = null;
@@ -184,7 +232,7 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       const reqRestart = new Request(`http://localhost:3000/api/threads/${thread.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restart" })
+        body: JSON.stringify({ action: "restart" }),
       });
 
       const resRestart = await POST(reqRestart, { params: Promise.resolve({ id: thread.id }) });
@@ -196,8 +244,16 @@ describe("Fix 2.1 & 2.2: POST /api/threads/[id] resume & restart triggers execut
       }
 
       assert.ok(executedTask, "executeTaskWithRecovery must be called on restart");
-      assert.equal((executedTask as TaskManifest).scope, "PROJECT", "Restarted task must preserve scope === 'PROJECT'");
-      assert.equal((executedOptions?.stepExecutor as any)?.scope, "PROJECT", "Restarted stepExecutor must receive scope === 'PROJECT'");
+      assert.equal(
+        (executedTask as TaskManifest).scope,
+        "PROJECT",
+        "Restarted task must preserve scope === 'PROJECT'"
+      );
+      assert.equal(
+        (executedOptions as { stepExecutor?: { scope?: string } } | null)?.stepExecutor?.scope,
+        "PROJECT",
+        "Restarted stepExecutor must receive scope === 'PROJECT'"
+      );
     } finally {
       OvernightSupervisor.prototype.executeTaskWithRecovery = originalExecute;
     }

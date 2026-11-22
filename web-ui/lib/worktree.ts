@@ -1,7 +1,11 @@
 import { execFileSync } from "child_process";
 import { existsSync, rmSync } from "fs";
 import { join } from "path";
-export interface WorktreeHandle { jobId: string; path: string; branch: string; }
+export interface WorktreeHandle {
+  jobId: string;
+  path: string;
+  branch: string;
+}
 // A git spawn must never wait forever: under parallel test churn, `worktree
 // add` can queue behind index/worktree locks indefinitely (CI run 43737566475
 // went silent 24 min on exactly this). Bound every spawn to 30s and retry a
@@ -12,8 +16,9 @@ const GIT_LOCK_RETRIES = 3;
 function sleep(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function errorText(err: any): string {
-  return [err?.message, err?.stderr, err?.stdout].filter(Boolean).map(String).join("\n");
+function errorText(err: unknown): string {
+  const e = err as { message?: unknown; stderr?: unknown; stdout?: unknown } | null | undefined;
+  return [e?.message, e?.stderr, e?.stdout].filter(Boolean).map(String).join("\n");
 }
 const LOCK_OR_RACE_RE =
   /\.lock\b|unable to create|could not lock|cannot lock ref|already exists|is not a working tree/i;
@@ -42,9 +47,10 @@ function git(args: string[], cwd: string): string {
         timeout: GIT_TIMEOUT_MS,
         stdio: ["ignore", "pipe", "pipe"],
       }).trim();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const text = errorText(err);
-      const timedOut = err?.code === "ETIMEDOUT" || /timed out/i.test(text);
+      const code = (err as { code?: string } | null)?.code;
+      const timedOut = code === "ETIMEDOUT" || /timed out/i.test(text);
       const lockOrRace = LOCK_OR_RACE_RE.test(text);
       if ((!timedOut && !lockOrRace) || attempt >= GIT_LOCK_RETRIES) throw err;
       attempt += 1;
@@ -61,16 +67,24 @@ export function createJobWorktree(repoRoot: string, jobId: string): WorktreeHand
   // stale registrations, retrying across concurrent git lock races.
   for (let attempt = 0; ; attempt++) {
     if (existsSync(path)) {
-      try { git(["worktree", "remove", "--force", path], repoRoot); } catch {}
+      try {
+        git(["worktree", "remove", "--force", path], repoRoot);
+      } catch {}
     }
-    try { git(["branch", "-D", branch], repoRoot); } catch {}
-    try { git(["worktree", "prune"], repoRoot); } catch {}
+    try {
+      git(["branch", "-D", branch], repoRoot);
+    } catch {}
+    try {
+      git(["worktree", "prune"], repoRoot);
+    } catch {}
     try {
       git(["worktree", "add", "-b", branch, path, "HEAD"], repoRoot);
       return { jobId, path, branch };
-    } catch (err: any) {
+    } catch (err: unknown) {
       const text = errorText(err);
-      const retryable = err?.code === "ETIMEDOUT" || /timed out/i.test(text) || LOCK_OR_RACE_RE.test(text);
+      const code = (err as { code?: string } | null)?.code;
+      const retryable =
+        code === "ETIMEDOUT" || /timed out/i.test(text) || LOCK_OR_RACE_RE.test(text);
       if (!retryable || attempt >= GIT_LOCK_RETRIES) throw err;
       sleep(150 * (attempt + 1) + (process.pid % 97));
     }
@@ -83,7 +97,11 @@ export function removeJobWorktree(repoRoot: string, handle: WorktreeHandle): voi
     try {
       if (existsSync(handle.path)) rmSync(handle.path, { recursive: true, force: true });
     } catch {}
-    try { git(["worktree", "prune"], repoRoot); } catch {}
+    try {
+      git(["worktree", "prune"], repoRoot);
+    } catch {}
   }
-  try { git(["branch", "-D", handle.branch], repoRoot); } catch {}
+  try {
+    git(["branch", "-D", handle.branch], repoRoot);
+  } catch {}
 }

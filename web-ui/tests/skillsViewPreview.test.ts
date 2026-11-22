@@ -13,8 +13,8 @@ describe("Sprint U4 — Skills Candidate Diff Review & SKILL.md Preview Suite", 
       pattern: "pytest-import-error",
       occurrences: 4,
       solutionSummary: "Execute python3 -m pytest via workspace_run_command inside /workspace",
-      status: "pending" as const
-    }
+      status: "pending" as const,
+    },
   ];
 
   it("renders '◨ View SKILL.md' button on pending skill candidate cards", () => {
@@ -23,7 +23,7 @@ describe("Sprint U4 — Skills Candidate Diff Review & SKILL.md Preview Suite", 
         onOpenDrawer: () => {},
         initialPending: dummyPending,
         initialActive: [],
-        initialFlywheel: []
+        initialFlywheel: [],
       })
     );
 
@@ -40,7 +40,7 @@ describe("Sprint U4 — Skills Candidate Diff Review & SKILL.md Preview Suite", 
         initialPending: dummyPending,
         initialActive: [],
         initialFlywheel: [],
-        initialPreviewCandidate: dummyPending[0]
+        initialPreviewCandidate: dummyPending[0],
       })
     );
 
@@ -55,7 +55,7 @@ describe("Sprint U4 — Skills Candidate Diff Review & SKILL.md Preview Suite", 
     assert.ok(html.includes("SKILL.md Preview"), "Must render SKILL.md Preview title");
     assert.ok(
       html.includes("skills/pending/pytest-workspace-isolation.md") ||
-      window.document.body.textContent?.includes("skills/pending/pytest-workspace-isolation.md"),
+        window.document.body.textContent?.includes("skills/pending/pytest-workspace-isolation.md"),
       "Must render pending skill file path"
     );
     assert.ok(html.includes("Directive"), "Must render markdown directive section");

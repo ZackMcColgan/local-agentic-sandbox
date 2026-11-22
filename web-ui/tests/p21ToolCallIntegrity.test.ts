@@ -10,8 +10,12 @@ import { NextRequest } from "next/server";
 import { ThreadStore } from "../lib/threads/threadStore";
 import { POST } from "../app/api/chat/route";
 
+type OllamaRequestBody = {
+  messages?: Array<{ role?: string; content?: string }>;
+};
+
 function startMockOllamaServer(
-  handler: (callIndex: number, body: any, res: http.ServerResponse) => void
+  handler: (callIndex: number, body: OllamaRequestBody, res: http.ServerResponse) => void
 ): Promise<{ server: http.Server; url: string }> {
   let callIndex = 0;
   const server = http.createServer((req, res) => {
@@ -24,14 +28,16 @@ function startMockOllamaServer(
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const idx = callIndex++;
-      let body: any = {};
-      try { body = JSON.parse(raw); } catch {}
+      let body: OllamaRequestBody = {};
+      try {
+        body = JSON.parse(raw);
+      } catch {}
       handler(idx, body, res);
     });
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as any;
+      const addr = server.address() as { port: number };
       resolve({ server, url: `http://127.0.0.1:${addr.port}` });
     });
   });
@@ -54,17 +60,35 @@ describe("P2.1: Tool-call integrity", () => {
       },
     ];
     const layer1 = buildLayer1Tools(tools);
-    const readTool = layer1.find((t: any) => t.function?.name === "workspace_read_file");
+    const readTool = layer1.find((t) => t.function?.name === "workspace_read_file");
     assert.ok(readTool, "workspace_read_file should be in layer1");
-    assert.ok(readTool.function.description.length <= 120, "layer1 description must be <= 120 chars");
-    assert.equal(readTool.function.parameters.type, "object", "layer1 parameters.type must be object");
-    assert.equal("properties" in readTool.function.parameters, false, "layer1 must not include properties");
-    assert.equal("required" in readTool.function.parameters, false, "layer1 must not include required");
+    assert.ok(
+      readTool.function.description.length <= 120,
+      "layer1 description must be <= 120 chars"
+    );
+    assert.equal(
+      readTool.function.parameters.type,
+      "object",
+      "layer1 parameters.type must be object"
+    );
+    assert.equal(
+      "properties" in readTool.function.parameters,
+      false,
+      "layer1 must not include properties"
+    );
+    assert.equal(
+      "required" in readTool.function.parameters,
+      false,
+      "layer1 must not include required"
+    );
 
     const registry = buildToolRegistry(tools);
     const layer2Read = describeTool("workspace_read_file", registry);
     assert.ok(layer2Read.tool, "workspace_read_file should resolve via Layer 2");
-    assert.ok(layer2Read.tool.parameters, "workspace_read_file Layer 2 tool should have parameters");
+    assert.ok(
+      layer2Read.tool.parameters,
+      "workspace_read_file Layer 2 tool should have parameters"
+    );
     assert.deepEqual(
       layer2Read.tool.parameters.properties,
       tools[0].inputSchema.properties,
@@ -105,7 +129,10 @@ describe("P2.1: Tool-call integrity", () => {
     let mockServer: http.Server | null = null;
 
     beforeEach(() => {
-      tmpThreadsDir = path.join(os.tmpdir(), `p21-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+      tmpThreadsDir = path.join(
+        os.tmpdir(),
+        `p21-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      );
       fs.mkdirSync(tmpThreadsDir, { recursive: true });
       originalThreadsDir = process.env.THREADS_DIR;
       originalLlmUrl = process.env.LLM_BASE_URL;
@@ -136,25 +163,31 @@ describe("P2.1: Tool-call integrity", () => {
       const { server, url } = await startMockOllamaServer((callIndex, body, res) => {
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (callIndex === 0) {
-          res.write(JSON.stringify({
-            model: "qwen2.5-coder:32b",
-            message: {
-              role: "assistant",
-              content: "",
-              tool_calls: [{ id: "tc_bad", function: { name: "search_web", arguments: "{bad json" } }],
-            },
-            done: true,
-            done_reason: "stop",
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              model: "qwen2.5-coder:32b",
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [
+                  { id: "tc_bad", function: { name: "search_web", arguments: "{bad json" } },
+                ],
+              },
+              done: true,
+              done_reason: "stop",
+            }) + "\n"
+          );
         } else {
-          const toolMsgs = (body.messages || []).filter((m: any) => m.role === "tool");
-          seenToolResult = toolMsgs.map((m: any) => m.content).join("\n");
-          res.write(JSON.stringify({
-            model: "qwen2.5-coder:32b",
-            message: { role: "assistant", content: "Handled error." },
-            done: true,
-            done_reason: "stop",
-          }) + "\n");
+          const toolMsgs = (body.messages || []).filter((m) => m.role === "tool");
+          seenToolResult = toolMsgs.map((m) => m.content || "").join("\n");
+          res.write(
+            JSON.stringify({
+              model: "qwen2.5-coder:32b",
+              message: { role: "assistant", content: "Handled error." },
+              done: true,
+              done_reason: "stop",
+            }) + "\n"
+          );
         }
         res.end();
       });
@@ -167,7 +200,10 @@ describe("P2.1: Tool-call integrity", () => {
       const req = new NextRequest("http://localhost/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId: thread.id, messages: [{ role: "user", content: "Search" }] }),
+        body: JSON.stringify({
+          threadId: thread.id,
+          messages: [{ role: "user", content: "Search" }],
+        }),
       });
       const resp = await POST(req);
       await resp.text();
@@ -182,27 +218,31 @@ describe("P2.1: Tool-call integrity", () => {
       const { server, url } = await startMockOllamaServer((callIndex, body, res) => {
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (callIndex === 0) {
-          res.write(JSON.stringify({
-            model: "qwen2.5-coder:32b",
-            message: {
-              role: "assistant",
-              content: "",
-              tool_calls: [
-                { id: "tc_p1", function: { name: "search_web", arguments: { query: "q1" } } },
-                { id: "tc_p2", function: { name: "search_web", arguments: { query: "q2" } } },
-              ],
-            },
-            done: true,
-            done_reason: "stop",
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              model: "qwen2.5-coder:32b",
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [
+                  { id: "tc_p1", function: { name: "search_web", arguments: { query: "q1" } } },
+                  { id: "tc_p2", function: { name: "search_web", arguments: { query: "q2" } } },
+                ],
+              },
+              done: true,
+              done_reason: "stop",
+            }) + "\n"
+          );
         } else {
-          toolMsgCount = (body.messages || []).filter((m: any) => m.role === "tool").length;
-          res.write(JSON.stringify({
-            model: "qwen2.5-coder:32b",
-            message: { role: "assistant", content: "Both done." },
-            done: true,
-            done_reason: "stop",
-          }) + "\n");
+          toolMsgCount = (body.messages || []).filter((m) => m.role === "tool").length;
+          res.write(
+            JSON.stringify({
+              model: "qwen2.5-coder:32b",
+              message: { role: "assistant", content: "Both done." },
+              done: true,
+              done_reason: "stop",
+            }) + "\n"
+          );
         }
         res.end();
       });
@@ -215,11 +255,18 @@ describe("P2.1: Tool-call integrity", () => {
       const req = new NextRequest("http://localhost/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId: thread.id, messages: [{ role: "user", content: "Run both" }] }),
+        body: JSON.stringify({
+          threadId: thread.id,
+          messages: [{ role: "user", content: "Run both" }],
+        }),
       });
       const resp = await POST(req);
       await resp.text();
-      assert.equal(toolMsgCount, 2, `Expected 2 tool results from parallel calls, got ${toolMsgCount}`);
+      assert.equal(
+        toolMsgCount,
+        2,
+        `Expected 2 tool results from parallel calls, got ${toolMsgCount}`
+      );
     });
   });
 });

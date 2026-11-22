@@ -1,6 +1,16 @@
 import fs from "fs";
 import path from "path";
 import { UnattendedScheduler, Schedule } from "./scheduler";
+import { isDrainAllowed, readBoardControlState } from "../board/boardControl";
+import { createProductionBoardOrchestrator } from "../board/productionDrain";
+import { ThreadStore } from "../threads/threadStore";
+
+let boardDrainInFlight = false;
+
+export interface BoardDrainDuty {
+  isRunning: () => boolean;
+  drain: () => Promise<unknown>;
+}
 
 export interface DaemonHeartbeat {
   pid: number;
@@ -13,6 +23,7 @@ export interface DaemonOptions {
   tickIntervalMs?: number;
   workspaceDir?: string;
   scheduler?: UnattendedScheduler;
+  boardDrain?: BoardDrainDuty;
   onTick?: (dueCount: number) => Promise<void> | void;
   singleTick?: boolean;
   registerSignalHandlers?: boolean;
@@ -24,6 +35,7 @@ export class SchedulerDaemon {
   readonly workspaceDir: string;
   readonly tickIntervalMs: number;
   readonly scheduler: UnattendedScheduler;
+  private readonly boardDrain?: BoardDrainDuty;
   public shutdownRequested: boolean = false;
   private isRunning: boolean = false;
   private startedAt: string = "";
@@ -39,12 +51,11 @@ export class SchedulerDaemon {
       : NaN;
 
     this.tickIntervalMs =
-      options?.tickIntervalMs ??
-      (!isNaN(envInterval) && envInterval > 0 ? envInterval : 60000);
+      options?.tickIntervalMs ?? (!isNaN(envInterval) && envInterval > 0 ? envInterval : 60000);
 
     this.scheduler =
-      options?.scheduler ||
-      new UnattendedScheduler({ workspaceDir: this.workspaceDir });
+      options?.scheduler || new UnattendedScheduler({ workspaceDir: this.workspaceDir });
+    this.boardDrain = options?.boardDrain;
 
     this.ensureDirectories();
 
@@ -85,8 +96,10 @@ export class SchedulerDaemon {
     try {
       const logFile = this.getLogFilePath(dateStr);
       fs.appendFileSync(logFile, logLine, "utf8");
-    } catch (err: any) {
-      console.error(`[SchedulerDaemon] Failed to write to log file: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(
+        `[SchedulerDaemon] Failed to write to log file: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
 
     if (level === "ERROR") {
@@ -128,8 +141,11 @@ export class SchedulerDaemon {
           }
         }
       }
-    } catch (err: any) {
-      this.log("WARN", `Log rotation check failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.log(
+        "WARN",
+        `Log rotation check failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
 
@@ -139,11 +155,14 @@ export class SchedulerDaemon {
         pid: process.pid,
         startedAt: this.startedAt,
         lastTick: new Date().toISOString(),
-        active
+        active,
       };
       fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(hb, null, 2), "utf8");
-    } catch (err: any) {
-      this.log("WARN", `Failed to write heartbeat: ${err.message}`);
+    } catch (err: unknown) {
+      this.log(
+        "WARN",
+        `Failed to write heartbeat: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
 
@@ -178,8 +197,11 @@ export class SchedulerDaemon {
           } else {
             this.log("INFO", `Crash recovery completed with no active schedule recovered.`);
           }
-        } catch (err: any) {
-          this.log("ERROR", `Crash recovery failed: ${err.message}`);
+        } catch (err: unknown) {
+          this.log(
+            "ERROR",
+            `Crash recovery failed: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     }
@@ -212,18 +234,34 @@ export class SchedulerDaemon {
       }
 
       try {
-        this.log(
-          "INFO",
-          `Executing due schedule ${sched.id} ("${sched.taskDescription}")`
-        );
+        this.log("INFO", `Executing due schedule ${sched.id} ("${sched.taskDescription}")`);
         await this.scheduler.executeScheduledRun(sched.id);
         this.log("INFO", `Successfully completed schedule run for ${sched.id}`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Catch per-schedule errors: one failure does not stop others
         this.log(
           "ERROR",
-          `Error executing schedule ${sched.id} ("${sched.taskDescription}"): ${err.message}`
+          `Error executing schedule ${sched.id} ("${sched.taskDescription}"): ${err instanceof Error ? err.message : String(err)}`
         );
+      }
+    }
+
+    if (!this.shutdownRequested && this.boardDrain && this.boardDrain.isRunning()) {
+      if (boardDrainInFlight) {
+        this.log("INFO", "Board drain already in flight; skipping this tick.");
+      } else {
+        boardDrainInFlight = true;
+        try {
+          this.log("INFO", "Board control is running; starting board drain.");
+          await this.boardDrain.drain();
+        } catch (err: unknown) {
+          this.log(
+            "ERROR",
+            `Board drain failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+        } finally {
+          boardDrainInFlight = false;
+        }
       }
     }
 
@@ -275,8 +313,11 @@ export class SchedulerDaemon {
       if (options?.onTick) {
         try {
           await options.onTick(dueCount);
-        } catch (err: any) {
-          this.log("ERROR", `Error in onTick callback: ${err.message}`);
+        } catch (err: unknown) {
+          this.log(
+            "ERROR",
+            `Error in onTick callback: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
 
@@ -294,16 +335,29 @@ export class SchedulerDaemon {
     const checkInterval = 250;
     let elapsed = 0;
     while (elapsed < ms && !this.shutdownRequested) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min(checkInterval, ms - elapsed))
-      );
+      await new Promise((resolve) => setTimeout(resolve, Math.min(checkInterval, ms - elapsed)));
       elapsed += checkInterval;
     }
   }
 }
 
+export function createDefaultBoardDrainDuty(): BoardDrainDuty {
+  return {
+    isRunning: () => isDrainAllowed(readBoardControlState()),
+    drain: async () => {
+      const orchestrator = createProductionBoardOrchestrator({
+        threadStore: new ThreadStore(),
+      });
+      return orchestrator.drain();
+    },
+  };
+}
+
 export async function startDaemon(options?: DaemonOptions): Promise<void> {
-  const daemon = new SchedulerDaemon(options);
+  const daemon = new SchedulerDaemon({
+    ...options,
+    boardDrain: options?.boardDrain ?? createDefaultBoardDrainDuty(),
+  });
   await daemon.start(options);
 }
 
@@ -313,7 +367,7 @@ const isMainScript = Boolean(
   process.argv &&
   process.argv[1] &&
   (process.argv[1].endsWith("schedulerDaemon.js") ||
-   process.argv[1].endsWith("schedulerDaemon.ts")) &&
+    process.argv[1].endsWith("schedulerDaemon.ts")) &&
   !process.env.NODE_TEST_CONTEXT &&
   !process.argv[1].includes(".test.")
 );

@@ -54,10 +54,7 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export const ROUND_INACTIVITY_DEADLINE_MS = envInt(
-  "ROUND_INACTIVITY_DEADLINE_MS",
-  180_000
-);
+export const ROUND_INACTIVITY_DEADLINE_MS = envInt("ROUND_INACTIVITY_DEADLINE_MS", 180_000);
 export const ROUND_TOTAL_DEADLINE_MS = envInt("ROUND_TOTAL_DEADLINE_MS", 900_000);
 
 /**
@@ -68,7 +65,7 @@ export const ROUND_TOTAL_DEADLINE_MS = envInt("ROUND_TOTAL_DEADLINE_MS", 900_000
 export function resolveRoundDeadlineMs(): { inactivityMs: number; totalMs: number } {
   return {
     inactivityMs: envInt("ROUND_INACTIVITY_DEADLINE_MS", ROUND_INACTIVITY_DEADLINE_MS),
-    totalMs: envInt("ROUND_TOTAL_DEADLINE_MS", ROUND_TOTAL_DEADLINE_MS)
+    totalMs: envInt("ROUND_TOTAL_DEADLINE_MS", ROUND_TOTAL_DEADLINE_MS),
   };
 }
 
@@ -84,22 +81,16 @@ export const TURN_TRUNCATION_MARKER =
   "Turn ended: generation truncated at the per-message size limit.";
 
 /** Directive for the single auto-continue round after a length-truncated text round. */
-export const LENGTH_CONTINUATION_DIRECTIVE =
-  `[LENGTH CONTINUATION]: Your previous answer was cut off at the per-message size limit. Continue exactly where you stopped — output ONLY the remaining continuation, starting from the exact point you stopped, without repeating anything already produced.`;
+export const LENGTH_CONTINUATION_DIRECTIVE = `[LENGTH CONTINUATION]: Your previous answer was cut off at the per-message size limit. Continue exactly where you stopped — output ONLY the remaining continuation, starting from the exact point you stopped, without repeating anything already produced.`;
 
 /** Directive injected after a deadline abort so the next round avoids repeating the runaway. */
-export const ROUND_TIMEOUT_DIRECTIVE =
-  `[ROUND DEADLINE]: The previous round was aborted by the round deadline while still generating (likely an oversized single generation or a stalled stream). Do NOT attempt the same oversized output again. Break the work into smaller steps (e.g. patch_file instead of one giant write_file, or a shorter answer), or synthesize from what already exists.`;
+export const ROUND_TIMEOUT_DIRECTIVE = `[ROUND DEADLINE]: The previous round was aborted by the round deadline while still generating (likely an oversized single generation or a stalled stream). Do NOT attempt the same oversized output again. Break the work into smaller steps (e.g. patch_file instead of one giant write_file, or a shorter answer), or synthesize from what already exists.`;
 
 /** Hard cap on persisted/streamed turn content: a runaway generation is clamped. */
 export const MAX_STREAMED_CONTENT_CHARS = 64_000;
 
 export type ToolLoopStopReason =
-  | "completed"
-  | "budget"
-  | "backstop"
-  | "web-research-cap"
-  | "round-timeout";
+  "completed" | "budget" | "backstop" | "web-research-cap" | "round-timeout";
 
 export interface ToolLoopDecision {
   canContinue: boolean;
@@ -114,30 +105,56 @@ export interface ToolLoopDecision {
 
 export const WEB_RESEARCH_TOOL_NAMES = new Set(["search_web", "fetch_webpage_markdown"]);
 
-export const WEB_BUDGET_EXHAUSTED_DIRECTIVE =
-  `[ACTION DISCIPLINE]: You have reached the maximum of ${MAX_WEB_RESEARCH_CALLS} web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.`;
+export const WEB_BUDGET_EXHAUSTED_DIRECTIVE = `[ACTION DISCIPLINE]: You have reached the maximum of ${MAX_WEB_RESEARCH_CALLS} web research calls for this turn. Web search tools are now disabled. Immediately use the gathered facts to produce the user's requested deliverable (e.g. call workspace_write_file or output the requested SVG/code artifact) or synthesize your final answer.`;
 
 export function isWebResearchTool(toolName: string, tier?: string): boolean {
   return WEB_RESEARCH_TOOL_NAMES.has(toolName) || tier === "browser";
 }
 
-export function filterToolsForWebBudget(
-  llmTools: any[],
+export interface ContextToolCall {
+  id?: string;
+  type?: string;
+  name?: string;
+  arguments?: unknown;
+  function?: { name?: string; arguments?: string | Record<string, unknown> };
+}
+
+export interface ContextMessage {
+  role: string;
+  content: string;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: ContextToolCall[];
+  [key: string]: unknown;
+}
+
+export type FittedMessages = ContextMessage[] & {
+  evictedCount?: number;
+  estimatedTokens?: number;
+};
+
+export function filterToolsForWebBudget<T extends { name?: string; function?: { name?: string } }>(
+  llmTools: T[],
   webResearchCallsUsed: number,
   maxWebCalls: number = MAX_WEB_RESEARCH_CALLS
-): any[] {
+): T[] {
   if (webResearchCallsUsed < maxWebCalls) {
     return llmTools;
   }
   return llmTools.filter((t) => {
-    const name = t.function?.name || t.name;
+    const name = t.function?.name || t.name || "";
     return !WEB_RESEARCH_TOOL_NAMES.has(name);
   });
 }
 
-export function hasArtifactCreationIntent(userPrompt: string): { isArtifactRequest: boolean; wantsSvg: boolean } {
+export function hasArtifactCreationIntent(userPrompt: string): {
+  isArtifactRequest: boolean;
+  wantsSvg: boolean;
+} {
   const wantsSvg =
-    /\b(svg|vector\s+diagram|vector\s+graphic|drawio|flowchart|architecture\s+diagram)\b/i.test(userPrompt) ||
+    /\b(svg|vector\s+diagram|vector\s+graphic|drawio|flowchart|architecture\s+diagram)\b/i.test(
+      userPrompt
+    ) ||
     (/\b(create|draw|generate|build|make|design|render|sketch)\b/i.test(userPrompt) &&
       /\b(diagram|chart|visual|graphic|card|infographic|illustration)\b/i.test(userPrompt));
 
@@ -149,7 +166,10 @@ export function hasArtifactCreationIntent(userPrompt: string): { isArtifactReque
   return { isArtifactRequest, wantsSvg };
 }
 
-export function buildSynthesisDirective(userPrompt: string, isFinalRoundSystemPrompt: boolean = false): string {
+export function buildSynthesisDirective(
+  userPrompt: string,
+  isFinalRoundSystemPrompt: boolean = false
+): string {
   const { isArtifactRequest, wantsSvg } = hasArtifactCreationIntent(userPrompt);
 
   if (wantsSvg) {
@@ -171,9 +191,12 @@ export function shouldRunPostToolSynthesis(params: {
   userPrompt: string;
   assistantContent: string;
   lingeringToolCallsCount: number;
-  traces: Array<{ tool: string; args?: any; result?: any }>;
+  traces: Array<{ tool: string; args?: Record<string, unknown>; result?: unknown }>;
 }): boolean {
-  if ((params.traces.length > 0 && params.lingeringToolCallsCount > 0) || !params.assistantContent?.trim()) {
+  if (
+    (params.traces.length > 0 && params.lingeringToolCallsCount > 0) ||
+    !params.assistantContent?.trim()
+  ) {
     return true;
   }
 
@@ -201,15 +224,16 @@ export function shouldRunPostToolSynthesis(params: {
  * Conservative token estimator: Math.ceil(text.length / 4).
  * Handles string, message object, or message arrays.
  */
-export function estimateTokens(input: any): number {
+export function estimateTokens(input: unknown): number {
   if (!input) return 0;
   if (typeof input === "string") {
     return Math.ceil(input.length / 4);
   }
   if (Array.isArray(input)) {
     let chars = 0;
-    for (const msg of input) {
-      if (!msg) continue;
+    for (const rawMsg of input) {
+      if (!rawMsg || typeof rawMsg !== "object") continue;
+      const msg = rawMsg as Record<string, unknown>;
       if (typeof msg.content === "string") {
         chars += msg.content.length;
       } else if (msg.content) {
@@ -222,15 +246,16 @@ export function estimateTokens(input: any): number {
     return Math.ceil(chars / 4);
   }
   if (typeof input === "object") {
+    const obj = input as Record<string, unknown>;
     let chars = 0;
-    if (typeof input.content === "string") {
-      chars += input.content.length;
-    } else if (input.content) {
-      chars += JSON.stringify(input.content).length;
+    if (typeof obj.content === "string") {
+      chars += obj.content.length;
+    } else if (obj.content) {
+      chars += JSON.stringify(obj.content).length;
     }
-    if (input.role) chars += String(input.role).length;
-    if (input.name) chars += String(input.name).length;
-    if (input.tool_calls) chars += JSON.stringify(input.tool_calls).length;
+    if (obj.role) chars += String(obj.role).length;
+    if (obj.name) chars += String(obj.name).length;
+    if (obj.tool_calls) chars += JSON.stringify(obj.tool_calls).length;
     return Math.ceil(chars / 4);
   }
   return Math.ceil(String(input).length / 4);
@@ -241,7 +266,7 @@ export function estimateTokens(input: any): number {
  * or inserts a system message at index 0 if not present.
  * Guarantees role === "system" never appears at index > 0.
  */
-export function mergeSystemDirective<T extends { role?: string; content?: any }>(
+export function mergeSystemDirective<T extends { role?: string; content?: unknown }>(
   messages: T[],
   directive: string
 ): T[] {
@@ -251,17 +276,20 @@ export function mergeSystemDirective<T extends { role?: string; content?: any }>
   const trimmed = directive.trim();
 
   if (messages.length > 0 && messages[0]?.role === "system") {
-    const existing = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+    const existing =
+      typeof messages[0].content === "string"
+        ? messages[0].content
+        : JSON.stringify(messages[0].content || "");
     if (!existing.includes(trimmed)) {
       messages[0] = {
         ...messages[0],
-        content: existing ? `${existing}\n\n${trimmed}` : trimmed
+        content: existing ? `${existing}\n\n${trimmed}` : trimmed,
       };
     }
   } else {
     messages.unshift({
       role: "system",
-      content: trimmed
+      content: trimmed,
     } as unknown as T);
   }
 
@@ -282,15 +310,15 @@ export function isLiveRealTimeIntent(userPrompt: string): boolean {
   );
 }
 
-export function hasWebResearchResults(messages: any[]): boolean {
+export function hasWebResearchResults(messages: ContextMessage[]): boolean {
   if (!Array.isArray(messages)) return false;
   return messages.some((m) => {
     if (m?.role === "tool" && (m?.name === "search_web" || m?.name === "fetch_webpage_markdown")) {
       return true;
     }
     if (m?.tool_calls && Array.isArray(m.tool_calls)) {
-      return m.tool_calls.some((tc: any) =>
-        WEB_RESEARCH_TOOL_NAMES.has(tc?.function?.name || tc?.name)
+      return m.tool_calls.some((tc) =>
+        WEB_RESEARCH_TOOL_NAMES.has(tc?.function?.name || tc?.name || "")
       );
     }
     return false;
@@ -309,7 +337,7 @@ export function resolveRoundModelOptions(params: {
   round?: number;
   isArtifactTurn?: boolean;
   numKeep?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }): {
   num_ctx: number;
   num_predict?: number;
@@ -319,10 +347,11 @@ export function resolveRoundModelOptions(params: {
   numKeep?: number;
 } {
   const isArtifact =
-    params.isArtifactTurn ?? (params.userPrompt ? hasArtifactCreationIntent(params.userPrompt).isArtifactRequest : false);
+    params.isArtifactTurn ??
+    (params.userPrompt ? hasArtifactCreationIntent(params.userPrompt).isArtifactRequest : false);
   const shouldUseFastSynthesis =
     isArtifact || params.isSynthesisOrFinalRound || params.hasCompletedToolCalls;
-  const effectiveEffort = shouldUseFastSynthesis ? "low" : (params.requestedEffort || "medium");
+  const effectiveEffort = shouldUseFastSynthesis ? "low" : params.requestedEffort || "medium";
   const baseOpts = computeModelOptions(params.model, effectiveEffort);
   const result: {
     num_ctx: number;
@@ -334,7 +363,7 @@ export function resolveRoundModelOptions(params: {
   } = {
     num_ctx: baseOpts.num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
     temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5),
-    reasoning_effort: effectiveEffort
+    reasoning_effort: effectiveEffort,
   };
   if (params.numKeep !== undefined) {
     result.num_predict = 2048 + params.numKeep;
@@ -348,7 +377,7 @@ export function resolveRoundModelOptions(params: {
 
 export interface FitContextOptions {
   maxContentTokens?: number;
-  tools?: any[];
+  tools?: unknown[];
   isArtifactTurn?: boolean;
   reserveOutputTokens?: number;
   outputHeadroomTokens?: number;
@@ -366,15 +395,17 @@ export interface FitContextOptions {
  * - The last message with role === "user"
  */
 export function fitContextWindow(
-  messages: any[],
+  messages: ContextMessage[],
   options?: FitContextOptions
-): any[] {
+): FittedMessages {
   if (!Array.isArray(messages) || messages.length === 0) {
     return [];
   }
 
   const source = options?.compactHistory
-    ? compactConversationHistory(messages, { maxContentTokens: options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS }).messages
+    ? compactConversationHistory(messages, {
+        maxContentTokens: options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS,
+      }).messages
     : messages;
 
   // 1. Enforce invariant: role === "system" ONLY exists at index 0.
@@ -382,10 +413,13 @@ export function fitContextWindow(
   let consolidatedSystemContent = "";
   const hasLeadingSystem = source[0]?.role === "system";
   if (hasLeadingSystem) {
-    consolidatedSystemContent = typeof source[0].content === "string" ? source[0].content : JSON.stringify(source[0].content || "");
+    consolidatedSystemContent =
+      typeof source[0].content === "string"
+        ? source[0].content
+        : JSON.stringify(source[0].content || "");
   }
 
-  const nonSystemMessages: any[] = [];
+  const nonSystemMessages: ContextMessage[] = [];
   for (let i = 0; i < source.length; i++) {
     const m = source[i];
     if (i === 0 && hasLeadingSystem) {
@@ -394,18 +428,20 @@ export function fitContextWindow(
     if (m?.role === "system") {
       const extra = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
       if (extra.trim() && !consolidatedSystemContent.includes(extra.trim())) {
-        consolidatedSystemContent = consolidatedSystemContent ? `${consolidatedSystemContent}\n\n${extra.trim()}` : extra.trim();
+        consolidatedSystemContent = consolidatedSystemContent
+          ? `${consolidatedSystemContent}\n\n${extra.trim()}`
+          : extra.trim();
       }
     } else {
       nonSystemMessages.push({ ...m });
     }
   }
 
-  const working: any[] = [];
+  const working: ContextMessage[] = [];
   if (hasLeadingSystem || consolidatedSystemContent) {
     working.push({
       role: "system",
-      content: consolidatedSystemContent
+      content: consolidatedSystemContent,
     });
   }
   working.push(...nonSystemMessages);
@@ -435,7 +471,12 @@ export function fitContextWindow(
   }
 
   const hasWebResults = hasWebResearchResults(working);
-  if (isArtifact || options?.reserveOutputTokens !== undefined || options?.outputHeadroomTokens !== undefined || hasWebResults) {
+  if (
+    isArtifact ||
+    options?.reserveOutputTokens !== undefined ||
+    options?.outputHeadroomTokens !== undefined ||
+    hasWebResults
+  ) {
     const headroom =
       options?.outputHeadroomTokens ??
       options?.reserveOutputTokens ??
@@ -448,14 +489,14 @@ export function fitContextWindow(
   let evictedCount = 0;
 
   if (estimateTokens(working) <= maxTokens) {
-    const res: any = working;
+    const res: FittedMessages = working;
     res.evictedCount = 0;
     res.estimatedTokens = estimateTokens(working);
     return res;
   }
 
   // Identify protected indices
-  const isProtected = (idx: number, arr: any[]): boolean => {
+  const isProtected = (idx: number, arr: ContextMessage[]): boolean => {
     if (idx === 0 && arr[0]?.role === "system") {
       return true;
     }
@@ -501,7 +542,7 @@ export function fitContextWindow(
     if (working[candidateIdx].role === "tool") {
       working[candidateIdx] = {
         ...working[candidateIdx],
-        content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+        content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
       };
       evictedCount++;
     } else {
@@ -556,12 +597,12 @@ export function fitContextWindow(
     const originalContent = working[longestIdx].content;
     working[longestIdx] = {
       ...working[longestIdx],
-      content: originalContent.slice(0, targetChars) + TOOL_TRUNCATION_MARKER
+      content: originalContent.slice(0, targetChars) + TOOL_TRUNCATION_MARKER,
     };
     evictedCount++;
   }
 
-  const result: any = working;
+  const result: FittedMessages = working;
   result.evictedCount = evictedCount;
   result.estimatedTokens = estimateTokens(working);
   return result;
@@ -584,44 +625,46 @@ export function clampToolOutput(raw: string, maxChars = MAX_TOOL_OUTPUT_CHARS): 
 }
 
 export interface RunChatToolLoopOptions {
-  conversationMessages: any[];
+  conversationMessages: ContextMessage[];
   activeModel?: string;
   effectiveReasoningEffort?: "low" | "medium" | "xhigh";
-  llmTools?: any[];
+  llmTools?: Array<{ name?: string; function?: { name?: string }; [key: string]: unknown }>;
   /** @deprecated backward-compat alias */
-  ollamaTools?: any[];
+  ollamaTools?: Array<{ name?: string; function?: { name?: string }; [key: string]: unknown }>;
   maxToolRounds?: number;
   maxContentTokens?: number;
-  streamLlmChat?: (payload: any) => AsyncIterable<{
+  streamLlmChat?: (payload: Record<string, unknown>) => AsyncIterable<{
     message?: {
       content?: string;
       thinking?: string;
-      tool_calls?: any[];
+      tool_calls?: ContextToolCall[];
     };
   }>;
   /** @deprecated backward-compat alias */
-  streamOllamaChat?: (payload: any) => AsyncIterable<{
+  streamOllamaChat?: (payload: Record<string, unknown>) => AsyncIterable<{
     message?: {
       content?: string;
       thinking?: string;
-      tool_calls?: any[];
+      tool_calls?: ContextToolCall[];
     };
   }>;
-  executeTool: (toolCall: any) => Promise<any>;
+  executeTool: (toolCall: ContextToolCall) => Promise<unknown>;
 }
 
 /**
  * Runs iterative chat tool rounds with per-round context window fitting,
  * tool-output clamping, and forced final-round synthesis.
  */
-export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<{ finalContent: string; roundsCompleted: number }> {
+export async function runChatToolLoop(
+  options: RunChatToolLoopOptions
+): Promise<{ finalContent: string; roundsCompleted: number }> {
   const {
     conversationMessages,
     activeModel = "qwen3.8:27b-q3_k_m",
     effectiveReasoningEffort = "medium",
     maxToolRounds = TOOL_ROUND_BACKSTOP,
     maxContentTokens = CHAT_CONTEXT_BUDGET_TOKENS,
-    executeTool
+    executeTool,
   } = options;
   const llmTools = options.llmTools || options.ollamaTools || [];
   const streamChatFn = options.streamLlmChat || options.streamOllamaChat;
@@ -642,7 +685,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
   while (true) {
     // Fit conversation to budget first through the compaction/elision ladder
     const fitResult = fitConversationToBudget(conversationMessages, {
-      budgetTokens: maxContentTokens
+      budgetTokens: maxContentTokens,
     });
     if (fitResult.compacted) {
       conversationMessages.length = 0;
@@ -661,7 +704,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       lastRoundTools,
       webResearchCalls,
       roundBackstop: maxToolRounds,
-      awaitingToolRound: groundingRoundPending
+      awaitingToolRound: groundingRoundPending,
     });
     if (!decision.canContinue) break;
     groundingRoundPending = false;
@@ -674,12 +717,12 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
         tools: isFinalRound ? undefined : llmTools,
-        isArtifactTurn: isArtifactRequest
+        isArtifactTurn: isArtifactRequest,
       }),
       keep_alive: -1,
       options: resolveRoundModelOptions({
@@ -687,8 +730,8 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
         requestedEffort: effectiveReasoningEffort,
         userPrompt,
         isSynthesisOrFinalRound: isFinalRound,
-        hasCompletedToolCalls: round > 0
-      })
+        hasCompletedToolCalls: round > 0,
+      }),
     };
 
     if (llmTools.length > 0 && !isFinalRound) {
@@ -696,7 +739,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     }
 
     let fullRoundContent = "";
-    let toolCallsFromMessage: any[] = [];
+    const toolCallsFromMessage: ContextToolCall[] = [];
 
     for await (const chunk of streamChatFn(payload)) {
       if (chunk.message?.content) {
@@ -726,7 +769,7 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
       finalContent = fullRoundContent;
       conversationMessages.push({
         role: "assistant",
-        content: fullRoundContent
+        content: fullRoundContent,
       });
       round++;
       break;
@@ -735,28 +778,29 @@ export async function runChatToolLoop(options: RunChatToolLoopOptions): Promise<
     conversationMessages.push({
       role: "assistant",
       content: fullRoundContent,
-      tool_calls: toolCallsFromMessage
+      tool_calls: toolCallsFromMessage,
     });
 
     for (const toolCall of toolCallsFromMessage) {
       const toolResult = await executeTool(toolCall);
-      const toolName = toolCall.function?.name || toolCall.name;
+      const toolName = toolCall.function?.name || toolCall.name || "";
       if (isWebResearchTool(toolName)) webResearchCalls++;
       const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
       conversationMessages.push({
         role: "tool",
         name: toolName,
-        content: isFileReadTool ? JSON.stringify(toolResult) : clampToolOutput(JSON.stringify(toolResult))
+        content: isFileReadTool
+          ? JSON.stringify(toolResult)
+          : clampToolOutput(JSON.stringify(toolResult)),
       });
     }
 
-    lastRoundTools = toolCallsFromMessage.map((tc: any) => tc.function?.name || tc.name || "");
+    lastRoundTools = toolCallsFromMessage.map((tc) => tc.function?.name || tc.name || "");
     round++;
   }
 
   return { finalContent, roundsCompleted: round };
 }
-
 
 /**
  * CHAT-7: budget-governed tool-round continuation.
@@ -798,13 +842,14 @@ export function canContinueToolLoop(options: {
   }
 
   if (contextTokens > budgetTokens) {
-    const allResearch = lastRoundTools.length > 0 && lastRoundTools.every((t) => isWebResearchTool(t));
+    const allResearch =
+      lastRoundTools.length > 0 && lastRoundTools.every((t) => isWebResearchTool(t));
     if (allResearch && webResearchCalls < MAX_WEB_RESEARCH_CALLS) {
       return { canContinue: true, forceSynthesis: false };
     }
     return {
       canContinue: false,
-      stopReason: webResearchCalls >= MAX_WEB_RESEARCH_CALLS ? "web-research-cap" : "budget"
+      stopReason: webResearchCalls >= MAX_WEB_RESEARCH_CALLS ? "web-research-cap" : "budget",
     };
   }
 
@@ -814,13 +859,10 @@ export function canContinueToolLoop(options: {
 }
 
 export type CompactionAction =
-  | "compaction"
-  | "elide_tool_outputs"
-  | "drop_old_turns"
-  | "truncate_oversize";
+  "compaction" | "elide_tool_outputs" | "drop_old_turns" | "truncate_oversize";
 
 export interface FitConversationResult {
-  messages: any[];
+  messages: ContextMessage[];
   compacted: boolean;
   actions: CompactionAction[];
   tokensBefore: number;
@@ -836,7 +878,7 @@ export interface FitConversationResult {
  * - Rung (d): Truncate oversize payload (preserving system prompt)
  */
 export function fitConversationToBudget(
-  messages: any[],
+  messages: ContextMessage[],
   options?: {
     budgetTokens?: number;
     compactionThreshold?: number;
@@ -850,7 +892,7 @@ export function fitConversationToBudget(
       actions: [],
       tokensBefore: 0,
       tokensAfter: 0,
-      highWater: false
+      highWater: false,
     };
   }
 
@@ -866,10 +908,10 @@ export function fitConversationToBudget(
     const compactRes = compactConversationHistory(workingMessages, {
       maxContentTokens: budgetTokens,
       compactionThreshold: thresholdRatio,
-      preserveRecentMessages: options?.preserveRecentMessages ?? 4
+      preserveRecentMessages: options?.preserveRecentMessages ?? 4,
     });
     if (compactRes.compacted) {
-      workingMessages = compactRes.messages;
+      workingMessages = compactRes.messages.map((m) => ({ ...m }));
       actions.push("compaction");
     }
   }
@@ -885,7 +927,7 @@ export function fitConversationToBudget(
         if (workingMessages[i].content !== EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER) {
           workingMessages[i] = {
             ...workingMessages[i],
-            content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
+            content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
           };
           anyElided = true;
           if (estimateTokens(workingMessages) <= budgetTokens) {
@@ -942,7 +984,8 @@ export function fitConversationToBudget(
     let maxLen = 0;
     for (let i = 0; i < workingMessages.length; i++) {
       if (i === 0 && hasLeadingSystem && workingMessages.length > 1) continue;
-      const len = typeof workingMessages[i].content === "string" ? workingMessages[i].content.length : 0;
+      const len =
+        typeof workingMessages[i].content === "string" ? workingMessages[i].content.length : 0;
       if (len > maxLen) {
         maxLen = len;
         longestIdx = i;
@@ -960,7 +1003,7 @@ export function fitConversationToBudget(
     const orig = workingMessages[longestIdx].content;
     workingMessages[longestIdx] = {
       ...workingMessages[longestIdx],
-      content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER
+      content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER,
     };
     if (!actions.includes("truncate_oversize")) {
       actions.push("truncate_oversize");
@@ -972,7 +1015,7 @@ export function fitConversationToBudget(
     actions.includes("elide_tool_outputs") ||
     actions.includes("drop_old_turns") ||
     actions.includes("truncate_oversize") ||
-    finalTokens >= budgetTokens * 0.90;
+    finalTokens >= budgetTokens * 0.9;
 
   return {
     messages: workingMessages,
@@ -980,6 +1023,6 @@ export function fitConversationToBudget(
     actions,
     tokensBefore: initialTokens,
     tokensAfter: finalTokens,
-    highWater
+    highWater,
   };
 }

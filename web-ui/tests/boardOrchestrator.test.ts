@@ -55,9 +55,27 @@ function makeSlotMetrics(overrides: Partial<SlotUtilizationMetrics> = {}): SlotU
 test("starts exactly the head eligible item and never starts a second job while one runs", async () => {
   const board: DispatcherBoardItem[] = [
     makeItem({ id: "done-0", key: "#0", status: "done", title: "Done dep" }),
-    makeItem({ id: "blocked-1", key: "#1", status: "queued", dependencies: ["missing"], title: "Blocked" }),
-    makeItem({ id: "eligible-1", key: "#2", status: "queued", dependencies: ["done-0"], title: "Head eligible" }),
-    makeItem({ id: "eligible-2", key: "#3", status: "queued", dependencies: [], title: "Second eligible" }),
+    makeItem({
+      id: "blocked-1",
+      key: "#1",
+      status: "queued",
+      dependencies: ["missing"],
+      title: "Blocked",
+    }),
+    makeItem({
+      id: "eligible-1",
+      key: "#2",
+      status: "queued",
+      dependencies: ["done-0"],
+      title: "Head eligible",
+    }),
+    makeItem({
+      id: "eligible-2",
+      key: "#3",
+      status: "queued",
+      dependencies: [],
+      title: "Second eligible",
+    }),
   ];
 
   let liveRunning = false;
@@ -68,7 +86,10 @@ test("starts exactly the head eligible item and never starts a second job while 
   const orchestrator = new BoardOrchestrator({
     items: board,
     getControlState: () => makeControl("running"),
-    getLiveJobState: () => ({ isRunning: liveRunning, runningJobId: liveRunning ? "job-active" : undefined }),
+    getLiveJobState: () => ({
+      isRunning: liveRunning,
+      runningJobId: liveRunning ? "job-active" : undefined,
+    }),
     getOwnerState: () => ({ isMidTurn: false }),
     getSlotMetrics: () => makeSlotMetrics(),
     operatorMemory: "Keep diffs small.",
@@ -297,4 +318,129 @@ test("enforces hard 5-item cap and 10-minute duration cap without interrupting m
   assert.equal(reportTimed.completedCount, 1);
   assert.equal(reportTimed.stopReason, "time-cap-reached");
   assert.equal(threeItems[1].status, "queued");
+});
+
+test("writes deep-link threadLink (/?thread=<id>) for failed, completed, chunk-complete, and in-progress outcomes", async () => {
+  const failedItem = makeItem({ id: "link-fail", key: "#51", title: "Failed link" });
+  const completedItem = makeItem({ id: "link-done", key: "#52", title: "Done link" });
+  const chunkItem = makeItem({ id: "link-chunk", key: "#53", title: "Chunk link" });
+  const inProgressItem = makeItem({ id: "link-prog", key: "#54", title: "In-progress link" });
+
+  let chunkCalls = 0;
+  let chunkLinkAfterFirst = "";
+
+  const orchestrator = new BoardOrchestrator({
+    items: [failedItem, completedItem, chunkItem, inProgressItem],
+    getControlState: () => makeControl("running"),
+    getLiveJobState: () => ({ isRunning: false }),
+    getOwnerState: () => ({ isMidTurn: false }),
+    getSlotMetrics: () => makeSlotMetrics(),
+    issueAndWait: async ({ item }) => {
+      if (item.id === "link-fail") {
+        return { status: "failed", threadId: "t-fail", error: "boom" };
+      }
+      if (item.id === "link-done") {
+        return { status: "completed", threadId: "t-done" };
+      }
+      if (item.id === "link-chunk") {
+        chunkCalls += 1;
+        if (chunkCalls === 1) {
+          return {
+            status: "chunk-complete",
+            threadId: "t-chunk-1",
+            handoff: {
+              state: "c1",
+              branch: "b1",
+              headSha: "abc1234",
+              nextStep: "next",
+            },
+          };
+        }
+        chunkLinkAfterFirst = item.threadLink ?? "";
+        return { status: "completed", threadId: "t-chunk-2" };
+      }
+      return { status: "in-progress", threadId: "t-prog" };
+    },
+  });
+
+  await orchestrator.drain();
+  assert.equal(failedItem.threadLink, "/?thread=t-fail");
+  assert.equal(completedItem.threadLink, "/?thread=t-done");
+  assert.equal(chunkLinkAfterFirst, "/?thread=t-chunk-1");
+  assert.equal(chunkItem.threadLink, "/?thread=t-chunk-2");
+  assert.equal(inProgressItem.threadLink, "/?thread=t-prog");
+});
+
+test("rolled-back selfDeploy with needsAttention=true marks item needs-attention, never done", async () => {
+  const item = makeItem({
+    id: "deploy-rollback-1",
+    key: "#99",
+    title: "Deploy rollback test",
+  });
+
+  const orchestrator = new BoardOrchestrator({
+    items: [item],
+    stageFlags: { selfDeploy: true },
+    getControlState: () => makeControl("running"),
+    getLiveJobState: () => ({ isRunning: false }),
+    getOwnerState: () => ({ isMidTurn: false }),
+    getSlotMetrics: () => makeSlotMetrics(),
+    issueAndWait: async () => ({
+      status: "completed",
+      threadId: "t-deploy-rb",
+      merged: true,
+      mergeSha: "abc1234",
+      deployTag: "v-abc1234",
+    }),
+    selfDeploy: {
+      deps: {
+        readCurrentState: async () => ({
+          image: "local-agentic-sandbox-web-ui:v-prev",
+          podStatus: "Running",
+          podRestarts: 0,
+        }),
+        bankRollbackTarget: async (tag) => ({ banked: true, tag }),
+        buildAndImport: async () => ({
+          built: true,
+          imported: true,
+          imagePresentInNode: true,
+          detail: "ok",
+        }),
+        setImage: async () => ({ ok: true }),
+        verifyDeployment: async (tag) =>
+          tag === "local-agentic-sandbox-web-ui:v-prev"
+            ? {
+                ok: true,
+                rolloutSuccess: true,
+                podRunningZeroRestarts: true,
+                gatewayStatus: 200,
+                threadListLoads: true,
+                observedTag: tag,
+              }
+            : {
+                ok: false,
+                rolloutSuccess: true,
+                podRunningZeroRestarts: false,
+                gatewayStatus: 502,
+                threadListLoads: false,
+                observedTag: tag,
+                failedStep: "gateway_200",
+                observed: "gateway=502",
+              },
+      },
+    },
+  });
+
+  const prevSelfDeploy = process.env.SELF_DEPLOY_ENABLED;
+  process.env.SELF_DEPLOY_ENABLED = "true";
+  try {
+    const report = await orchestrator.drain();
+    assert.equal(item.status, "needs-attention");
+    assert.equal(report.completedCount, 0);
+    assert.equal(report.outcomes[0].outcome, "failed");
+    assert.match(report.outcomes[0].reason ?? "", /S4 verification failed|gateway_200/);
+  } finally {
+    if (prevSelfDeploy === undefined) delete process.env.SELF_DEPLOY_ENABLED;
+    else process.env.SELF_DEPLOY_ENABLED = prevSelfDeploy;
+  }
 });

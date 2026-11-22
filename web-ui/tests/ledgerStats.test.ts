@@ -12,7 +12,7 @@ describe("Sprint 6 — Ledger Telemetry Analytics Utility (ledgerStats.test.ts)"
       failedOrParkedRuns: 0,
       successRatePct: 0,
       totalCommits: 0,
-      averageDurationMs: 0
+      averageDurationMs: 0,
     });
   });
 
@@ -31,7 +31,7 @@ describe("Sprint 6 — Ledger Telemetry Analytics Utility (ledgerStats.test.ts)"
         gitShas: ["abc1234", "def5678"],
         milestoneSummary: [],
         deploymentRef: "",
-        resumable: false
+        resumable: false,
       },
       {
         runId: "run-2",
@@ -46,7 +46,7 @@ describe("Sprint 6 — Ledger Telemetry Analytics Utility (ledgerStats.test.ts)"
         gitShas: ["def5678"], // Duplicate sha across runs
         milestoneSummary: [],
         deploymentRef: "",
-        resumable: true
+        resumable: true,
       },
       {
         runId: "run-3",
@@ -60,8 +60,8 @@ describe("Sprint 6 — Ledger Telemetry Analytics Utility (ledgerStats.test.ts)"
         gitShas: ["ghi9012"],
         milestoneSummary: [],
         deploymentRef: "",
-        resumable: true
-      }
+        resumable: true,
+      },
     ];
 
     const summary = summarizeLedgerRuns(sampleRuns);

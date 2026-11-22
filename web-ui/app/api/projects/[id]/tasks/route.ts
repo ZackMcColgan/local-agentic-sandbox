@@ -16,8 +16,11 @@ export async function GET(req: Request, { params }: RouteParams) {
 
     const tasks = listProjectTasks(id);
     return NextResponse.json({ tasks });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -48,12 +51,14 @@ export async function POST(req: Request, { params }: RouteParams) {
       prompt: prompt.trim(),
       mode: mode || "now",
       scheduleTime,
-      executeInline: false
+      executeInline: false,
     });
 
     return NextResponse.json({ task }, { status: 201 });
-  } catch (err: any) {
-    const status = err.statusCode || (err.message && /active task/i.test(err.message) ? 409 : 500);
-    return NextResponse.json({ error: err.message }, { status });
+  } catch (err: unknown) {
+    const e = err as { statusCode?: number; message?: string };
+    const message = e.message ?? String(err);
+    const status = e.statusCode || (/active task/i.test(message) ? 409 : 500);
+    return NextResponse.json({ error: message }, { status });
   }
 }

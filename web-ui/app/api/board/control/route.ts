@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  getBoardControlStore,
-  isValidBoardControlAction,
-} from "@/lib/board/boardControlStore";
+import { getBoardControlStore, isValidBoardControlAction } from "@/lib/board/boardControlStore";
 
 export async function GET() {
   try {

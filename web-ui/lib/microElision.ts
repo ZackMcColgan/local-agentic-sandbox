@@ -57,9 +57,31 @@ export function buildToolResultStub(meta: ElisionMeta): string {
   return `[Micro-elision: superseded tool result. tool=${meta.tool} round=${meta.round}${target} originalChars=${meta.originalChars}. The full result is preserved in the thread trace record — re-invoke the tool if you need the content again.]`;
 }
 
+interface ElisionToolCall {
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string | Record<string, unknown>;
+  };
+}
+
+interface ElisionMessage {
+  role?: string;
+  name?: string;
+  content?: unknown;
+  tool_call_id?: string;
+  tool_calls?: ElisionToolCall[];
+  elided?: boolean;
+  elidedFrom?: ElisionMeta;
+  [key: string]: unknown;
+}
+
 /** Recovers the path/command/url/query target from the paired tool call args. */
-function recoverTarget(msg: any, pairedCall: any): { target?: string; targetKind: ElisionMeta["targetKind"] } {
-  let args: Record<string, any> = {};
+function recoverTarget(
+  msg: ElisionMessage,
+  pairedCall: ElisionToolCall | undefined
+): { target?: string; targetKind: ElisionMeta["targetKind"] } {
+  let args: Record<string, unknown> = {};
   const raw = pairedCall?.function?.arguments;
   if (typeof raw === "string") {
     try {
@@ -68,7 +90,7 @@ function recoverTarget(msg: any, pairedCall: any): { target?: string; targetKind
       args = {};
     }
   } else if (raw && typeof raw === "object") {
-    args = raw as Record<string, any>;
+    args = raw as Record<string, unknown>;
   }
 
   const pathKeys = ["path", "file", "filepath", "filename", "target_path"];
@@ -77,29 +99,33 @@ function recoverTarget(msg: any, pairedCall: any): { target?: string; targetKind
   const queryKeys = ["query", "q", "search_query"];
 
   for (const k of pathKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "path" };
+    const val = args[k];
+    if (typeof val === "string" && val.trim()) return { target: val.trim(), targetKind: "path" };
   }
   for (const k of commandKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "command" };
+    const val = args[k];
+    if (typeof val === "string" && val.trim()) return { target: val.trim(), targetKind: "command" };
   }
   for (const k of urlKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "url" };
+    const val = args[k];
+    if (typeof val === "string" && val.trim()) return { target: val.trim(), targetKind: "url" };
   }
   for (const k of queryKeys) {
-    if (typeof args[k] === "string" && args[k].trim()) return { target: args[k].trim(), targetKind: "query" };
+    const val = args[k];
+    if (typeof val === "string" && val.trim()) return { target: val.trim(), targetKind: "query" };
   }
   return { targetKind: "none" };
 }
 
 /** Finds the assistant tool_call paired with a tool result message. */
-function findPairedCall(messages: any[], toolIdx: number): any {
+function findPairedCall(messages: ElisionMessage[], toolIdx: number): ElisionToolCall | undefined {
   const toolMsg = messages[toolIdx];
   // Scan backwards for the assistant message carrying this call id.
   for (let i = toolIdx - 1; i >= 0; i--) {
     const m = messages[i];
     if (m?.role !== "assistant" || !Array.isArray(m.tool_calls)) continue;
     if (toolMsg?.tool_call_id) {
-      const match = m.tool_calls.find((tc: any) => tc?.id === toolMsg.tool_call_id);
+      const match = m.tool_calls.find((tc) => tc?.id === toolMsg.tool_call_id);
       if (match) return match;
     }
     if (m.tool_calls.length > 0) return m.tool_calls[0];
@@ -118,7 +144,10 @@ function findPairedCall(messages: any[], toolIdx: number): any {
  *   only genuinely changed content (a re-read after an edit) is re-stubbed.
  * - Results under MICRO_ELISION_MIN_RESULT_CHARS are never stubbed.
  */
-export function applyMicroElision(messages: any[], currentRound: number): MicroElisionResult {
+export function applyMicroElision(
+  messages: ElisionMessage[],
+  currentRound: number
+): MicroElisionResult {
   const elisions: ElisionMeta[] = [];
   if (!Array.isArray(messages)) return { stubbed: 0, elisions };
 
@@ -150,7 +179,7 @@ export function applyMicroElision(messages: any[], currentRound: number): MicroE
       round: precedingAssistantRounds > 0 ? precedingAssistantRounds : currentRound,
       target,
       targetKind,
-      originalChars: content.length
+      originalChars: content.length,
     };
 
     msg.content = buildToolResultStub(meta);

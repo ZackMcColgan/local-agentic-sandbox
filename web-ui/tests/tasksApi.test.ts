@@ -12,8 +12,8 @@ describe("Phase 1 — Tasks API Route Suite", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         goal: "Build a draw.io architecture diagram of this repo's current state, README-ready",
-        toolchain: "node:22"
-      })
+        toolchain: "node:22",
+      }),
     });
 
     const res = await POST(req);
@@ -40,7 +40,7 @@ describe("Phase 1 — Tasks API Route Suite", () => {
 
   it("DELETE /api/tasks triggers cancellation token and marks status cancelled", async () => {
     const req = new Request(`http://localhost:3000/api/tasks?taskId=${createdTaskId}`, {
-      method: "DELETE"
+      method: "DELETE",
     });
     const res = await DELETE(req);
     assert.equal(res.status, 200);
@@ -73,10 +73,12 @@ describe("Phase 1 — Tasks API Route Suite", () => {
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
-    supervisor.saveCheckpoint(testManifest as any);
+    supervisor.saveCheckpoint(
+      testManifest as unknown as Parameters<typeof supervisor.saveCheckpoint>[0]
+    );
 
     // Initial GET caches the task in tasksRegistry as "active"
     const req1 = new Request(`http://localhost:3000/api/tasks?taskId=${diskTaskId}`);
@@ -88,7 +90,9 @@ describe("Phase 1 — Tasks API Route Suite", () => {
     // Outside route, task is paused on disk
     testManifest.status = "paused";
     testManifest.updatedAt = new Date().toISOString();
-    supervisor.saveCheckpoint(testManifest as any);
+    supervisor.saveCheckpoint(
+      testManifest as unknown as Parameters<typeof supervisor.saveCheckpoint>[0]
+    );
 
     // If supervisor.listAllTasks() was skipped or if tasksRegistry held onto stale state,
     // let's verify resumeTaskFromCheckpoint overrides tasksRegistry cache:
@@ -99,5 +103,3 @@ describe("Phase 1 — Tasks API Route Suite", () => {
     assert.equal(data2.task.status, "paused");
   });
 });
-
-

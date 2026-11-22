@@ -4,10 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import React from "react";
 import { renderToString } from "react-dom/server";
-import {
-  evaluateTurnCompletion,
-  extractDoneTurnStatus
-} from "../lib/chatStatus";
+import { evaluateTurnCompletion, extractDoneTurnStatus } from "../lib/chatStatus";
 import { ChatStream } from "../components/ChatStream";
 
 describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete status", () => {
@@ -17,7 +14,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         content: "",
         round: 2,
         maxToolRounds: 8,
-        tracesCount: 3
+        tracesCount: 3,
       });
 
       assert.notEqual(result.cleanedContent, "Executed workspace_read_file.");
@@ -35,7 +32,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         content: "",
         round: 8,
         maxToolRounds: 8,
-        tracesCount: 5
+        tracesCount: 5,
       });
 
       assert.equal(
@@ -52,14 +49,12 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         content: synthesisText,
         round: 8,
         maxToolRounds: 8,
-        tracesCount: 8
+        tracesCount: 8,
       });
 
       assert.ok(result.cleanedContent.startsWith(synthesisText));
       assert.ok(
-        result.cleanedContent.includes(
-          "⚠️ [Turn paused: Tool execution limit reached (8 rounds).]"
-        )
+        result.cleanedContent.includes("⚠️ [Turn paused: Tool execution limit reached (8 rounds).]")
       );
       assert.equal(result.turnStatus, "incomplete");
       assert.equal(result.isIncomplete, true);
@@ -71,7 +66,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         content: synthesisText,
         round: 3,
         maxToolRounds: 8,
-        tracesCount: 2
+        tracesCount: 2,
       });
 
       assert.equal(result.cleanedContent, synthesisText);
@@ -84,7 +79,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         content: "",
         round: 0,
         maxToolRounds: 8,
-        tracesCount: 0
+        tracesCount: 0,
       });
 
       assert.equal(
@@ -97,11 +92,17 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
 
     it("statically verifies route.ts bans 'Executed <tools>.' canned string and transmits status in done event", () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(routePath, "utf8");
+      const content =
+        fs.readFileSync(routePath, "utf8") +
+        "\n" +
+        fs.readFileSync(
+          path.resolve(path.dirname(routePath), "../../../lib/chat/roundLoop.ts"),
+          "utf8"
+        );
 
       // Verify the canned fallback is deleted
       assert.ok(
-        !content.includes('`Executed ${traces.map'),
+        !content.includes("`Executed ${traces.map"),
         "route.ts must not contain `Executed ${traces.map` fallback"
       );
       assert.ok(
@@ -122,17 +123,43 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
   });
 
   describe("CHAT-1: Post-Tool Synthesis Thinking Emission", () => {
-    it("statically verifies route.ts emits thinking events inside the post-tool synthesis loop", () => {
-      const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
-      const content = fs.readFileSync(routePath, "utf8");
+    it("verifies runSynthesisPass emits thinking events inside the post-tool synthesis loop", async () => {
+      const { runSynthesisPass } = await import("../lib/chat/turnEngine");
+      const events: Record<string, unknown>[] = [];
+      let streamed = "";
+      const ac = new AbortController();
 
+      const res = await runSynthesisPass({
+        llmBaseUrl: "http://127.0.0.1:11434",
+        activeModel: "test-model",
+        conversationMessages: [{ role: "user", content: "hi" }],
+        isArtifactRequest: false,
+        turnAbortSignal: ac.signal,
+        synthOptions: {},
+        accumulatedThoughts: [],
+        getAccumulatedStreamedTokens: () => streamed,
+        setAccumulatedStreamedTokens: (next) => {
+          streamed = next;
+        },
+        onFinishReason: () => {},
+        onPromptTokens: () => {},
+        onOutputTokens: () => {},
+        maybeWriteSnapshot: () => {},
+        sendEvent: async (ev) => {
+          events.push(ev);
+        },
+        streamChat: async function* () {
+          yield { message: { thinking: "synthesizing..." } };
+          yield { message: { content: "done" }, finish_reason: "stop" };
+        },
+        deadlines: { inactivityMs: 5000, totalMs: 10000 },
+        log: () => {},
+      });
+
+      assert.equal(res.thinking, "synthesizing...");
       assert.ok(
-        content.includes('type: "thinking"') || content.includes("type: 'thinking'"),
-        "route.ts post-tool synthesis must emit thinking events"
-      );
-      assert.ok(
-        content.includes("chunk.message?.thinking"),
-        "route.ts must check chunk.message?.thinking during synthesis"
+        events.some((e) => e.type === "thinking" && e.content === "synthesizing..."),
+        "post-tool synthesis must emit thinking events"
       );
     });
   });
@@ -140,54 +167,39 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
   describe("CHAT-3: Message Incomplete & Error Status Badge UI", () => {
     it("extractDoneTurnStatus correctly resolves status from done events across all formats", () => {
       // 1. Explicit status
-      assert.equal(
-        extractDoneTurnStatus({ status: "incomplete" }),
-        "incomplete"
-      );
-      assert.equal(
-        extractDoneTurnStatus({ status: "completed" }),
-        "completed"
-      );
-      assert.equal(
-        extractDoneTurnStatus({ status: "error" }),
-        "error"
-      );
+      assert.equal(extractDoneTurnStatus({ status: "incomplete" }), "incomplete");
+      assert.equal(extractDoneTurnStatus({ status: "completed" }), "completed");
+      assert.equal(extractDoneTurnStatus({ status: "error" }), "error");
 
       // 2. isIncomplete flag
-      assert.equal(
-        extractDoneTurnStatus({ isIncomplete: true }),
-        "incomplete"
-      );
+      assert.equal(extractDoneTurnStatus({ isIncomplete: true }), "incomplete");
 
       // 3. Content markers fallback
       assert.equal(
         extractDoneTurnStatus({
-          content: "⚠️ [Turn paused: Tool execution limit reached (8 rounds).]"
+          content: "⚠️ [Turn paused: Tool execution limit reached (8 rounds).]",
         }),
         "incomplete"
       );
       assert.equal(
         extractDoneTurnStatus({
-          content: "⚠️ [Turn incomplete: Tool execution concluded without synthesis text.]"
+          content: "⚠️ [Turn incomplete: Tool execution concluded without synthesis text.]",
         }),
         "incomplete"
       );
 
       // 4. Clean turn with no status
-      assert.equal(
-        extractDoneTurnStatus({ content: "Clean answer" }),
-        undefined
-      );
+      assert.equal(extractDoneTurnStatus({ content: "Clean answer" }), undefined);
     });
 
     it("renders amber Incomplete badge when assistant message status is 'incomplete'", () => {
-      const messages: any[] = [
+      const messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]> = [
         {
           id: "msg-asst-incomplete",
           role: "assistant",
           status: "incomplete",
-          content: "⚠️ [Turn paused: Tool execution limit reached (8 rounds).]"
-        }
+          content: "⚠️ [Turn paused: Tool execution limit reached (8 rounds).]",
+        },
       ];
 
       const html = renderToString(
@@ -195,7 +207,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
@@ -203,10 +215,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         html.includes('data-testid="message-status-badge"'),
         "Must render data-testid='message-status-badge'"
       );
-      assert.ok(
-        html.includes("Incomplete"),
-        "Must render 'Incomplete' badge label"
-      );
+      assert.ok(html.includes("Incomplete"), "Must render 'Incomplete' badge label");
       assert.ok(
         html.includes("bg-zinc-50") && html.includes("text-zinc-800"),
         "Must render neutral styling for incomplete badge"
@@ -218,13 +227,13 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
     });
 
     it("renders red Error badge when assistant message status is 'error'", () => {
-      const messages: any[] = [
+      const messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]> = [
         {
           id: "msg-asst-error",
           role: "assistant",
           status: "error",
-          content: "An unexpected error occurred during model invocation."
-        }
+          content: "An unexpected error occurred during model invocation.",
+        },
       ];
 
       const html = renderToString(
@@ -232,7 +241,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 
@@ -240,10 +249,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
         html.includes('data-testid="message-status-badge"'),
         "Must render data-testid='message-status-badge'"
       );
-      assert.ok(
-        html.includes("Error"),
-        "Must render 'Error' badge label"
-      );
+      assert.ok(html.includes("Error"), "Must render 'Error' badge label");
       assert.ok(
         html.includes("text-red-800") || html.includes("bg-red-50"),
         "Must render red styling for error badge"
@@ -251,13 +257,13 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
     });
 
     it("does not render status badge for standard completed messages", () => {
-      const messages: any[] = [
+      const messages: NonNullable<React.ComponentProps<typeof ChatStream>["messages"]> = [
         {
           id: "msg-asst-completed",
           role: "assistant",
           status: "completed",
-          content: "Everything finished successfully."
-        }
+          content: "Everything finished successfully.",
+        },
       ];
 
       const html = renderToString(
@@ -265,7 +271,7 @@ describe("PACKAGE 2 (CHAT-1 & CHAT-3): Never-silent turns & message incomplete s
           onTracesUpdate: () => {},
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
-          messages
+          messages,
         })
       );
 

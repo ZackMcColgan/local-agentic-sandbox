@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
@@ -30,7 +30,8 @@ export async function GET() {
     const schedulesPath = path.join(workspaceDir, "schedules.json");
 
     // 1. Read daemon heartbeat
-    let daemonData: { active: boolean; pid: number; lastTick: string; stale: boolean } | null = null;
+    let daemonData: { active: boolean; pid: number; lastTick: string; stale: boolean } | null =
+      null;
     let isDaemonValid = false;
 
     if (fs.existsSync(daemonHbPath)) {
@@ -49,7 +50,7 @@ export async function GET() {
             active: parsed.active,
             pid: Number(parsed.pid) || 0,
             lastTick: parsed.lastTick,
-            stale: isStale
+            stale: isStale,
           };
           isDaemonValid = true;
         }
@@ -74,15 +75,11 @@ export async function GET() {
       try {
         const raw = fs.readFileSync(schedulerHbPath, "utf8");
         const parsed = JSON.parse(raw);
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          typeof parsed.active === "boolean"
-        ) {
+        if (parsed && typeof parsed === "object" && typeof parsed.active === "boolean") {
           schedulerData = {
             active: parsed.active,
             scheduleId: parsed.scheduleId || "",
-            lastHeartbeat: parsed.lastHeartbeat || ""
+            lastHeartbeat: parsed.lastHeartbeat || "",
           };
         }
       } catch {
@@ -101,14 +98,16 @@ export async function GET() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           total = parsed.length;
-          const enabledSchedules = parsed.filter((s: any) => s && s.enabled);
+          const enabledSchedules = (
+            parsed as Array<{ enabled?: boolean; nextRun?: unknown } | null>
+          ).filter((s) => s && s.enabled);
           enabled = enabledSchedules.length;
 
           // Find earliest nextRun among enabled schedules
           const validNextRuns = enabledSchedules
-            .map((s: any) => s.nextRun)
-            .filter((nr: any) => typeof nr === "string" && !isNaN(new Date(nr).getTime()))
-            .sort((a: string, b: string) => new Date(a).getTime() - new Date(b).getTime());
+            .map((s) => s?.nextRun)
+            .filter((nr): nr is string => typeof nr === "string" && !isNaN(new Date(nr).getTime()))
+            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
           if (validNextRuns.length > 0) {
             nextRun = validNextRuns[0];
@@ -126,8 +125,8 @@ export async function GET() {
       schedules: {
         total,
         enabled,
-        nextRun
-      }
+        nextRun,
+      },
     };
 
     return NextResponse.json(report, { status: 200 });
@@ -137,7 +136,7 @@ export async function GET() {
         status: "not-running",
         daemon: null,
         scheduler: null,
-        schedules: { total: 0, enabled: 0, nextRun: null }
+        schedules: { total: 0, enabled: 0, nextRun: null },
       },
       { status: 200 }
     );

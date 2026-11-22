@@ -7,15 +7,18 @@
 ## 1. VRAM & Compute Budget
 
 ### 1.1 Hardware Baseline & Allocation
+
 - **GPU**: AMD Radeon RX 9070 XT (16 GB GDDR6 VRAM).
 - **Driver / Runtime**: AMD ROCm runtime with direct host passthrough to the Strata inference engine (`:8080`) and host-bridge (`:8765`).
 - **Model Roster**: User-managed via configuration (e.g. Qwen3.8-Flash-Next 125B-class MoE / swift-15-27b-mtp 27B fallback). The platform reads model names dynamically from config and does not prescribe hardcoded rosters.
 
 ### 1.2 Concurrency & Headroom
+
 - Concurrency cap is derived dynamically at runtime from available VRAM headroom.
 - Subagents (Explorer, Builder, Critic, Recorder) share the local inference pool sequentially or in bounded batches.
 
 ### 1.3 Cancellation & Zero VRAM Leakage Guarantee
+
 - Every running worker session is bound to an `AbortController` cancellation token.
 - Triggering cancellation (e.g. via mobile Web UI kill switch or API `/api/tasks` and `/api/threads/[id]`) immediately signals Strata to abort streaming inference, halts child tool processes, and recovers active worker count to 0 (idle) in under 30 seconds.
 
@@ -24,11 +27,13 @@
 ## 2. Disk & Build Cache Budget
 
 ### 2.1 20 GB Disk Budget Cap
+
 - Build artifacts and package manager caches (`node_modules`, `cargo target/`, `.cache/pip`, Go module cache) must **never** be checked into the repository or left in host directories.
 - Caches are persisted exclusively to a dedicated named Docker volume (`build-cache`) or Kubernetes PersistentVolumeClaim (`build-cache-pvc`).
 - Total cache allocation is strictly capped at **20 GB**.
 
 ### 2.2 7-Day Automatic Cache Pruning
+
 - To prevent disk exhaustion during multi-day autonomous overnight operations, the system implements automated cache pruning:
   - Cache entries with modification times older than **7 days** (`CACHE_MAX_AGE_DAYS = 7`) are automatically pruned.
   - Automated pruning routines run periodically and prior to large compilation jobs via `pruneBuildCache()`.
@@ -60,14 +65,18 @@ To reconcile security isolation with the practical necessity of software builds 
 ```
 
 ### 3.1 Pre-Baked Toolchain Images
+
 The overnight builder never runs `apt-get` or installs compilers mid-run at 2 AM. All toolchains are pre-baked and versioned under `deploy/`:
+
 - `deploy/builder-node/Dockerfile`: `builder-node:22` (Node.js 22 LTS, npm, yarn, pnpm)
 - `deploy/builder-python/Dockerfile`: `builder-python:3.12` (Python 3.12, pip, poetry, build-essential)
 - `deploy/builder-go/Dockerfile`: `builder-go:latest` (Go 1.23 toolchain)
 - `deploy/builder-rust/Dockerfile`: `builder-rust:latest` (Rust 1.80 stable toolchain)
 
 ### 3.2 Egress Registry Allowlist
+
 The build tier egress proxy permits traffic exclusively to approved package registries:
+
 - `registry.npmjs.org`, `registry.yarnpkg.com`
 - `pypi.org`, `files.pythonhosted.org`
 - `crates.io`, `static.crates.io`

@@ -9,9 +9,10 @@ import {
   freshnessFor,
   hostDisconnectChipVisible,
   streamBannerKind,
-  formatThoughtLabel
+  formatThoughtLabel,
 } from "../lib/liveActivity";
 import { LiveActivityHeader } from "../components/LiveActivityHeader";
+import { NowLineBar } from "../components/NowLineBar";
 import { ThinkingPanel } from "../components/ThinkingPanel";
 
 const webUiRoot = path.resolve(__dirname, "..");
@@ -45,7 +46,11 @@ describe("uir-0/uir-1 — liveActivity pure helpers", () => {
 
   it("hostDisconnectChipVisible is true only while the host runner is down", () => {
     assert.equal(
-      hostDisconnectChipVisible({ hostAccess: true, runnerState: "UNAVAILABLE", runnerAvailable: false }),
+      hostDisconnectChipVisible({
+        hostAccess: true,
+        runnerState: "UNAVAILABLE",
+        runnerAvailable: false,
+      }),
       true
     );
     assert.equal(
@@ -59,7 +64,11 @@ describe("uir-0/uir-1 — liveActivity pure helpers", () => {
     );
     // Access disabled in Settings is a choice, not a disconnect -> no chip
     assert.equal(
-      hostDisconnectChipVisible({ hostAccess: false, runnerState: "UNAVAILABLE", runnerAvailable: false }),
+      hostDisconnectChipVisible({
+        hostAccess: false,
+        runnerState: "UNAVAILABLE",
+        runnerAvailable: false,
+      }),
       false
     );
     // Unknown state -> no chip (never cry wolf)
@@ -71,10 +80,22 @@ describe("uir-0/uir-1 — liveActivity pure helpers", () => {
 
   it("streamBannerKind shows disconnected, then recovered briefly, then nothing", () => {
     const now = 1_000_000_000;
-    assert.equal(streamBannerKind({ isDisconnected: true, recoveredAtMs: null, nowMs: now }), "disconnected");
-    assert.equal(streamBannerKind({ isDisconnected: false, recoveredAtMs: now - 3_000, nowMs: now }), "recovered");
-    assert.equal(streamBannerKind({ isDisconnected: false, recoveredAtMs: now - 30_000, nowMs: now }), null);
-    assert.equal(streamBannerKind({ isDisconnected: false, recoveredAtMs: null, nowMs: now }), null);
+    assert.equal(
+      streamBannerKind({ isDisconnected: true, recoveredAtMs: null, nowMs: now }),
+      "disconnected"
+    );
+    assert.equal(
+      streamBannerKind({ isDisconnected: false, recoveredAtMs: now - 3_000, nowMs: now }),
+      "recovered"
+    );
+    assert.equal(
+      streamBannerKind({ isDisconnected: false, recoveredAtMs: now - 30_000, nowMs: now }),
+      null
+    );
+    assert.equal(
+      streamBannerKind({ isDisconnected: false, recoveredAtMs: null, nowMs: now }),
+      null
+    );
   });
 
   it("formatThoughtLabel renders the collapsed end-of-turn row label", () => {
@@ -96,7 +117,7 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
         traceCount: 73,
         phaseLabel: "Writing code — host_run_file_write",
         activityLabel: null,
-        isStreaming: true
+        isStreaming: true,
       })
     );
     assert.ok(html.includes('data-testid="live-activity-header"'), "header testid present");
@@ -107,7 +128,10 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
     // muted span (board styling), so the full label is asserted on the
     // tag-stripped rendered text — same semantic guarantee.
     const renderedText = html.replace(/<[^>]+>/g, "");
-    assert.ok(renderedText.includes("Writing code — host_run_file_write"), "phase label in words with tool");
+    assert.ok(
+      renderedText.includes("Writing code — host_run_file_write"),
+      "phase label in words with tool"
+    );
     assert.ok(html.includes("Live"), "freshness shows Live");
     assert.ok(!html.includes("%"), "no percentage anywhere in the activity header");
   });
@@ -121,11 +145,14 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
         traceCount: 12,
         phaseLabel: "Running command — run_command",
         activityLabel: null,
-        isStreaming: true
+        isStreaming: true,
       })
     );
     assert.ok(html.includes('data-testid="live-activity-stalled"'), "stalled chip testid present");
-    assert.ok(html.includes("STALLED · No heartbeat for 90s"), "stalled chip carries the silent duration");
+    assert.ok(
+      html.includes("STALLED · No heartbeat for 90s"),
+      "stalled chip carries the silent duration"
+    );
   });
 
   it("omits the Round meta segment when the round is not known (never fabricates it)", () => {
@@ -137,7 +164,7 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
         traceCount: 1,
         phaseLabel: "Starting turn…",
         activityLabel: null,
-        isStreaming: true
+        isStreaming: true,
       })
     );
     assert.ok(html.includes("1 trace"), "trace meta present with singular form");
@@ -153,19 +180,79 @@ describe("uir-1 — LiveActivityHeader rendering", () => {
         traceCount: 1,
         phaseLabel: "Starting turn…",
         activityLabel: null,
-        isStreaming: true
+        isStreaming: true,
       })
     );
     assert.ok(html.includes("from-emerald-500"), "pulse gradient starts at emerald-500");
     assert.ok(html.includes("to-cyan-400"), "pulse gradient ends at cyan-400");
+  });
+
+  it("Fix 1: LiveActivityHeader retires its duplicate trace list (renders 0 live-trace-row elements)", () => {
+    const html = renderToString(
+      React.createElement(LiveActivityHeader, {
+        startedAtMs: NOW - 15_000,
+        lastActivityAtMs: NOW - 1_000,
+        nowMs: NOW,
+        traceCount: 2,
+        traces: [
+          {
+            tool: "workspace_read_file",
+            args: { path: "a.ts" },
+            result: "ok",
+            durationMs: 20,
+            timestamp: new Date(NOW - 5_000).toISOString(),
+          },
+          {
+            tool: "workspace_run_command",
+            args: { command: "npm test" },
+            result: "",
+            durationMs: 0,
+            timestamp: new Date(NOW - 1_000).toISOString(),
+          },
+        ],
+        phaseLabel: "Running command — workspace_run_command",
+        activityLabel: null,
+        isStreaming: true,
+      })
+    );
+    assert.ok(
+      !html.includes('data-testid="live-trace-row"'),
+      "legacy panel must not duplicate tool call rows"
+    );
+  });
+
+  it("Fix 1: NowLineBar carries the stall signal in place of the retired live-activity panel", () => {
+    const html = renderToString(
+      React.createElement(NowLineBar, {
+        hasRunTurn: true,
+        isStreaming: true,
+        startedAtMs: NOW - 300_000,
+        lastActivityAtMs: NOW - 90_000,
+        nowMs: NOW,
+        traces: [
+          { tool: "workspace_run_command", args: { command: "npm test" }, status: "running" },
+        ],
+      })
+    );
+    assert.ok(html.includes('data-testid="now-line-stalled"'), "now-line carries stalled testid");
+    assert.ok(
+      html.includes("Stalled · no heartbeat 90s"),
+      "now-line carries the silent heartbeat duration"
+    );
   });
 });
 
 describe("uir-1 — ThinkingPanel fake progress bar is deleted", () => {
   it("ThinkingPanel source has no 0/100 progress assignment, no 5% floor clamp, no percent label", () => {
     const src = readSrc("components/ThinkingPanel.tsx");
-    assert.ok(!src.includes("progressPercent: isStreaming ? 0 : 100"), "fake 0/100 assignment removed");
-    assert.ok(!src.includes("Math.min(Math.max(phaseItem.progressPercent, 5), 100)"), "5% floor clamp removed");
+    assert.ok(
+      !src.includes("progressPercent: isStreaming ? 0 : 100"),
+      "fake 0/100 assignment removed"
+    );
+    assert.ok(
+      !src.includes("Math.min(Math.max(phaseItem.progressPercent, 5), 100)"),
+      "5% floor clamp removed"
+    );
     assert.ok(!src.includes("In progress ·"), "percent progress label removed");
   });
 
@@ -174,7 +261,7 @@ describe("uir-1 — ThinkingPanel fake progress bar is deleted", () => {
       React.createElement(ThinkingPanel, {
         isStreaming: true,
         rawThought: "Checking the files and planning the patch...",
-        streamStatus: "Running workspace_grep"
+        streamStatus: "Running workspace_grep",
       })
     );
     assert.ok(html.includes("Thinking"), "header shows Thinking while streaming");
@@ -184,22 +271,35 @@ describe("uir-1 — ThinkingPanel fake progress bar is deleted", () => {
 
   it("ThinkingPanel source carries the Thought-for end-state label", () => {
     const src = readSrc("components/ThinkingPanel.tsx");
-    assert.ok(src.includes("formatThoughtLabel"), "collapsed row uses the Thought-for label helper");
+    assert.ok(
+      src.includes("formatThoughtLabel"),
+      "collapsed row uses the Thought-for label helper"
+    );
   });
 });
 
 describe("uir-0 — header diet in ChatStream", () => {
-  const src = readSrc("components/ChatStream.tsx");
+  const src =
+    readSrc("components/ChatStream.tsx") + "\n" + readSrc("components/chat/messageRender.tsx");
 
   it("Engine pill and Host status chip are gone from the header", () => {
-    assert.ok(!src.includes("<EngineStatusPill"), "EngineStatusPill no longer mounted in ChatStream");
-    assert.ok(!src.includes('data-testid="host-access-chip"'), "host status chip removed from header");
+    assert.ok(
+      !src.includes("<EngineStatusPill"),
+      "EngineStatusPill no longer mounted in ChatStream"
+    );
+    assert.ok(
+      !src.includes('data-testid="host-access-chip"'),
+      "host status chip removed from header"
+    );
   });
 
   it("the only header guest is the amber host-disconnect alert chip", () => {
     assert.ok(src.includes('data-testid="host-disconnect-chip"'), "disconnect chip testid present");
     assert.ok(src.includes("HOST DISCONNECTED · OPEN SETTINGS"), "chip carries the alert label");
-    assert.ok(src.includes("hostDisconnectChipVisible"), "chip visibility comes from the pure helper");
+    assert.ok(
+      src.includes("hostDisconnectChipVisible"),
+      "chip visibility comes from the pure helper"
+    );
   });
 
   it("context meter track is widened with the 85K redline tick", () => {
@@ -218,17 +318,40 @@ describe("uir-0 — header diet in ChatStream", () => {
     );
   });
 
-  it("Live Activity Header is wired into the streaming message and banners exist", () => {
-    assert.ok(src.includes("<LiveActivityHeader"), "LiveActivityHeader mounted for the streaming turn");
-    assert.ok(src.includes('data-testid="turn-transient-disconnected"'), "disconnected banner keeps its testid");
+  it("Fix 1: ActivityTimeline is the single live trace surface (LiveActivityHeader unmounted) and NowLineBar + banners exist", () => {
+    const messageRenderSrc = readSrc("components/chat/messageRender.tsx");
+    const chatStreamSrc = readSrc("components/ChatStream.tsx");
+    assert.ok(
+      !messageRenderSrc.includes("<LiveActivityHeader"),
+      "LiveActivityHeader no longer mounted on streaming turns (single live surface)"
+    );
+    assert.ok(
+      messageRenderSrc.includes("<ActivityTimeline"),
+      "ActivityTimeline is the single trace renderer"
+    );
+    assert.ok(
+      chatStreamSrc.includes("<NowLineBar") &&
+        chatStreamSrc.includes("lastActivityAtMs={lastActivityAtMs}"),
+      "NowLineBar receives lastActivityAtMs for stall detection"
+    );
+    assert.ok(
+      src.includes('data-testid="turn-transient-disconnected"'),
+      "disconnected banner keeps its testid"
+    );
     assert.ok(src.includes("DISCONNECTED"), "disconnected banner label present");
-    assert.ok(src.includes('data-testid="stream-recovered-banner"'), "recovered banner testid present");
+    assert.ok(
+      src.includes('data-testid="stream-recovered-banner"'),
+      "recovered banner testid present"
+    );
     assert.ok(src.includes("RECOVERED"), "recovered banner label present");
-    assert.ok(src.includes('data-testid="turn-done-chip"'), "done chip replaces the header at turn end");
+    assert.ok(
+      src.includes('data-testid="turn-done-chip"'),
+      "done chip replaces the header at turn end"
+    );
   });
 
   it("page.tsx passes a settings opener so the disconnect chip can open Settings", () => {
-    const page = readSrc("app/page.tsx");
+    const page = readSrc("app/page.tsx") + "\n" + readSrc("components/ViewShell.tsx");
     assert.ok(page.includes("onOpenSettings"), "page wires onOpenSettings into ChatStream");
   });
 

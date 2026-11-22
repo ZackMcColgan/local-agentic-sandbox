@@ -4,9 +4,9 @@ import {
   generateOvernightMorningReport,
   persistOvernightMorningReport,
   loadPersistedOvernightMorningReport,
-  generateMorningReport
+  generateMorningReport,
 } from "@/lib/subagents/morningReport";
-import { ThreadStore, Thread } from "@/lib/threads/threadStore";
+import { ThreadStore } from "@/lib/threads/threadStore";
 import { notify } from "@/lib/notifications";
 
 const supervisor = new OvernightSupervisor();
@@ -64,7 +64,7 @@ export async function GET() {
             commitSha: m.commitSha,
             testsPassed: m.testsPassed ?? 0,
             testsFailed: m.testsFailed ?? 0,
-            diffSummary: m.diffSummary
+            diffSummary: m.diffSummary,
           })),
           ambiguityFlags: latestTask.ambiguityFlags || [],
           parkedItems: latestTask.parkedReason ? [latestTask.parkedReason] : [],
@@ -77,10 +77,13 @@ export async function GET() {
 
     return NextResponse.json({
       overnightReport,
-      morningReport: singleReport
+      morningReport: singleReport,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -93,10 +96,13 @@ export async function POST(req: Request) {
     // Outbound notification for morning report readiness
     notify("morning_report.ready", {
       title: "Morning Report Ready",
-      body: `Overnight engineering report compiled with ${tasks.length} task(s).`
+      body: `Overnight engineering report compiled with ${tasks.length} task(s).`,
     }).catch(() => {});
     return NextResponse.json({ overnightReport });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

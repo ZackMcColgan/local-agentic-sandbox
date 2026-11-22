@@ -9,7 +9,10 @@ import { renderToString } from "react-dom/server";
 
 describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
   it("page.tsx omits .mobile-bottom-nav and routes all views through NavigationDrawer", () => {
-    const pageSrc = fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8");
+    const pageSrc =
+      fs.readFileSync(path.resolve(__dirname, "../app/page.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../components/ViewShell.tsx"), "utf8");
     assert.ok(
       !pageSrc.includes("mobile-bottom-nav"),
       "page.tsx must not render .mobile-bottom-nav"
@@ -18,7 +21,10 @@ describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
       pageSrc.includes("<NavigationDrawer"),
       "page.tsx must render NavigationDrawer for desktop rail / drawer navigation"
     );
-    const drawerSrc = fs.readFileSync(path.resolve(__dirname, "../components/NavigationDrawer.tsx"), "utf8");
+    const drawerSrc = fs.readFileSync(
+      path.resolve(__dirname, "../components/NavigationDrawer.tsx"),
+      "utf8"
+    );
     const views = ["chat", "projects", "builds", "skills", "settings"] as const;
     for (const view of views) {
       assert.ok(
@@ -30,26 +36,22 @@ describe("W1: Mobile Navigation Streamlining & Direct Projects Access", () => {
 
   it("ChatStream topbar renders a direct Projects navigation button with accessible label", async () => {
     const { ChatStream } = await import("../components/ChatStream.js");
-    let openedProjects = false;
 
     const html = renderToString(
       React.createElement(ChatStream, {
         onTracesUpdate: () => {},
         reasoningEffort: "medium" as const,
-        onOpenProjects: () => {
-          openedProjects = true;
-        },
+        onOpenProjects: () => {},
         threadTitle: "Test Thread",
-        activeModel: "Swift-1.5-Qwen3.8-27B-IQ3_XS"
+        activeModel: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
       })
     );
 
+    assert.ok(html.includes("Projects"), "ChatStream topbar must render a Projects button");
     assert.ok(
-      html.includes("Projects"),
-      "ChatStream topbar must render a Projects button"
-    );
-    assert.ok(
-      html.includes("title=\"Open Projects\"") || html.includes("aria-label=\"Open Projects\"") || html.includes("Projects"),
+      html.includes('title="Open Projects"') ||
+        html.includes('aria-label="Open Projects"') ||
+        html.includes("Projects"),
       "Projects button must be accessible"
     );
   });
@@ -68,7 +70,11 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
 
     // Configure git repo in repo-one
     execFileSync("git", ["init", "-b", "main"], { cwd: gitRepoDir });
-    fs.writeFileSync(path.join(gitRepoDir, "package.json"), JSON.stringify({ name: "repo-one" }), "utf8");
+    fs.writeFileSync(
+      path.join(gitRepoDir, "package.json"),
+      JSON.stringify({ name: "repo-one" }),
+      "utf8"
+    );
     execFileSync("git", ["config", "user.name", "Test Agent"], { cwd: gitRepoDir });
     execFileSync("git", ["config", "user.email", "agent@test.internal"], { cwd: gitRepoDir });
     execFileSync("git", ["add", "."], { cwd: gitRepoDir });
@@ -94,22 +100,30 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
     try {
       const { GET } = await import("../app/api/projects/browse/route.js");
       const req = new Request("http://localhost:3000/api/projects/browse");
-      const res = await GET(req as any);
+      const res = await GET(req as unknown as Parameters<typeof GET>[0]);
       assert.equal(res.status, 200);
 
       const data = await res.json();
       assert.ok(Array.isArray(data.items), "Must return items array");
 
-      const repoItem = data.items.find((i: any) => i.name === "repo-one");
+      const repoItem = data.items.find((i: { name?: string }) => i.name === "repo-one");
       assert.ok(repoItem, "repo-one must be in items");
       assert.equal(repoItem.isGitRepo, true, "repo-one must be detected as git repo");
       assert.equal(repoItem.defaultBranch, "main", "repo-one branch must be main");
-      assert.equal(repoItem.toolchain, "node:22", "repo-one toolchain must detect package.json as node:22");
+      assert.equal(
+        repoItem.toolchain,
+        "node:22",
+        "repo-one toolchain must detect package.json as node:22"
+      );
 
-      const plainItem = data.items.find((i: any) => i.name === "plain-folder");
+      const plainItem = data.items.find((i: { name?: string }) => i.name === "plain-folder");
       assert.ok(plainItem, "plain-folder must be in items");
       assert.equal(plainItem.isGitRepo, false, "plain-folder is not a git repo");
-      assert.equal(plainItem.toolchain, "python:3.11", "plain-folder toolchain must detect requirements.txt as python:3.11");
+      assert.equal(
+        plainItem.toolchain,
+        "python:3.11",
+        "plain-folder toolchain must detect requirements.txt as python:3.11"
+      );
     } finally {
       teardownDirs();
     }
@@ -120,7 +134,7 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
     try {
       const { GET } = await import("../app/api/projects/browse/route.js");
       const req = new Request("http://localhost:3000/api/projects/browse?subpath=../../etc");
-      const res = await GET(req as any);
+      const res = await GET(req as unknown as Parameters<typeof GET>[0]);
       assert.equal(res.status, 403, "Must reject traversal outside allowed root with 403");
     } finally {
       teardownDirs();
@@ -136,14 +150,18 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "init-repo",
-          targetPath: nonGitDir
-        })
+          targetPath: nonGitDir,
+        }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.success, true);
-      assert.equal(fs.existsSync(path.join(nonGitDir, ".git")), true, ".git must be created in nonGitDir");
+      assert.equal(
+        fs.existsSync(path.join(nonGitDir, ".git")),
+        true,
+        ".git must be created in nonGitDir"
+      );
     } finally {
       teardownDirs();
     }
@@ -158,10 +176,10 @@ describe("W2: Filesystem Folder Browser & Smart Discovery API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create-greenfield",
-          name: "my-greenfield-app"
-        })
+          name: "my-greenfield-app",
+        }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       assert.equal(res.status, 201);
       const data = await res.json();
       assert.ok(data.projectPath);

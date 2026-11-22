@@ -141,10 +141,7 @@ export class PrioritySlotScheduler {
    * empty so `fn` starts in the caller's tick (preserving immediate abort
    * listener registration).
    */
-  runWithSlot<T>(
-    options: AcquireSlotOptions,
-    fn: (lease: SlotLease) => Promise<T>
-  ): Promise<T> {
+  runWithSlot<T>(options: AcquireSlotOptions, fn: (lease: SlotLease) => Promise<T>): Promise<T> {
     if (options.signal?.aborted) {
       return Promise.reject(new Error("Slot acquisition aborted before acquire"));
     }
@@ -312,10 +309,7 @@ export class PrioritySlotScheduler {
     return lease;
   }
 
-  private acquireState(
-    state: LeaseState,
-    onQueued?: (position: number) => void
-  ): Promise<void> {
+  private acquireState(state: LeaseState, onQueued?: (position: number) => void): Promise<void> {
     if (state.signal?.aborted) {
       return Promise.reject(new Error("Slot acquisition aborted before acquire"));
     }

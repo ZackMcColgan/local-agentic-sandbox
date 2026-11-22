@@ -62,18 +62,23 @@ const ALLOWED_FILE_EXTENSIONS = new Set([
   ".yml",
   ".sql",
   ".css",
-  ".toml"
+  ".toml",
 ]);
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const requestedPath = url.searchParams.get("path");
-    const asJson = url.searchParams.get("format") === "json" || url.searchParams.get("json") === "true";
-    const isDownload = url.searchParams.get("download") === "1" || url.searchParams.get("download") === "true";
+    const asJson =
+      url.searchParams.get("format") === "json" || url.searchParams.get("json") === "true";
+    const isDownload =
+      url.searchParams.get("download") === "1" || url.searchParams.get("download") === "true";
 
     if (!requestedPath || typeof requestedPath !== "string") {
-      return NextResponse.json({ error: "Missing required 'path' query parameter" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required 'path' query parameter" },
+        { status: 400 }
+      );
     }
 
     // Clean leading slashes
@@ -81,7 +86,10 @@ export async function GET(request: NextRequest) {
 
     // Prevent path traversal
     if (cleanPath.includes("..")) {
-      return NextResponse.json({ error: "Access forbidden: path traversal detected" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Access forbidden: path traversal detected" },
+        { status: 403 }
+      );
     }
 
     // Determine candidate root directories where files might reside
@@ -93,7 +101,7 @@ export async function GET(request: NextRequest) {
       path.resolve(cwd, "..", "workspace"),
       path.resolve(cwd, "workspace"),
       cwd,
-      path.resolve(cwd, "..")
+      path.resolve(cwd, ".."),
     ];
 
     // Check if target is a directory across candidate roots (directory listing is forbidden)
@@ -108,8 +116,13 @@ export async function GET(request: NextRequest) {
       if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
         candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^workspace[\/\\]/, "")));
       }
-      if (root === threadsDir && (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))) {
-        candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "")));
+      if (
+        root === threadsDir &&
+        (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
+      ) {
+        candidatesToCheck.push(
+          path.resolve(root, cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, ""))
+        );
       }
       for (const candidate of candidatesToCheck) {
         const rel = path.relative(root, candidate);
@@ -117,7 +130,10 @@ export async function GET(request: NextRequest) {
           try {
             const stat = fs.statSync(candidate);
             if (stat.isDirectory()) {
-              return NextResponse.json({ error: "Access forbidden: directory listing not permitted" }, { status: 403 });
+              return NextResponse.json(
+                { error: "Access forbidden: directory listing not permitted" },
+                { status: 403 }
+              );
             }
           } catch {}
         }
@@ -130,7 +146,10 @@ export async function GET(request: NextRequest) {
 
     if (!isAllowedExt) {
       return NextResponse.json(
-        { error: "Unsupported media type: only allowed text, diagram, and code artifacts are permitted" },
+        {
+          error:
+            "Unsupported media type: only allowed text, diagram, and code artifacts are permitted",
+        },
         { status: 415 }
       );
     }
@@ -148,7 +167,10 @@ export async function GET(request: NextRequest) {
         try {
           const stat = fs.statSync(candidate1);
           if (stat.isDirectory()) {
-            return NextResponse.json({ error: "Access forbidden: directory listing not permitted" }, { status: 403 });
+            return NextResponse.json(
+              { error: "Access forbidden: directory listing not permitted" },
+              { status: 403 }
+            );
           }
           if (stat.isFile()) {
             resolvedPath = candidate1;
@@ -174,7 +196,10 @@ export async function GET(request: NextRequest) {
       }
 
       // If resolving against resolveThreadsDir() and cleanPath starts with ".agent/threads/", strip it
-      if (root === threadsDir && (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))) {
+      if (
+        root === threadsDir &&
+        (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
+      ) {
         const stripped = cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "");
         const candidate3 = path.resolve(root, stripped);
         const rel3 = path.relative(root, candidate3);
@@ -193,13 +218,11 @@ export async function GET(request: NextRequest) {
     // If file not found locally on disk, try proxying to mcp-server if available
     if (!resolvedPath) {
       const mcpEnv = process.env.MCP_SERVER_URL || process.env.MCP_URL;
-      const mcpBase = mcpEnv
-        ? mcpEnv.replace(/\/sse\/?$/, "")
-        : "http://localhost:8080";
+      const mcpBase = mcpEnv ? mcpEnv.replace(/\/sse\/?$/, "") : "http://localhost:8080";
 
       try {
         const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {
-          signal: AbortSignal.timeout(3000)
+          signal: AbortSignal.timeout(3000),
         });
         if (mcpFileRes.ok) {
           const fileBuffer = await mcpFileRes.arrayBuffer();
@@ -210,23 +233,24 @@ export async function GET(request: NextRequest) {
               path: cleanPath,
               size: fileBuffer.byteLength,
               mimeType,
-              content: textContent
+              content: textContent,
             });
           }
           const headers: Record<string, string> = {
             "Content-Type": mimeType,
             "Content-Length": fileBuffer.byteLength.toString(),
-            "Cache-Control": "public, max-age=60"
+            "Cache-Control": "public, max-age=60",
           };
           if (isDownload) {
             const basename = path.basename(cleanPath);
             const asciiName = basename.replace(/[^\x20-\x7E]/g, "_");
             const utf8Name = encodeURIComponent(basename);
-            headers["Content-Disposition"] = `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+            headers["Content-Disposition"] =
+              `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
           }
           return new NextResponse(Buffer.from(fileBuffer), {
             status: 200,
-            headers
+            headers,
           });
         }
       } catch {
@@ -249,7 +273,7 @@ export async function GET(request: NextRequest) {
         path: cleanPath,
         size: stat.size,
         mimeType,
-        content
+        content,
       });
     }
 
@@ -257,21 +281,25 @@ export async function GET(request: NextRequest) {
     const headers: Record<string, string> = {
       "Content-Type": mimeType,
       "Content-Length": stat.size.toString(),
-      "Cache-Control": "public, max-age=60"
+      "Cache-Control": "public, max-age=60",
     };
     if (isDownload) {
       const basename = path.basename(resolvedPath);
       const asciiName = basename.replace(/[^\x20-\x7E]/g, "_");
       const utf8Name = encodeURIComponent(basename);
-      headers["Content-Disposition"] = `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+      headers["Content-Disposition"] =
+        `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
     }
     return new NextResponse(fileBuffer, {
       status: 200,
-      headers
+      headers,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: "Internal server error reading file", details: error.message },
+      {
+        error: "Internal server error reading file",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }

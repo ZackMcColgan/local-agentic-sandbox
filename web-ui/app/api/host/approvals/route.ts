@@ -3,7 +3,7 @@ import {
   getPendingApprovals,
   consumePendingApproval,
   recordContinuationEntry,
-  executeHostTool
+  executeHostTool,
 } from "@/lib/hostMode";
 
 export async function GET(req: Request) {
@@ -12,8 +12,11 @@ export async function GET(req: Request) {
     const threadId = searchParams.get("threadId") || undefined;
     const approvals = getPendingApprovals(threadId);
     return NextResponse.json({ approvals });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -44,9 +47,12 @@ export async function POST(req: Request) {
         threadId: approval.threadId,
         tool: approval.tool,
         args: approval.args,
-        status: "expired"
+        status: "expired",
       });
-      return NextResponse.json({ error: "Approval request expired", status: "expired" }, { status: 410 });
+      return NextResponse.json(
+        { error: "Approval request expired", status: "expired" },
+        { status: 410 }
+      );
     }
 
     const approval = consumption.approval;
@@ -57,7 +63,7 @@ export async function POST(req: Request) {
         threadId: approval.threadId,
         tool: approval.tool,
         args: approval.args,
-        status: "rejected"
+        status: "rejected",
       });
       return NextResponse.json({ success: true, status: "rejected", approvalId: approval.id });
     }
@@ -74,9 +80,14 @@ export async function POST(req: Request) {
           args: approval.args,
           status: "error",
           error: result.error || "Host tool execution reported failure",
-          result
+          result,
         });
-        return NextResponse.json({ success: false, status: "error", approvalId: approval.id, result });
+        return NextResponse.json({
+          success: false,
+          status: "error",
+          approvalId: approval.id,
+          result,
+        });
       }
 
       recordContinuationEntry({
@@ -85,21 +96,31 @@ export async function POST(req: Request) {
         tool: approval.tool,
         args: approval.args,
         status: "executed",
-        result
+        result,
       });
-      return NextResponse.json({ success: true, status: "executed", approvalId: approval.id, result });
-    } catch (execErr: any) {
+      return NextResponse.json({
+        success: true,
+        status: "executed",
+        approvalId: approval.id,
+        result,
+      });
+    } catch (execErr: unknown) {
+      const execMsg = execErr instanceof Error ? execErr.message : undefined;
       recordContinuationEntry({
         approvalId: approval.id,
         threadId: approval.threadId,
         tool: approval.tool,
         args: approval.args,
         status: "error",
-        error: execErr?.message || "Host tool execution threw an exception"
+        error: execMsg || "Host tool execution threw an exception",
       });
-      return NextResponse.json({ success: false, error: execErr?.message || "Execution error" }, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: execMsg || "Execution error" },
+        { status: 500 }
+      );
     }
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    return NextResponse.json({ error: message || "Internal server error" }, { status: 500 });
   }
 }

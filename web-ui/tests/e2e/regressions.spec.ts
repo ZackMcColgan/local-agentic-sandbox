@@ -6,11 +6,16 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
     await setupStubbedEngineRoutes(page);
   });
 
-  test("Regression 1: Header Stop pill never overlaps Projects button", async ({ page, isMobile }) => {
+  test("Regression 1: Header Stop pill never overlaps Projects button", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/");
     await page.waitForSelector("header");
 
-    const projectsBtn = page.locator('button[aria-label="Open Projects"], button[title="Open Projects"]').first();
+    const projectsBtn = page
+      .locator('button[aria-label="Open Projects"], button[title="Open Projects"]')
+      .first();
 
     if (isMobile) {
       // UI-019 (owner order): the header Projects button is removed on
@@ -25,19 +30,33 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
 
     if (isMobile) {
       // On mobile, Stop pill must NOT be in the header at all
-      const mobileStopHeader = page.locator("header .engine-stop-pill, header button:has-text('Stop')");
+      const mobileStopHeader = page.locator(
+        "header .engine-stop-pill, header button:has-text('Stop')"
+      );
       await expect(mobileStopHeader).toBeHidden();
     } else {
       // On desktop, Engine pill / Stop button may exist, but MUST NOT overlap Projects button
       expect(projectsBox).not.toBeNull();
-      const enginePill = page.locator("header .engine-status-pill, header button:has-text('Stop'), header [aria-label*='Engine']").first();
+      const enginePill = page
+        .locator(
+          "header .engine-status-pill, header button:has-text('Stop'), header [aria-label*='Engine']"
+        )
+        .first();
       if (await enginePill.isVisible()) {
         const engineBox = await enginePill.boundingBox();
         expect(engineBox).not.toBeNull();
 
         // Calculate overlap area between projects button and engine pill
-        const overlapW = Math.max(0, Math.min(projectsBox!.x + projectsBox!.width, engineBox!.x + engineBox!.width) - Math.max(projectsBox!.x, engineBox!.x));
-        const overlapH = Math.max(0, Math.min(projectsBox!.y + projectsBox!.height, engineBox!.y + engineBox!.height) - Math.max(projectsBox!.y, engineBox!.y));
+        const overlapW = Math.max(
+          0,
+          Math.min(projectsBox!.x + projectsBox!.width, engineBox!.x + engineBox!.width) -
+            Math.max(projectsBox!.x, engineBox!.x)
+        );
+        const overlapH = Math.max(
+          0,
+          Math.min(projectsBox!.y + projectsBox!.height, engineBox!.y + engineBox!.height) -
+            Math.max(projectsBox!.y, engineBox!.y)
+        );
         const overlapArea = overlapW * overlapH;
 
         expect(overlapArea).toBe(0);
@@ -45,7 +64,10 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
     }
   });
 
-  test("Regression 2: Sessions panel does not bleed through or clip", async ({ page, isMobile }) => {
+  test("Regression 2: Sessions panel does not bleed through or clip", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/");
     await page.waitForSelector("header");
 
@@ -69,7 +91,9 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
       const sidebar = page.locator(".app-sidebar");
       if (await sidebar.isVisible()) {
         const title = sidebar.locator("text=Sessions").first();
-        const hideBtn = sidebar.locator('button:has-text("Hide"), button[aria-label*="Hide"]').first();
+        const hideBtn = sidebar
+          .locator('button:has-text("Hide"), button[aria-label*="Hide"]')
+          .first();
 
         if ((await title.isVisible()) && (await hideBtn.isVisible())) {
           const titleBox = await title.boundingBox();
@@ -77,15 +101,26 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
           expect(titleBox).not.toBeNull();
           expect(hideBox).not.toBeNull();
 
-          const overlapW = Math.max(0, Math.min(titleBox!.x + titleBox!.width, hideBox!.x + hideBox!.width) - Math.max(titleBox!.x, hideBox!.x));
-          const overlapH = Math.max(0, Math.min(titleBox!.y + titleBox!.height, hideBox!.y + hideBox!.height) - Math.max(titleBox!.y, hideBox!.y));
+          const overlapW = Math.max(
+            0,
+            Math.min(titleBox!.x + titleBox!.width, hideBox!.x + hideBox!.width) -
+              Math.max(titleBox!.x, hideBox!.x)
+          );
+          const overlapH = Math.max(
+            0,
+            Math.min(titleBox!.y + titleBox!.height, hideBox!.y + hideBox!.height) -
+              Math.max(titleBox!.y, hideBox!.y)
+          );
           expect(overlapW * overlapH).toBe(0);
         }
       }
     }
   });
 
-  test("Regression 3: Undiscoverable mobile menu — hamburger button present and functional", async ({ page, isMobile }) => {
+  test("Regression 3: Undiscoverable mobile menu — hamburger button present and functional", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/");
     await page.waitForSelector("header");
 
@@ -105,14 +140,19 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
       await expect(drawer).toBeVisible();
 
       // Verify close button exists and closes the menu
-      const closeBtn = drawer.locator('button[aria-label="Close drawer"], button[title="Close drawer"]').first();
+      const closeBtn = drawer
+        .locator('button[aria-label="Close drawer"], button[title="Close drawer"]')
+        .first();
       await expect(closeBtn).toBeVisible();
       await closeBtn.click();
       await expect(drawer).toBeHidden();
     }
   });
 
-  test("Regression 4: Chain F mobile header non-overlap, one-drawer law, and single turn-status-slot invariant", async ({ page, isMobile }) => {
+  test("Regression 4: Chain F mobile header non-overlap, one-drawer law, and single turn-status-slot invariant", async ({
+    page,
+    isMobile,
+  }) => {
     await page.goto("/?simulate=chat-tools&speed=20");
     await page.waitForSelector("header");
 
@@ -137,7 +177,10 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
     // The slot is transient (it unmounts when the tail message starts
     // rendering its thinking panel), so read the box in a single attempt
     // instead of isVisible-then-boundingBox, which races the unmount.
-    const slotBox = await slotLocator.first().boundingBox({ timeout: 2500 }).catch(() => null);
+    const slotBox = await slotLocator
+      .first()
+      .boundingBox({ timeout: 2500 })
+      .catch(() => null);
     if (slotBox) {
       expect(slotBox.height).toBeGreaterThan(0);
       expect(slotBox.height).toBeLessThanOrEqual(36);
@@ -154,10 +197,13 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
         'header button[aria-label="Open navigation menu"]',
         'header [data-testid="context-meter-pill"]',
         'header [data-testid="host-mode-toggle"]',
-        'header button[aria-label="Open Projects"]'
+        'header button[aria-label="Open Projects"]',
       ];
 
-      const boxes: Array<{ sel: string; box: { x: number; y: number; width: number; height: number } }> = [];
+      const boxes: Array<{
+        sel: string;
+        box: { x: number; y: number; width: number; height: number };
+      }> = [];
       for (const sel of headerSelectors) {
         const el = page.locator(sel).first();
         if (await el.isVisible()) {
@@ -176,8 +222,14 @@ test.describe("Seed Regression Tests for Escaped Defects", () => {
         for (let j = i + 1; j < boxes.length; j++) {
           const b1 = boxes[i].box;
           const b2 = boxes[j].box;
-          const overlapW = Math.max(0, Math.min(b1.x + b1.width, b2.x + b2.width) - Math.max(b1.x, b2.x));
-          const overlapH = Math.max(0, Math.min(b1.y + b1.height, b2.y + b2.height) - Math.max(b1.y, b2.y));
+          const overlapW = Math.max(
+            0,
+            Math.min(b1.x + b1.width, b2.x + b2.width) - Math.max(b1.x, b2.x)
+          );
+          const overlapH = Math.max(
+            0,
+            Math.min(b1.y + b1.height, b2.y + b2.height) - Math.max(b1.y, b2.y)
+          );
           const overlapArea = overlapW * overlapH;
           expect(overlapArea).toBe(0);
         }

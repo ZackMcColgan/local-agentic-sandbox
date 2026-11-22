@@ -36,11 +36,10 @@ export function LiveActivityHeader({
   lastActivityAtMs,
   round,
   traceCount,
-  traces = [],
   phaseLabel,
   activityLabel = null,
   isStreaming = true,
-  nowMs
+  nowMs,
 }: LiveActivityHeaderProps) {
   const [tickedNowMs, setTickedNowMs] = useState<number>(() => nowMs ?? Date.now());
 
@@ -122,7 +121,10 @@ export function LiveActivityHeader({
 
       {/* Indeterminate pulse track — signals work continuing, never completion */}
       {!isStalled && (
-        <div className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden" aria-hidden="true">
+        <div
+          className="relative h-[3px] rounded-full bg-emerald-500/20 dark:bg-emerald-500/20 overflow-hidden"
+          aria-hidden="true"
+        >
           <div className="live-activity-pulse absolute top-0 h-full w-1/3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400" />
         </div>
       )}
@@ -134,64 +136,6 @@ export function LiveActivityHeader({
           {activityLabel && metaParts.length > 0 && (
             <span className="shrink-0 tabular-nums">{metaParts.join(" · ")}</span>
           )}
-        </div>
-      )}
-
-      {/* Live trace rows */}
-      {traces.length > 0 && (
-        <div className="pt-1.5 space-y-1 border-t border-stone-200/80 dark:border-white/[0.08]">
-          {traces.map((trace, idx) => {
-            const tr = trace as ExecutionTraceItem & {
-              id?: string;
-              status?: string;
-              durationMs?: number;
-              args?: Record<string, unknown>;
-              error?: string;
-            };
-            const isFailed = tr.status === "error" || tr.status === "failed" || Boolean(tr.error);
-            const isInFlight =
-              !isFailed &&
-              (tr.status === "running" ||
-                (isStreaming && idx === traces.length - 1 && tr.durationMs == null && tr.status !== "completed"));
-            const target =
-              (typeof tr.args?.path === "string" && tr.args.path) ||
-              (typeof tr.args?.file === "string" && tr.args.file) ||
-              (typeof tr.args?.command === "string" && tr.args.command) ||
-              null;
-            return (
-              <div
-                key={tr.id || `${tr.tool}-${idx}`}
-                data-testid="live-trace-row"
-                data-in-flight={isInFlight ? "true" : "false"}
-                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-xs font-mono ${
-                  isFailed
-                    ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30"
-                    : isInFlight
-                    ? "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border border-cyan-500/30"
-                    : "text-stone-700 dark:text-stone-300"
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  {isFailed ? (
-                    <span className="text-rose-500 dark:text-rose-400 shrink-0">✕</span>
-                  ) : isInFlight ? (
-                    <span className="h-2 w-2 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse shrink-0" />
-                  ) : (
-                    <span className="text-emerald-600 dark:text-emerald-400 shrink-0">✓</span>
-                  )}
-                  <span className="font-semibold truncate">{tr.tool}</span>
-                  {target && <span className="text-zinc-600 dark:text-zinc-400 truncate">{target}</span>}
-                </div>
-                <span className="text-[11px] text-zinc-600 dark:text-zinc-400 tabular-nums shrink-0">
-                  {tr.durationMs != null
-                    ? `${tr.durationMs}ms`
-                    : isInFlight
-                    ? formatElapsedDuration(elapsedSeconds)
-                    : ""}
-                </span>
-              </div>
-            );
-          })}
         </div>
       )}
     </div>

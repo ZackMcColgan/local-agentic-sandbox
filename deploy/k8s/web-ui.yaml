@@ -40,6 +40,8 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
+            - name: SCHEDULER_DAEMON_ENABLED
+              value: "true"
             - name: AGENT_CHECKPOINT_DIR
               value: "/workspace/.agent/checkpoints"
             - name: PORT
@@ -80,6 +82,8 @@ spec:
               value: "/workspace/.agent/threads"
             - name: HOST_RUNNER_URL
               value: "http://host-runner-service:8765"
+            - name: HOST_CHECKOUT_PATH
+              value: 'C:\Users\zackm\Desktop\repos\local-agentic-sandbox'
             - name: HOST_RUNNER_SHARED_SECRET
               valueFrom:
                 secretKeyRef:
@@ -106,7 +110,7 @@ spec:
           resources:
             limits:
               cpu: "1000m"
-              memory: "1Gi"
+              memory: "2Gi"
             requests:
               cpu: "100m"
               memory: "128Mi"

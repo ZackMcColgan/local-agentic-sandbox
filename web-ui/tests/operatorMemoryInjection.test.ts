@@ -2,14 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
-import {
-  assembleSystemPrompt,
-  OWNER_MEMORY_HEADER
-} from "../lib/memory/operatorMemory.js";
+import { assembleSystemPrompt, OWNER_MEMORY_HEADER } from "../lib/memory/operatorMemory.js";
 
 describe("Settings Memory — system-prompt injection", () => {
   const BASE = "SYSTEM_PROMPT_TEXT";
-  const PROFILE = "\n--- USER PROFILE & DURABLE PREFERENCES ---\n- preferred_name: Zack\n--- END USER PROFILE ---\n";
+  const PROFILE =
+    "\n--- USER PROFILE & DURABLE PREFERENCES ---\n- preferred_name: Zack\n--- END USER PROFILE ---\n";
   const EFFORT = "\n\nREASONING EFFORT: BALANCED.";
   const HOST = "\n\n[HOST ACCESS: READY]";
 
@@ -49,10 +47,10 @@ describe("Settings Memory — system-prompt injection", () => {
   });
 
   it("chat route.ts wires assembleSystemPrompt and loadOperatorMemory into the system message", () => {
-    const routeSrc = fs.readFileSync(
-      path.resolve(__dirname, "../app/api/chat/route.ts"),
-      "utf8"
-    );
+    const routeSrc =
+      fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
     assert.ok(routeSrc.includes("loadOperatorMemory"), "route must load operator memory");
     assert.ok(routeSrc.includes("assembleSystemPrompt"), "route must assemble via helper");
     assert.ok(routeSrc.includes("formatMemoryForContext"), "route must format memory for context");

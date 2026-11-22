@@ -28,14 +28,16 @@ export async function GET(req: Request, { params }: RouteParams) {
       try {
         const fileData = readProjectFile(project, filePath);
         return NextResponse.json(fileData);
-      } catch (err: any) {
-        if (/forbidden|traversal|outside project root|symlink escape|revoked/i.test(err.message)) {
-          return NextResponse.json({ error: err.message }, { status: 403 });
+      } catch (err: unknown) {
+        const e = err as { message?: string; code?: string };
+        const message = e.message ?? String(err);
+        if (/forbidden|traversal|outside project root|symlink escape|revoked/i.test(message)) {
+          return NextResponse.json({ error: message }, { status: 403 });
         }
-        if (/not a file|no such file|does not exist/i.test(err.message) || err.code === "ENOENT") {
+        if (/not a file|no such file|does not exist/i.test(message) || e.code === "ENOENT") {
           return NextResponse.json({ error: `File not found: ${filePath}` }, { status: 404 });
         }
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return NextResponse.json({ error: message }, { status: 500 });
       }
     }
 
@@ -43,13 +45,17 @@ export async function GET(req: Request, { params }: RouteParams) {
     try {
       const tree = getProjectTree(project);
       return NextResponse.json({ tree });
-    } catch (err: any) {
-      if (/forbidden|traversal|outside project root|symlink escape|revoked/i.test(err.message)) {
-        return NextResponse.json({ error: err.message }, { status: 403 });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/forbidden|traversal|outside project root|symlink escape|revoked/i.test(message)) {
+        return NextResponse.json({ error: message }, { status: 403 });
       }
-      return NextResponse.json({ error: err.message }, { status: 500 });
+      return NextResponse.json({ error: message }, { status: 500 });
     }
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

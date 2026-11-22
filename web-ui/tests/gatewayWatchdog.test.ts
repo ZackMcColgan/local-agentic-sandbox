@@ -4,7 +4,6 @@ import path from "node:path";
 import fs from "node:fs";
 
 // Import GatewayWatchdog from scripts/lan-bridge
-// @ts-ignore
 import { GatewayWatchdog } from "../../scripts/lan-bridge.js";
 
 describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
@@ -23,9 +22,15 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
     const watchdog = new GatewayWatchdog({
       enabled: true,
       probeFn: async () => ({ ok: true }),
-      restartContainerFn: () => { healCalls.push("restart"); return { ok: true }; },
-      startGatewayFn: () => { healCalls.push("start"); return { ok: true }; },
-      containerExistsFn: () => true
+      restartContainerFn: () => {
+        healCalls.push("restart");
+        return { ok: true };
+      },
+      startGatewayFn: () => {
+        healCalls.push("start");
+        return { ok: true };
+      },
+      containerExistsFn: () => true,
     });
 
     await watchdog.step();
@@ -41,8 +46,11 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
     const watchdog = new GatewayWatchdog({
       enabled: true,
       probeFn: async () => ({ ok: false, error: "ECONNREFUSED" }),
-      restartContainerFn: () => { healCalls.push("restart"); return { ok: true }; },
-      containerExistsFn: () => true
+      restartContainerFn: () => {
+        healCalls.push("restart");
+        return { ok: true };
+      },
+      containerExistsFn: () => true,
     });
 
     await watchdog.step();
@@ -56,10 +64,16 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
     const watchdog = new GatewayWatchdog({
       enabled: true,
       probeFn: async () => ({ ok: false, error: "connect ETIMEDOUT" }),
-      restartContainerFn: () => { healCalls.push("docker restart kind-gateway"); return { ok: true }; },
-      startGatewayFn: () => { healCalls.push("start-gateway.ps1"); return { ok: true }; },
+      restartContainerFn: () => {
+        healCalls.push("docker restart kind-gateway");
+        return { ok: true };
+      },
+      startGatewayFn: () => {
+        healCalls.push("start-gateway.ps1");
+        return { ok: true };
+      },
       containerExistsFn: () => true,
-      logFn: (msg: string) => logs.push(msg)
+      logFn: (msg: string) => logs.push(msg),
     });
 
     await watchdog.step(); // 1st failure
@@ -69,7 +83,10 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
     assert.equal(healCalls.length, 1);
     assert.equal(healCalls[0], "docker restart kind-gateway");
     assert.equal(watchdog.getState().totalHeals, 1);
-    assert.ok(logs.some((l) => l.includes("Action: docker restart kind-gateway")), "Must log heal action");
+    assert.ok(
+      logs.some((l) => l.includes("Action: docker restart kind-gateway")),
+      "Must log heal action"
+    );
   });
 
   it("5. Watchdog: 2 consecutive failures triggers start-gateway.ps1 if container does NOT exist", async () => {
@@ -78,9 +95,15 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
       enabled: true,
       targetPort: 3001,
       probeFn: async () => ({ ok: false, error: "no such container" }),
-      restartContainerFn: () => { healCalls.push("restart"); return { ok: true }; },
-      startGatewayFn: (port: number) => { healCalls.push(`start-gateway ${port}`); return { ok: true }; },
-      containerExistsFn: () => false
+      restartContainerFn: () => {
+        healCalls.push("restart");
+        return { ok: true };
+      },
+      startGatewayFn: (port: number) => {
+        healCalls.push(`start-gateway ${port}`);
+        return { ok: true };
+      },
+      containerExistsFn: () => false,
     });
 
     await watchdog.step();
@@ -94,7 +117,7 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
     const watchdog = new GatewayWatchdog({
       enabled: true,
       probeFn: async () => ({ ok: probeOk }),
-      containerExistsFn: () => true
+      containerExistsFn: () => true,
     });
 
     await watchdog.step(); // fail 1
@@ -120,9 +143,12 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
       windowMs: 300000,
       nowFn: () => currentTime,
       probeFn: async () => ({ ok: false, error: "ECONNREFUSED" }),
-      restartContainerFn: () => { healCalls.push("restart"); return { ok: true }; },
+      restartContainerFn: () => {
+        healCalls.push("restart");
+        return { ok: true };
+      },
       containerExistsFn: () => true,
-      logFn: (msg: string) => logs.push(msg)
+      logFn: (msg: string) => logs.push(msg),
     });
 
     // Heal 1 (steps 1 & 2)
@@ -149,7 +175,10 @@ describe("Gateway Watchdog State Machine & Dev-Proxy Suite", () => {
     await watchdog.step();
     assert.equal(healCalls.length, 3, "Heals must not exceed maxHeals in window");
     assert.equal(watchdog.getState().isExhausted, true);
-    assert.ok(logs.some((l) => l.includes("WATCHDOG EXHAUSTED")), "Must log WATCHDOG EXHAUSTED");
+    assert.ok(
+      logs.some((l) => l.includes("WATCHDOG EXHAUSTED")),
+      "Must log WATCHDOG EXHAUSTED"
+    );
 
     // Advance time beyond window (> 300,000ms), heals should be allowed again
     currentTime += 350000;

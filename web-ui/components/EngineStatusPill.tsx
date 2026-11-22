@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Play, RotateCw, Square } from "lucide-react";
+import { Play, Square } from "lucide-react";
 
 export interface EngineStatusData {
   status: "running" | "stopped" | "starting" | "unknown";
@@ -22,7 +22,7 @@ export interface EngineStatusPillProps {
 export function EngineStatusPill({
   initialStatus,
   onOpenSettings,
-  className = ""
+  className = "",
 }: EngineStatusPillProps) {
   const [data, setData] = useState<EngineStatusData>(
     initialStatus || { status: "unknown", reachable: true }
@@ -58,7 +58,7 @@ export function EngineStatusPill({
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start" })
+        body: JSON.stringify({ action: "start" }),
       });
       const json = await res.json().catch(() => ({}));
       if (json.status) {
@@ -80,7 +80,7 @@ export function EngineStatusPill({
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stop" })
+        body: JSON.stringify({ action: "stop" }),
       });
       const json = await res.json().catch(() => ({}));
       if (json.status) {
@@ -106,7 +106,9 @@ export function EngineStatusPill({
         aria-label="Engine running"
       >
         <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
-        <span className="hidden sm:inline text-[11px] font-bold text-emerald-800 dark:text-emerald-300">Engine</span>
+        <span className="hidden sm:inline text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+          Engine
+        </span>
         <button
           type="button"
           onClick={handleStop}
@@ -146,7 +148,9 @@ export function EngineStatusPill({
       aria-label="Engine stopped"
     >
       <span className="h-2 w-2 rounded-full bg-stone-400 dark:bg-stone-500 shrink-0" />
-      <span className="hidden sm:inline text-stone-600 dark:text-stone-400 text-[11px]">Engine Stopped</span>
+      <span className="hidden sm:inline text-stone-600 dark:text-stone-400 text-[11px]">
+        Engine Stopped
+      </span>
       <button
         type="button"
         onClick={handleStart}

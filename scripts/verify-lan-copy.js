@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { exec } = require("child_process");
 
 setTimeout(() => {
   console.error(JSON.stringify({ pass: false, error: "deadline exceeded" }));
@@ -8,9 +8,13 @@ setTimeout(() => {
 async function waitForPort(port, maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(15000) });
+      const res = await fetch(`http://127.0.0.1:${port}/json`, {
+        signal: AbortSignal.timeout(15000),
+      });
       if (res.ok) return await res.json();
-    } catch {}
+    } catch {
+      /* retry until Chrome debug port is ready */
+    }
     await new Promise((r) => setTimeout(r, 400));
   }
   throw new Error(`Failed to connect to Chrome on port ${port}`);
@@ -27,8 +31,8 @@ async function testLanCopy() {
 
   try {
     const tabs = await waitForPort(port);
-    const pageTab = tabs.find((t) => t.type === 'page');
-    if (!pageTab) throw new Error('No page tab found');
+    const pageTab = tabs.find((t) => t.type === "page");
+    if (!pageTab) throw new Error("No page tab found");
 
     const ws = new WebSocket(pageTab.webSocketDebuggerUrl);
 
@@ -70,9 +74,11 @@ async function testLanCopy() {
           try {
             await send("Browser.grantPermissions", {
               permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
-              origin: targetHost
+              origin: targetHost,
             });
-          } catch {}
+          } catch {
+            /* ignore unsupported clipboard permission grant */
+          }
 
           console.log("Simulating insecure HTTP LAN context (navigator.clipboard disabled)...");
           const testResult = await send("Runtime.evaluate", {
@@ -115,7 +121,7 @@ async function testLanCopy() {
             `,
             userGesture: true,
             awaitPromise: true,
-            returnByValue: true
+            returnByValue: true,
           });
 
           const val = testResult.value || testResult.result?.value || testResult;
@@ -125,7 +131,9 @@ async function testLanCopy() {
             throw new Error(`Fallback copy failed in insecure context! ${JSON.stringify(val)}`);
           }
 
-          console.log("✅ Acceptance passed: copy works in unauthenticated plain HTTP LAN origin via execCommand fallback!");
+          console.log(
+            "✅ Acceptance passed: copy works in unauthenticated plain HTTP LAN origin via execCommand fallback!"
+          );
           ws.close();
           resolve();
         } catch (err) {
@@ -137,7 +145,9 @@ async function testLanCopy() {
   } finally {
     try {
       chrome.kill();
-    } catch {}
+    } catch {
+      /* ignore Chrome kill error */
+    }
   }
 }
 

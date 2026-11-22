@@ -11,12 +11,40 @@ import { estimateTokens } from "../contextBudget";
 
 export type LLMEngine = "ollama" | "llamacpp" | "strata";
 
+export interface LLMToolCall {
+  id?: string;
+  type?: string;
+  function: {
+    name: string;
+    arguments: string | Record<string, unknown>;
+  };
+}
+
+export interface LLMChatMessage {
+  role: string;
+  content?: string | unknown[] | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{
+    id?: string;
+    type?: string;
+    name?: string;
+    arguments?: unknown;
+    function?: {
+      name?: string;
+      arguments?: string | Record<string, unknown>;
+    };
+  }>;
+  images?: string[];
+  [key: string]: unknown;
+}
+
 export interface LLMStreamChunk {
   message?: {
     role?: string;
     content?: string;
     thinking?: string;
-    tool_calls?: any[];
+    tool_calls?: LLMToolCall[];
   };
   done?: boolean;
   finish_reason?: string;
@@ -24,13 +52,14 @@ export interface LLMStreamChunk {
   /** TOKEN ECONOMICS (a): prompt tokens from usage.prompt_tokens on the finish chunk. */
   promptTokens?: number;
   eval_count?: number;
-  [key: string]: any;
+  prompt_eval_count?: number;
+  [key: string]: unknown;
 }
 
 export interface LLMChatRequest {
   model?: string;
-  messages: any[];
-  tools?: any[];
+  messages: LLMChatMessage[];
+  tools?: unknown[];
   keep_alive?: string | number;
   reasoning_effort?: "low" | "medium" | "xhigh";
   signal?: AbortSignal;
@@ -39,9 +68,9 @@ export interface LLMChatRequest {
     num_predict?: number;
     num_ctx?: number;
     reasoning_effort?: "low" | "medium" | "xhigh";
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface LLMGenerateRequest {
@@ -62,7 +91,7 @@ export interface LLMGenerateResult {
   model: string;
   loadDurationMs?: number;
   totalDurationMs?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface LLMProviderOptions {
@@ -105,7 +134,7 @@ export class OllamaProvider implements LLMProvider {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...bodyPayload, stream: true }),
-      signal
+      signal,
     });
 
     if (!res.ok) {
@@ -134,9 +163,10 @@ export class OllamaProvider implements LLMProvider {
                   reject(new DOMException("The operation was aborted", "AbortError"));
                   return;
                 }
-                const onAbort = () => reject(new DOMException("The operation was aborted", "AbortError"));
+                const onAbort = () =>
+                  reject(new DOMException("The operation was aborted", "AbortError"));
                 signal.addEventListener("abort", onAbort, { once: true });
-              })
+              }),
             ])
           : reader.read());
         if (done) break;
@@ -149,7 +179,7 @@ export class OllamaProvider implements LLMProvider {
           try {
             const json = JSON.parse(trimmed);
             yield json;
-          } catch (err) {
+          } catch {
             console.warn("[Ollama Stream] JSON parse error on chunk:", trimmed);
           }
         }
@@ -168,7 +198,7 @@ export class OllamaProvider implements LLMProvider {
   async chat(baseUrl: string, payload: LLMChatRequest): Promise<LLMStreamChunk> {
     let accumulatedContent = "";
     let accumulatedThinking = "";
-    const toolCalls: any[] = [];
+    const toolCalls: LLMToolCall[] = [];
     let lastChunk: LLMStreamChunk | undefined;
 
     for await (const chunk of this.streamChat(baseUrl, payload)) {
@@ -184,9 +214,9 @@ export class OllamaProvider implements LLMProvider {
         role: "assistant",
         content: accumulatedContent,
         ...(accumulatedThinking ? { thinking: accumulatedThinking } : {}),
-        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
       },
-      done: true
+      done: true,
     };
   }
 
@@ -196,7 +226,12 @@ export class OllamaProvider implements LLMProvider {
     options?: LLMProviderOptions
   ): Promise<LLMGenerateResult> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (
+      baseUrl ||
+      process.env.LLM_BASE_URL ||
+      process.env.OLLAMA_BASE_URL ||
+      "http://127.0.0.1:11434"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 900_000;
     const endpoint = `${effectiveBase}/api/generate`;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -204,8 +239,11 @@ export class OllamaProvider implements LLMProvider {
 
     const taskScope = req.scope || options?.scope;
     const numCtx = taskScope?.toUpperCase() === "PROJECT" ? 8192 : 4096;
-    const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
-    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "balanced") as string;
+    const requestedPredict =
+      typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+    const effort = (req.reasoningEffort ||
+      (req.options as { reasoningEffort?: string } | undefined)?.reasoningEffort ||
+      "balanced") as string;
     let thinkingBudget = 4096;
     if (effort === "fast" || effort === "low") thinkingBudget = 1024;
     else if (effort === "deep" || effort === "xhigh") thinkingBudget = 8192;
@@ -214,7 +252,7 @@ export class OllamaProvider implements LLMProvider {
     const requestOptions = {
       num_ctx: numCtx,
       ...(req.options || {}),
-      num_predict: effectiveNumPredict
+      num_predict: effectiveNumPredict,
     };
 
     let res: Response;
@@ -229,16 +267,20 @@ export class OllamaProvider implements LLMProvider {
           stream: true,
           ...(req.format ? { format: req.format } : {}),
           ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
-          options: requestOptions
-        })
+          options: requestOptions,
+        }),
       });
-    } catch (err: any) {
-      throw new Error(`Model "${req.model}" unavailable at ${endpoint}: ${err?.message || String(err)}`);
+    } catch (err: unknown) {
+      throw new Error(
+        `Model "${req.model}" unavailable at ${endpoint}: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      throw new Error(`Model "${req.model}" unavailable at ${endpoint}: HTTP ${res.status} ${errText.slice(0, 200)}`);
+      throw new Error(
+        `Model "${req.model}" unavailable at ${endpoint}: HTTP ${res.status} ${errText.slice(0, 200)}`
+      );
     }
 
     let accumulatedText = "";
@@ -247,8 +289,8 @@ export class OllamaProvider implements LLMProvider {
     let loadDurationMs = 0;
     let totalDurationMs = 0;
 
-    if (res.body && typeof (res.body as any).getReader === "function") {
-      const reader = (res.body as any).getReader();
+    if (res.body && typeof res.body.getReader === "function") {
+      const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
 
@@ -322,31 +364,41 @@ export class OllamaProvider implements LLMProvider {
       thinking: thinkingText.trim() || undefined,
       model: req.model,
       loadDurationMs,
-      totalDurationMs
+      totalDurationMs,
     };
   }
 
   async listModels(baseUrl?: string, options?: LLMProviderOptions): Promise<string[]> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (
+      baseUrl ||
+      process.env.LLM_BASE_URL ||
+      process.env.OLLAMA_BASE_URL ||
+      "http://127.0.0.1:11434"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 5000;
     const res = await fetchImpl(`${effectiveBase}/api/tags`, {
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       throw new Error(`Ollama listModels failed: HTTP ${res.status}`);
     }
-    const data: any = await res.json();
-    return (data.models || []).map((m: any) => m.name || "").filter(Boolean);
+    const data = (await res.json()) as { models?: Array<{ name?: string }> };
+    return (data.models || []).map((m) => m.name || "").filter(Boolean);
   }
 
   async healthCheck(baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (
+      baseUrl ||
+      process.env.LLM_BASE_URL ||
+      process.env.OLLAMA_BASE_URL ||
+      "http://127.0.0.1:11434"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 5000;
     try {
       const res = await fetchImpl(`${effectiveBase}/api/version`, {
-        signal: AbortSignal.timeout(timeoutMs)
+        signal: AbortSignal.timeout(timeoutMs),
       });
       return res.ok;
     } catch {
@@ -354,16 +406,25 @@ export class OllamaProvider implements LLMProvider {
     }
   }
 
-  async ensureResident(model: string, baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
+  async ensureResident(
+    model: string,
+    baseUrl?: string,
+    options?: LLMProviderOptions
+  ): Promise<boolean> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (baseUrl || process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+    const effectiveBase = (
+      baseUrl ||
+      process.env.LLM_BASE_URL ||
+      process.env.OLLAMA_BASE_URL ||
+      "http://127.0.0.1:11434"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 30_000;
     try {
       const res = await fetchImpl(`${effectiveBase}/api/generate`, {
         method: "POST",
         signal: AbortSignal.timeout(timeoutMs),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, keep_alive: -1 })
+        body: JSON.stringify({ model, keep_alive: -1 }),
       });
       return res.ok;
     } catch {
@@ -378,31 +439,36 @@ export class OllamaProvider implements LLMProvider {
  * 2. Normalizes assistant tool_calls: ensures id, type: "function", and arguments as JSON string.
  * 3. Assigns matching tool_call_id to subsequent role === "tool" messages.
  */
-export function normalizeOpenAIMessages(messages: any[]): any[] {
+export function normalizeOpenAIMessages(messages: LLMChatMessage[]): LLMChatMessage[] {
   if (!Array.isArray(messages) || messages.length === 0) return [];
 
   // 1. Consolidate stray system messages into index 0
   let consolidatedSystem = "";
   const hasLeadingSystem = messages[0]?.role === "system";
   if (hasLeadingSystem) {
-    consolidatedSystem = typeof messages[0].content === "string" ? messages[0].content : JSON.stringify(messages[0].content || "");
+    consolidatedSystem =
+      typeof messages[0].content === "string"
+        ? messages[0].content
+        : JSON.stringify(messages[0].content || "");
   }
 
-  const nonSystem: any[] = [];
+  const nonSystem: LLMChatMessage[] = [];
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     if (i === 0 && hasLeadingSystem) continue;
     if (m?.role === "system") {
       const extra = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
       if (extra.trim() && !consolidatedSystem.includes(extra.trim())) {
-        consolidatedSystem = consolidatedSystem ? `${consolidatedSystem}\n\n${extra.trim()}` : extra.trim();
+        consolidatedSystem = consolidatedSystem
+          ? `${consolidatedSystem}\n\n${extra.trim()}`
+          : extra.trim();
       }
     } else {
       nonSystem.push(m);
     }
   }
 
-  const reordered: any[] = [];
+  const reordered: LLMChatMessage[] = [];
   if (hasLeadingSystem || consolidatedSystem) {
     reordered.push({ role: "system", content: consolidatedSystem });
   }
@@ -429,7 +495,7 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
 
     // Convert Ollama-format images array into OpenAI multimodal content parts
     if (Array.isArray(currentMsg?.images) && currentMsg.images.length > 0) {
-      const parts: any[] = [];
+      const parts: unknown[] = [];
       if (typeof currentMsg.content === "string" && currentMsg.content.length > 0) {
         parts.push({ type: "text", text: currentMsg.content });
       } else if (Array.isArray(currentMsg.content)) {
@@ -443,20 +509,24 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
         const url = img.startsWith("data:") ? img : `data:image/jpeg;base64,${img}`;
         parts.push({
           type: "image_url",
-          image_url: { url }
+          image_url: { url },
         });
       }
 
       const { images, ...rest } = currentMsg;
       currentMsg = {
         ...rest,
-        content: parts
+        content: parts,
       };
     }
 
-    if (currentMsg?.role === "assistant" && Array.isArray(currentMsg.tool_calls) && currentMsg.tool_calls.length > 0) {
+    if (
+      currentMsg?.role === "assistant" &&
+      Array.isArray(currentMsg.tool_calls) &&
+      currentMsg.tool_calls.length > 0
+    ) {
       pendingToolCallIds.length = 0; // reset for this assistant turn
-      const normalizedCalls = currentMsg.tool_calls.map((tc: any, tcIdx: number) => {
+      const normalizedCalls = currentMsg.tool_calls.map((tc, tcIdx: number) => {
         const id = tc.id || `call_${msgIdx}_${tcIdx}`;
         pendingToolCallIds.push(id);
         const rawArgs = tc.function?.arguments;
@@ -466,14 +536,14 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
           type: "function",
           function: {
             name: tc.function?.name || "unknown",
-            arguments: argsStr
-          }
+            arguments: argsStr,
+          },
         };
       });
       return {
         ...currentMsg,
         content: currentMsg.content ?? "",
-        tool_calls: normalizedCalls
+        tool_calls: normalizedCalls,
       };
     }
 
@@ -482,7 +552,10 @@ export function normalizeOpenAIMessages(messages: any[]): any[] {
       return {
         ...currentMsg,
         tool_call_id: matchedId,
-        content: typeof currentMsg.content === "string" ? currentMsg.content : JSON.stringify(currentMsg.content ?? "")
+        content:
+          typeof currentMsg.content === "string"
+            ? currentMsg.content
+            : JSON.stringify(currentMsg.content ?? ""),
       };
     }
 
@@ -518,9 +591,9 @@ export class LlamaCppProvider implements LLMProvider {
       nKeep = Math.min(2048, Math.max(64, tokens));
     }
 
-    const requestBody: Record<string, any> = {
+    const requestBody: Record<string, unknown> = {
       stream: true,
-      messages: normalizeOpenAIMessages(payload.messages || [])
+      messages: normalizeOpenAIMessages(payload.messages || []),
     };
 
     if (payload.model) {
@@ -544,7 +617,8 @@ export class LlamaCppProvider implements LLMProvider {
       requestBody.reasoning_effort = effort;
     }
 
-    const engineLabel = this.engine === "strata" || process.env.LLM_ENGINE === "strata" ? "Strata" : "llama.cpp";
+    const engineLabel =
+      this.engine === "strata" || process.env.LLM_ENGINE === "strata" ? "Strata" : "llama.cpp";
 
     let res: Response;
     try {
@@ -552,10 +626,11 @@ export class LlamaCppProvider implements LLMProvider {
         method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify(requestBody),
-        signal: payload.signal
+        signal: payload.signal,
       });
-    } catch (err: any) {
-      if (payload.signal?.aborted || err?.name === "AbortError") {
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      if (payload.signal?.aborted || e?.name === "AbortError") {
         throw err;
       }
       const cleanBase = (baseUrl || "").replace(/\/$/, "");
@@ -566,13 +641,17 @@ export class LlamaCppProvider implements LLMProvider {
             method: "POST",
             headers: this.getHeaders(),
             body: JSON.stringify(requestBody),
-            signal: payload.signal
+            signal: payload.signal,
           });
         } catch {
-          throw new Error(`${engineLabel} engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
+          throw new Error(
+            `${engineLabel} engine returned network error at ${targetUrl}: ${e?.message || String(err)}`
+          );
         }
       } else {
-        throw new Error(`${engineLabel} engine returned network error at ${targetUrl}: ${err?.message || String(err)}`);
+        throw new Error(
+          `${engineLabel} engine returned network error at ${targetUrl}: ${e?.message || String(err)}`
+        );
       }
     }
 
@@ -609,9 +688,10 @@ export class LlamaCppProvider implements LLMProvider {
                   reject(new DOMException("The operation was aborted", "AbortError"));
                   return;
                 }
-                const onAbort = () => reject(new DOMException("The operation was aborted", "AbortError"));
+                const onAbort = () =>
+                  reject(new DOMException("The operation was aborted", "AbortError"));
                 signal.addEventListener("abort", onAbort, { once: true });
-              })
+              }),
             ])
           : reader.read());
         if (done) break;
@@ -628,7 +708,32 @@ export class LlamaCppProvider implements LLMProvider {
             break;
           }
 
-          let parsed: any;
+          let parsed: {
+            finish_reason?: string;
+            usage?: { completion_tokens?: number; prompt_tokens?: number };
+            choices?: Array<{
+              finish_reason?: string;
+              delta?: {
+                reasoning_content?: string;
+                reasoning?: string;
+                content?: string;
+                tool_calls?: Array<{
+                  index?: number;
+                  id?: string;
+                  type?: string;
+                  function?: { name?: string; arguments?: string };
+                }>;
+              };
+              message?: {
+                tool_calls?: Array<{
+                  index?: number;
+                  id?: string;
+                  type?: string;
+                  function?: { name?: string; arguments?: string | Record<string, unknown> };
+                }>;
+              };
+            }>;
+          };
           try {
             parsed = JSON.parse(dataStr);
           } catch {
@@ -651,7 +756,7 @@ export class LlamaCppProvider implements LLMProvider {
               message: { thinking: reasoning },
               finish_reason: finishReason || undefined,
               outputTokens: usageOutputTokens,
-              promptTokens: usagePromptTokens
+              promptTokens: usagePromptTokens,
             };
           }
 
@@ -671,21 +776,41 @@ export class LlamaCppProvider implements LLMProvider {
               if (content.includes("</think>")) {
                 const parts = content.split("</think>");
                 if (parts[0]) {
-                  yield { message: { thinking: parts[0] }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
+                  yield {
+                    message: { thinking: parts[0] },
+                    finish_reason: finishReason || undefined,
+                    outputTokens: usageOutputTokens,
+                  };
                 }
                 insideThinking = false;
                 const after = parts.slice(1).join("</think>");
                 if (after) {
-                  yield { message: { content: after }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
+                  yield {
+                    message: { content: after },
+                    finish_reason: finishReason || undefined,
+                    outputTokens: usageOutputTokens,
+                  };
                 }
               } else if (content) {
-                yield { message: { thinking: content }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
+                yield {
+                  message: { thinking: content },
+                  finish_reason: finishReason || undefined,
+                  outputTokens: usageOutputTokens,
+                };
               }
             } else if (content) {
-              yield { message: { content }, finish_reason: finishReason || undefined, outputTokens: usageOutputTokens };
+              yield {
+                message: { content },
+                finish_reason: finishReason || undefined,
+                outputTokens: usageOutputTokens,
+              };
             }
           } else if (finishReason) {
-            yield { finish_reason: finishReason, outputTokens: usageOutputTokens, promptTokens: usagePromptTokens };
+            yield {
+              finish_reason: finishReason,
+              outputTokens: usageOutputTokens,
+              promptTokens: usagePromptTokens,
+            };
           }
 
           // Handle streaming delta tool calls
@@ -698,7 +823,7 @@ export class LlamaCppProvider implements LLMProvider {
                 toolCallsAccumulator.set(idx, {
                   id: tc.id || "",
                   type: tc.type || "function",
-                  function: { name: "", arguments: "" }
+                  function: { name: "", arguments: "" },
                 });
               }
               const acc = toolCallsAccumulator.get(idx)!;
@@ -718,7 +843,7 @@ export class LlamaCppProvider implements LLMProvider {
                 toolCallsAccumulator.set(idx, {
                   id: tc.id || "",
                   type: tc.type || "function",
-                  function: { name: "", arguments: "" }
+                  function: { name: "", arguments: "" },
                 });
               }
               const acc = toolCallsAccumulator.get(idx)!;
@@ -739,7 +864,7 @@ export class LlamaCppProvider implements LLMProvider {
       // End of stream: emit accumulated streaming tool calls if any
       if (toolCallsAccumulator.size > 0) {
         const finalizedToolCalls = Array.from(toolCallsAccumulator.values()).map((tc) => {
-          let args: any = tc.function.arguments;
+          let args: string | Record<string, unknown> = tc.function.arguments;
           if (typeof args === "string") {
             try {
               args = JSON.parse(args);
@@ -750,17 +875,17 @@ export class LlamaCppProvider implements LLMProvider {
             type: tc.type || "function",
             function: {
               name: tc.function.name,
-              arguments: args
-            }
+              arguments: args,
+            },
           };
         });
 
         yield {
           message: {
             role: "assistant",
-            tool_calls: finalizedToolCalls
+            tool_calls: finalizedToolCalls,
           },
-          done: true
+          done: true,
         };
       } else {
         yield { done: true };
@@ -773,7 +898,7 @@ export class LlamaCppProvider implements LLMProvider {
   async chat(baseUrl: string, payload: LLMChatRequest): Promise<LLMStreamChunk> {
     let accumulatedContent = "";
     let accumulatedThinking = "";
-    const toolCalls: any[] = [];
+    const toolCalls: LLMToolCall[] = [];
     let lastChunk: LLMStreamChunk | undefined;
 
     for await (const chunk of this.streamChat(baseUrl, payload)) {
@@ -789,9 +914,9 @@ export class LlamaCppProvider implements LLMProvider {
         role: "assistant",
         content: accumulatedContent,
         ...(accumulatedThinking ? { thinking: accumulatedThinking } : {}),
-        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
       },
-      done: true
+      done: true,
     };
   }
 
@@ -801,14 +926,19 @@ export class LlamaCppProvider implements LLMProvider {
     options?: LLMProviderOptions
   ): Promise<LLMGenerateResult> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const effectiveBase = (
+      process.env.LLAMACPP_BASE_URL ||
+      baseUrl ||
+      "http://127.0.0.1:8080"
+    ).replace(/\/$/, "");
     const targetUrl = `${effectiveBase}/v1/chat/completions`;
     const timeoutMs = options?.timeoutMs || 900_000;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
 
     // Prompt-prefix protection: compute n_keep so llama-server never evicts prompt context
-    let nKeep: number | undefined = typeof req.options?.n_keep === "number" ? req.options.n_keep : undefined;
+    let nKeep: number | undefined =
+      typeof req.options?.n_keep === "number" ? req.options.n_keep : undefined;
     if (nKeep === undefined && req.prompt) {
       const tokens = estimateTokens(req.prompt.slice(0, 500));
       nKeep = Math.min(2048, Math.max(64, tokens));
@@ -817,20 +947,26 @@ export class LlamaCppProvider implements LLMProvider {
     // Decouple reasoning token budget from generated output budget:
     // When using models with thinking tokens, max_tokens in llama-server limits BOTH reasoning and content.
     // Allocate requested output tokens PLUS reasoning headroom so thinking never starves completion.
-    const rawEffort = req.reasoningEffort || (req.options as any)?.reasoningEffort || (req.options as any)?.reasoning_effort;
+    const rawEffort =
+      req.reasoningEffort ||
+      (req.options as { reasoningEffort?: string; reasoning_effort?: string } | undefined)
+        ?.reasoningEffort ||
+      (req.options as { reasoningEffort?: string; reasoning_effort?: string } | undefined)
+        ?.reasoning_effort;
     const effort =
       rawEffort === "fast"
         ? "low"
         : rawEffort === "balanced"
-        ? "medium"
-        : rawEffort === "deep"
-        ? "xhigh"
-        : rawEffort;
+          ? "medium"
+          : rawEffort === "deep"
+            ? "xhigh"
+            : rawEffort;
     let maxTokens: number;
     if (typeof req.options?.max_tokens === "number") {
       maxTokens = req.options.max_tokens;
     } else if (effort) {
-      const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+      const requestedPredict =
+        typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
       let thinkingBudget = 4096;
       if (effort === "low") thinkingBudget = 1024;
       else if (effort === "xhigh") thinkingBudget = 8192;
@@ -841,11 +977,11 @@ export class LlamaCppProvider implements LLMProvider {
       maxTokens = 6144;
     }
 
-    const requestBody: Record<string, any> = {
+    const requestBody: Record<string, unknown> = {
       model: req.model,
       messages: normalizeOpenAIMessages([{ role: "user", content: req.prompt }]),
       stream: true,
-      max_tokens: maxTokens
+      max_tokens: maxTokens,
     };
 
     if (nKeep !== undefined) {
@@ -865,9 +1001,10 @@ export class LlamaCppProvider implements LLMProvider {
         method: "POST",
         signal,
         headers: this.getHeaders(),
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       const cleanBase = (baseUrl || "").replace(/\/$/, "");
       if (effectiveBase !== cleanBase && cleanBase) {
         const fallbackUrl = `${cleanBase}/v1/chat/completions`;
@@ -876,27 +1013,29 @@ export class LlamaCppProvider implements LLMProvider {
             method: "POST",
             signal,
             headers: this.getHeaders(),
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
           });
         } catch {
-          throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${err?.message || String(err)}`);
+          throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${errMsg}`);
         }
       } else {
-        throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${err?.message || String(err)}`);
+        throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: ${errMsg}`);
       }
     }
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      throw new Error(`Model "${req.model}" unavailable at ${targetUrl}: HTTP ${res.status} ${errText.slice(0, 200)}`);
+      throw new Error(
+        `Model "${req.model}" unavailable at ${targetUrl}: HTTP ${res.status} ${errText.slice(0, 200)}`
+      );
     }
 
     let accumulatedText = "";
     let thinkingText = "";
     let insideThinking = false;
 
-    if (res.body && typeof (res.body as any).getReader === "function") {
-      const reader = (res.body as any).getReader();
+    if (res.body && typeof res.body.getReader === "function") {
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -914,7 +1053,24 @@ export class LlamaCppProvider implements LLMProvider {
             const dataStr = trimmed.replace(/^data:\s*/, "");
             if (dataStr === "[DONE]") break;
 
-            let parsed: any;
+            let parsed: {
+              finish_reason?: string;
+              usage?: { completion_tokens?: number; prompt_tokens?: number };
+              choices?: Array<{
+                finish_reason?: string;
+                delta?: {
+                  reasoning_content?: string;
+                  reasoning?: string;
+                  content?: string;
+                  tool_calls?: Array<{
+                    index?: number;
+                    id?: string;
+                    type?: string;
+                    function?: { name?: string; arguments?: string };
+                  }>;
+                };
+              }>;
+            };
             try {
               parsed = JSON.parse(dataStr);
             } catch {
@@ -975,8 +1131,12 @@ export class LlamaCppProvider implements LLMProvider {
     if (!text && thinkingText.trim()) {
       // If the model produced reasoning but content is empty, check if it placed code or JSON within the reasoning stream
       const rawThinking = thinkingText.trim();
-      const codeBlockMatch = rawThinking.match(/```(?:json|xml|svg|typescript|javascript|ts|js)?\s*([\s\S]*?)```/);
-      const jsonObjectMatch = rawThinking.match(/(\{(?:[\s\S]*"milestones"[\s\S]*|"approved"[\s\S]*)\})/);
+      const codeBlockMatch = rawThinking.match(
+        /```(?:json|xml|svg|typescript|javascript|ts|js)?\s*([\s\S]*?)```/
+      );
+      const jsonObjectMatch = rawThinking.match(
+        /(\{(?:[\s\S]*"milestones"[\s\S]*|"approved"[\s\S]*)\})/
+      );
       if (codeBlockMatch && codeBlockMatch[1]?.trim()) {
         text = codeBlockMatch[1].trim();
       } else if (jsonObjectMatch && jsonObjectMatch[1]?.trim()) {
@@ -994,31 +1154,39 @@ export class LlamaCppProvider implements LLMProvider {
       text,
       thinking: thinkingText.trim() || undefined,
       model: req.model,
-      totalDurationMs: Date.now() - startTime
+      totalDurationMs: Date.now() - startTime,
     };
   }
 
   async listModels(baseUrl?: string, options?: LLMProviderOptions): Promise<string[]> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const effectiveBase = (
+      process.env.LLAMACPP_BASE_URL ||
+      baseUrl ||
+      "http://127.0.0.1:8080"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 5000;
     const res = await fetchImpl(`${effectiveBase}/v1/models`, {
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       throw new Error(`llama.cpp listModels failed: HTTP ${res.status}`);
     }
-    const data: any = await res.json();
-    return (data.data || []).map((m: any) => m.id || m.name || "").filter(Boolean);
+    const data = (await res.json()) as { data?: Array<{ id?: string; name?: string }> };
+    return (data.data || []).map((m) => m.id || m.name || "").filter(Boolean);
   }
 
   async healthCheck(baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const effectiveBase = (
+      process.env.LLAMACPP_BASE_URL ||
+      baseUrl ||
+      "http://127.0.0.1:8080"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 5000;
     try {
       const res = await fetchImpl(`${effectiveBase}/health`, {
-        signal: AbortSignal.timeout(timeoutMs)
+        signal: AbortSignal.timeout(timeoutMs),
       });
       return res.ok;
     } catch {
@@ -1026,13 +1194,21 @@ export class LlamaCppProvider implements LLMProvider {
     }
   }
 
-  async ensureResident(model: string, baseUrl?: string, options?: LLMProviderOptions): Promise<boolean> {
+  async ensureResident(
+    model: string,
+    baseUrl?: string,
+    options?: LLMProviderOptions
+  ): Promise<boolean> {
     const fetchImpl = options?.fetchImpl || globalThis.fetch;
-    const effectiveBase = (process.env.LLAMACPP_BASE_URL || baseUrl || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const effectiveBase = (
+      process.env.LLAMACPP_BASE_URL ||
+      baseUrl ||
+      "http://127.0.0.1:8080"
+    ).replace(/\/$/, "");
     const timeoutMs = options?.timeoutMs || 15000;
     try {
       const res = await fetchImpl(`${effectiveBase}/health`, {
-        signal: AbortSignal.timeout(timeoutMs)
+        signal: AbortSignal.timeout(timeoutMs),
       });
       return res.ok;
     } catch {

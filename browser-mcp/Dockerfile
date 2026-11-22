@@ -11,8 +11,11 @@ COPY browser-mcp/package*.json ./browser-mcp/
 COPY browser-mcp/tsconfig.json ./browser-mcp/
 COPY browser-mcp/src ./browser-mcp/src
 
-# Install from root (honors workspace config)
-RUN npm ci --workspaces
+# Install from root (honors workspace config).
+# --ignore-scripts: the root prepare script installs git hooks, which are
+# meaningless inside an image (nothing commits here); without this flag the
+# build fails on "husky: not found" (exit 127).
+RUN npm ci --workspaces --ignore-scripts
 
 WORKDIR /build/browser-mcp
 RUN npm run build

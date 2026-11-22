@@ -45,16 +45,8 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     );
 
     // Verify 0o770 is present instead
-    assert.match(
-      threadStoreCode,
-      /0o770/,
-      "web-ui/lib/threads/threadStore.ts must use 0o770"
-    );
-    assert.match(
-      routeCode,
-      /0o770/,
-      "web-ui/app/api/chat/route.ts must use 0o770"
-    );
+    assert.match(threadStoreCode, /0o770/, "web-ui/lib/threads/threadStore.ts must use 0o770");
+    assert.match(routeCode, /0o770/, "web-ui/app/api/chat/route.ts must use 0o770");
 
     // Verify writeFileSync with mode 0o660 is present in threadStore.ts
     assert.match(
@@ -66,29 +58,34 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
 
   it("Test 2: Runtime directory permissions — verify directories are created with 0770 permissions", () => {
     const targetThreadsDir = path.join(tempDir!, "threads_runtime_dir");
-    
+
     // Track mkdirSync and chmodSync calls
     const origMkdirSync = fs.mkdirSync;
     const origChmodSync = fs.chmodSync;
-    const mkdirCalls: Array<{ path: string; options?: any }> = [];
-    const chmodCalls: Array<{ path: string; mode: any }> = [];
+    const mkdirCalls: Array<{ path: string; options?: fs.MakeDirectoryOptions | fs.Mode | null }> =
+      [];
+    const chmodCalls: Array<{ path: string; mode: fs.Mode }> = [];
 
     try {
-      (fs as any).mkdirSync = (p: any, opt?: any) => {
-        mkdirCalls.push({ path: String(p), options: opt });
-        return origMkdirSync(p, opt);
+      const fsMutable = fs as unknown as {
+        mkdirSync: typeof fs.mkdirSync;
+        chmodSync: typeof fs.chmodSync;
       };
-      (fs as any).chmodSync = (p: any, m: any) => {
+      fsMutable.mkdirSync = ((p: fs.PathLike, opt?: fs.MakeDirectoryOptions | fs.Mode | null) => {
+        mkdirCalls.push({ path: String(p), options: opt });
+        return origMkdirSync(p, opt as fs.MakeDirectoryOptions);
+      }) as typeof fs.mkdirSync;
+      fsMutable.chmodSync = ((p: fs.PathLike, m: fs.Mode) => {
         chmodCalls.push({ path: String(p), mode: m });
         return origChmodSync(p, m);
-      };
+      }) as typeof fs.chmodSync;
 
-      const store = new ThreadStore(targetThreadsDir);
+      new ThreadStore(targetThreadsDir);
       assert.ok(fs.existsSync(targetThreadsDir), "threads directory should be created");
 
       // Verify that any mkdirSync calls specify mode 0o770
       const relevantMkdir = mkdirCalls.find((c) => c.path.includes("threads_runtime_dir"));
-      if (relevantMkdir && relevantMkdir.options) {
+      if (relevantMkdir && relevantMkdir.options && typeof relevantMkdir.options === "object") {
         assert.strictEqual(
           relevantMkdir.options.mode,
           0o770,
@@ -98,11 +95,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
 
       // Verify that any chmodSync calls pass 0o770 (never 0o777)
       for (const call of chmodCalls) {
-        assert.notStrictEqual(
-          call.mode,
-          0o777,
-          `chmodSync called with 0o777 on ${call.path}`
-        );
+        assert.notStrictEqual(call.mode, 0o777, `chmodSync called with 0o777 on ${call.path}`);
       }
 
       // On POSIX systems, check actual filesystem mode
@@ -126,18 +119,23 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     fs.mkdirSync(targetThreadsDir, { recursive: true, mode: 0o770 });
 
     const origWriteFileSync = fs.writeFileSync;
-    const writeCalls: Array<{ path: string; options?: any }> = [];
+    const writeCalls: Array<{ path: string; options?: fs.WriteFileOptions }> = [];
 
     try {
-      (fs as any).writeFileSync = (p: any, data: any, opt?: any) => {
+      const fsMutable = fs as unknown as { writeFileSync: typeof fs.writeFileSync };
+      fsMutable.writeFileSync = ((
+        p: fs.PathOrFileDescriptor,
+        data: string | NodeJS.ArrayBufferView,
+        opt?: fs.WriteFileOptions
+      ) => {
         writeCalls.push({ path: String(p), options: opt });
         return origWriteFileSync(p, data, opt);
-      };
+      }) as typeof fs.writeFileSync;
 
       const store = new ThreadStore(targetThreadsDir);
       const thread = store.createThread({
         title: "Test Hardened Thread",
-        initialPrompt: "Testing file mode 0660"
+        initialPrompt: "Testing file mode 0660",
       });
 
       assert.ok(thread && thread.id);
@@ -153,7 +151,7 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
           `writeFileSync options should be an object (got ${typeof call.options})`
         );
         assert.strictEqual(
-          call.options.mode,
+          (call.options as fs.ObjectEncodingOptions & { mode?: fs.Mode }).mode,
           0o660,
           `writeFileSync must be called with mode 0o660 on ${call.path}`
         );
@@ -199,16 +197,16 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     );
   });
 
-  it("Test 5: web-ui container memory limit is 1Gi (OOMKill RCA: 384Mi ceiling)", () => {
+  it("Test 5: web-ui container memory limit is 2Gi (OOMKill RCA: raised from 1Gi)", () => {
     const webUiPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
     const webUiYaml = fs.readFileSync(webUiPath, "utf8");
 
-    // RCA: pod web-ui-548b99549f-665xt was OOMKilled at 01:01 CT Nov 12 2026
-    // under load with limits.memory: 384Mi. The web-ui container limit must be 1Gi.
+    // RCA: pod web-ui was OOMKilled under load with limits.memory: 1Gi (Nov 21 2026)
+    // after previously being raised from 384Mi (Nov 12 2026). The web-ui container limit must be 2Gi.
     assert.match(
       webUiYaml,
-      /limits:\s*\n\s*cpu:\s*"?1000m"?\s*\n\s*memory:\s*"1Gi"/,
-      "deploy/k8s/web-ui.yaml must set the web-ui container memory limit to 1Gi"
+      /limits:\s*\n\s*cpu:\s*"?1000m"?\s*\n\s*memory:\s*"2Gi"/,
+      "deploy/k8s/web-ui.yaml must set the web-ui container memory limit to 2Gi"
     );
 
     // The old 384Mi ceiling must be gone entirely.
@@ -219,7 +217,10 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
 
     // CPU limits and requests must remain unchanged.
     assert.match(webUiYaml, /cpu:\s*"?1000m"?/, "web-ui CPU limit must stay 1000m");
-    assert.match(webUiYaml, /requests:\s*\n\s*cpu:\s*"?100m"?\s*\n\s*memory:\s*"128Mi"/,
-      "web-ui requests must stay cpu 100m / memory 128Mi");
+    assert.match(
+      webUiYaml,
+      /requests:\s*\n\s*cpu:\s*"?100m"?\s*\n\s*memory:\s*"128Mi"/,
+      "web-ui requests must stay cpu 100m / memory 128Mi"
+    );
   });
 });

@@ -8,7 +8,7 @@ import {
   approveSkillCandidate,
   rejectSkillCandidate,
   listActiveSkills,
-  loadPendingQueue
+  loadPendingQueue,
 } from "../lib/subagents/skillGate.js";
 
 describe("Skill Gate & Pattern Recording Suite", () => {
@@ -18,7 +18,7 @@ describe("Skill Gate & Pattern Recording Suite", () => {
       const patternKey = "fix-null-pointer-in-tree-traversal";
       const details = {
         title: "Check node existence before reading children",
-        solutionSummary: "Ensure if (!node) return null; is added at top of recursive tree walker."
+        solutionSummary: "Ensure if (!node) return null; is added at top of recursive tree walker.",
       };
 
       // 1st occurrence: recorded, not pending approval, 0 active skills
@@ -40,7 +40,11 @@ describe("Skill Gate & Pattern Recording Suite", () => {
       assert.equal(o3.candidate.occurrences, 3);
       assert.equal(o3.isPendingApproval, true);
       assert.equal(o3.promoted, false, "NOTHING auto-promotes without explicit user approval");
-      assert.deepEqual(listActiveSkills(tempSkillsDir), [], "Active skills MUST remain empty before approval");
+      assert.deepEqual(
+        listActiveSkills(tempSkillsDir),
+        [],
+        "Active skills MUST remain empty before approval"
+      );
 
       // Verify pending queue state on disk
       const queue = loadPendingQueue(tempSkillsDir);
@@ -70,9 +74,21 @@ describe("Skill Gate & Pattern Recording Suite", () => {
     const tempSkillsDir = fs.mkdtempSync(path.join(os.tmpdir(), "gated-skills-rej-"));
     try {
       const patternKey = "bad-pattern-to-reject";
-      recordObservedPattern(patternKey, { title: "Bad pattern", solutionSummary: "Don't promote" }, { skillsDir: tempSkillsDir });
-      recordObservedPattern(patternKey, { title: "Bad pattern", solutionSummary: "Don't promote" }, { skillsDir: tempSkillsDir });
-      recordObservedPattern(patternKey, { title: "Bad pattern", solutionSummary: "Don't promote" }, { skillsDir: tempSkillsDir });
+      recordObservedPattern(
+        patternKey,
+        { title: "Bad pattern", solutionSummary: "Don't promote" },
+        { skillsDir: tempSkillsDir }
+      );
+      recordObservedPattern(
+        patternKey,
+        { title: "Bad pattern", solutionSummary: "Don't promote" },
+        { skillsDir: tempSkillsDir }
+      );
+      recordObservedPattern(
+        patternKey,
+        { title: "Bad pattern", solutionSummary: "Don't promote" },
+        { skillsDir: tempSkillsDir }
+      );
 
       const rej = rejectSkillCandidate(patternKey, { skillsDir: tempSkillsDir });
       assert.equal(rej.rejected, true);

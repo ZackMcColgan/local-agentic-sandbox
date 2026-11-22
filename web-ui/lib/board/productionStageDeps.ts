@@ -1,18 +1,11 @@
+import { NextRequest } from "next/server";
 import { executeHostTool as defaultExecuteHostTool } from "../hostMode";
 import { ThreadStore, type Thread } from "../threads/threadStore";
 import { prepareSelfDeployPlan } from "../selfDeployMachinery";
 import type { BoardOrchestratorDeps } from "./boardOrchestrator";
 import type { DispatcherBoardItem } from "./dispatcher";
-import type {
-  FlowMonitorBoardItem,
-  PrCheckResult,
-  PrChecksSnapshot,
-} from "./flowMonitor";
-import type {
-  GateVerdict,
-  MechanicalCheckInput,
-  ReviewerVerdict,
-} from "./reviewerGate";
+import type { FlowMonitorBoardItem, PrCheckResult, PrChecksSnapshot } from "./flowMonitor";
+import type { GateVerdict, MechanicalCheckInput, ReviewerVerdict } from "./reviewerGate";
 import type {
   BankRollbackResult,
   BuildImportResult,
@@ -20,6 +13,7 @@ import type {
   SelfDeployVerifiedDeps,
   VerifyDeploymentResult,
 } from "../deploy/selfDeployVerified";
+import { readResponseStreamTail } from "./streamTail";
 
 export const DEFAULT_REVIEWER_TIMEOUT_MS = 10 * 60 * 1000;
 export const DEFAULT_REVIEWER_POLL_INTERVAL_MS = 2_000;
@@ -42,9 +36,24 @@ export interface StageThreadStore {
   getThread: (id: string) => Promise<Thread | null> | Thread | null;
 }
 
+export interface ReviewerChatDispatchResult {
+  ok: boolean;
+  status: number;
+  /** Bounded tail of the chat response stream (at most `STREAM_TAIL_CAP_BYTES`), not the full stream. */
+  rawStream?: string;
+  /** Total bytes consumed from the response stream before tail truncation. */
+  streamTotalBytes?: number;
+}
+
+export type ReviewerChatDispatcher = (params: {
+  threadId: string;
+  brief: string;
+}) => Promise<ReviewerChatDispatchResult>;
+
 export interface ProductionStageDepsOptions {
   executeHostTool?: HostBridgeExecutor;
   threadStore?: StageThreadStore;
+  dispatchChatTurn?: ReviewerChatDispatcher;
   hostCheckoutPath?: string;
   reviewerTimeoutMs?: number;
   reviewerPollIntervalMs?: number;
@@ -68,6 +77,24 @@ interface GhPrCheckRow {
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function defaultDispatchChatTurn(params: {
+  threadId: string;
+  brief: string;
+}): Promise<ReviewerChatDispatchResult> {
+  const { POST: chatPost } = await import("../../app/api/chat/route");
+  const chatReq = new NextRequest("http://localhost/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      threadId: params.threadId,
+      messages: [{ role: "user", content: params.brief }],
+    }),
+  });
+  const response = await chatPost(chatReq);
+  const { tail: rawStream, totalBytes: streamTotalBytes } = await readResponseStreamTail(response);
+  return { ok: response.ok, status: response.status, rawStream, streamTotalBytes };
 }
 
 function isCommandSuccess(res: HostBridgeCommandResult | null | undefined): boolean {
@@ -99,8 +126,7 @@ function mapGhCheckRow(row: GhPrCheckRow): PrCheckResult | null {
     state === "TIMED_OUT" ||
     state === "ACTION_REQUIRED"
   ) {
-    const conclusion =
-      state === "TIMED_OUT" || state === "ACTION_REQUIRED" ? state : "FAILURE";
+    const conclusion = state === "TIMED_OUT" || state === "ACTION_REQUIRED" ? state : "FAILURE";
     return { name, status: "COMPLETED", conclusion };
   }
   if (bucket === "skipping" || state === "SKIPPED" || state === "NEUTRAL") {
@@ -115,13 +141,12 @@ function extractItemAllowlist(item: DispatcherBoardItem): string[] {
   if (!Array.isArray(candidate)) {
     return [];
   }
-  return candidate.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  return candidate.filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+  );
 }
 
-function parseReviewerVerdictContent(
-  threadId: string,
-  content: string
-): ReviewerVerdict {
+function parseReviewerVerdictContent(threadId: string, content: string): ReviewerVerdict {
   const lines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -200,9 +225,10 @@ export function createProductionStageDeps(
   options: ProductionStageDepsOptions = {}
 ): ProductionStageDeps {
   const execBridge: HostBridgeExecutor =
-    options.executeHostTool ??
-    ((tool, args) => defaultExecuteHostTool(tool, args));
+    options.executeHostTool ?? ((tool, args) => defaultExecuteHostTool(tool, args));
   const threadStore: StageThreadStore = options.threadStore ?? new ThreadStore();
+  const dispatchChatTurn: ReviewerChatDispatcher =
+    options.dispatchChatTurn ?? defaultDispatchChatTurn;
   const hostCheckoutPath = options.hostCheckoutPath ?? process.env.HOST_CHECKOUT_PATH;
   const reviewerTimeoutMs = options.reviewerTimeoutMs ?? DEFAULT_REVIEWER_TIMEOUT_MS;
   const reviewerPollIntervalMs =
@@ -285,9 +311,8 @@ export function createProductionStageDeps(
         runHostCommand(`gh pr view ${prNum} --json headRefName`, 60),
       ]);
 
-      const diff = isCommandSuccess(diffRes) && typeof diffRes.stdout === "string"
-        ? diffRes.stdout
-        : "";
+      const diff =
+        isCommandSuccess(diffRes) && typeof diffRes.stdout === "string" ? diffRes.stdout : "";
 
       let commitSubjects: string[] = [];
       if (isCommandSuccess(commitsRes) && typeof commitsRes.stdout === "string") {
@@ -332,6 +357,24 @@ export function createProductionStageDeps(
       });
       const deadline = now() + reviewerTimeoutMs;
 
+      let dispatchError: string | null = null;
+      const dispatchPromise = dispatchChatTurn({
+        threadId: thread.id,
+        brief,
+      })
+        .then((res) => {
+          if (!res.ok) {
+            dispatchError = `Reviewer chat dispatch failed for thread ${thread.id} (HTTP ${res.status}).`;
+          }
+        })
+        .catch((err) => {
+          dispatchError =
+            err instanceof Error
+              ? err.message
+              : `Reviewer chat dispatch threw for thread ${thread.id}: ${String(err)}`;
+        });
+      void dispatchPromise;
+
       while (true) {
         const record = await threadStore.getThread(thread.id);
         if (record) {
@@ -365,6 +408,14 @@ export function createProductionStageDeps(
           }
         }
 
+        if (dispatchError) {
+          return {
+            threadId: thread.id,
+            verdict: "FAIL",
+            evidence: [dispatchError],
+          };
+        }
+
         if (now() >= deadline) {
           return {
             threadId: thread.id,
@@ -387,10 +438,7 @@ export function createProductionStageDeps(
           "kubectl -n local-agentic-sandbox get deployment web-ui -o jsonpath='{.spec.template.spec.containers[0].image}'",
           30
         ),
-        runHostCommand(
-          "kubectl -n local-agentic-sandbox get pods -l app=web-ui -o json",
-          30
-        ),
+        runHostCommand("kubectl -n local-agentic-sandbox get pods -l app=web-ui -o json", 30),
       ]);
 
       const image =
@@ -434,8 +482,9 @@ export function createProductionStageDeps(
 
     async buildAndImport(targetTag: string, dryRun: boolean): Promise<BuildImportResult> {
       if (dryRun) {
+        const currentState = await selfDeployDeps.readCurrentState();
         const plan = prepareSelfDeployPlan({
-          currentImage: "current",
+          currentImage: currentState.image,
           targetImage: formatImageRef(targetTag),
           healthUrl: "http://127.0.0.1:3001/api/sandbox-status",
           shadowMode: true,
@@ -451,13 +500,25 @@ export function createProductionStageDeps(
       try {
         const res = await runHostCommand("node scripts/deploy-cluster.js web-ui", 600);
         const ok = isCommandSuccess(res);
+        const stdout = typeof res.stdout === "string" ? res.stdout : "";
+        const tagMatch = stdout.match(/local-agentic-sandbox-web-ui:(v-[a-z0-9-]+)/i);
+        const builtTag = tagMatch?.[1];
+        if (ok && !builtTag) {
+          return {
+            built: false,
+            imported: false,
+            imagePresentInNode: false,
+            detail: "Could not determine built image tag from deploy-cluster.js output",
+          };
+        }
         const detail = ok
-          ? (res.stdout || `Built and imported ${targetTag}`).trim()
-          : (res.stderr || res.error || res.stdout || "deploy-cluster.js failed").trim();
+          ? (stdout || `Built and imported ${builtTag}`).trim()
+          : (res.stderr || res.error || stdout || "deploy-cluster.js failed").trim();
         return {
           built: ok,
           imported: ok,
           imagePresentInNode: ok,
+          ...(builtTag ? { builtTag: `local-agentic-sandbox-web-ui:${builtTag}` } : {}),
           detail,
         };
       } catch (err) {
@@ -525,10 +586,7 @@ export function createProductionStageDeps(
       const threadListLoads = threadsStatus === 200;
 
       const ok =
-        rolloutSuccess &&
-        podRunningZeroRestarts &&
-        gatewayStatus === 200 &&
-        threadListLoads;
+        rolloutSuccess && podRunningZeroRestarts && gatewayStatus === 200 && threadListLoads;
 
       let failedStep: string | undefined;
       let observed: string | undefined;

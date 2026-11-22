@@ -12,23 +12,48 @@ export { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patc
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
+function toErrorInfo(err: unknown): {
+  message: string;
+  stdout?: string;
+  stderr?: string;
+  code?: string | number;
+  status?: number;
+} {
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    return {
+      message: typeof e.message === "string" ? e.message : String(err),
+      stdout: typeof e.stdout === "string" ? e.stdout : undefined,
+      stderr: typeof e.stderr === "string" ? e.stderr : undefined,
+      code: typeof e.code === "string" || typeof e.code === "number" ? e.code : undefined,
+      status: typeof e.status === "number" ? e.status : undefined,
+    };
+  }
+  return { message: String(err) };
+}
+
 // Determine Workspace Root: /workspace in container, or local fallback in repo root
-export const WORKSPACE_DIR = process.env.WORKSPACE_DIR || (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
+export const WORKSPACE_DIR =
+  process.env.WORKSPACE_DIR ||
+  (fsSync.existsSync("/workspace") ? "/workspace" : path.resolve(process.cwd(), "../workspace"));
 
 // Helper: exec git commands using argv array (no shell interpolation) to prevent shell command injection
 async function execGit(args: string[], cwd: string = WORKSPACE_DIR) {
   const baseArgs = [
-    "-c", "safe.directory=*",
-    "-c", "user.name=Autonomous Agent",
-    "-c", "user.email=agent@local-sandbox.internal",
-    ...args
+    "-c",
+    "safe.directory=*",
+    "-c",
+    "user.name=Autonomous Agent",
+    "-c",
+    "user.email=agent@local-sandbox.internal",
+    ...args,
   ];
   return execFileAsync("git", baseArgs, {
     cwd,
     env: {
       ...process.env,
-      GIT_CONFIG_GLOBAL: "/tmp/.gitconfig"
-    }
+      GIT_CONFIG_GLOBAL: "/tmp/.gitconfig",
+    },
   });
 }
 
@@ -50,20 +75,29 @@ async function ensureWorkspaceInitialized() {
     } catch {
       const readmePath = path.join(WORKSPACE_DIR, "README.md");
       if (!fsSync.existsSync(readmePath)) {
-        await fs.writeFile(readmePath, "# Autonomous Agent Workspace\n\nPersistent workspace for code, branches, tests, and architecture diagrams.\n", "utf8");
+        await fs.writeFile(
+          readmePath,
+          "# Autonomous Agent Workspace\n\nPersistent workspace for code, branches, tests, and architecture diagrams.\n",
+          "utf8"
+        );
       }
       await execGit(["add", "-A"], WORKSPACE_DIR);
-      await execGit(["commit", "-m", "chore: initialize persistent agent workspace"], WORKSPACE_DIR);
+      await execGit(
+        ["commit", "-m", "chore: initialize persistent agent workspace"],
+        WORKSPACE_DIR
+      );
     }
-  } catch (err: any) {
-    console.warn("[WorkspaceTools] Workspace initialization notice:", err.message);
+  } catch (err: unknown) {
+    console.warn("[WorkspaceTools] Workspace initialization notice:", toErrorInfo(err).message);
   }
 }
 
 // Ensure safe path resolution within WORKSPACE_DIR
 export function resolveSafePath(userPath: string): string {
   if (userPath.includes("..")) {
-    throw new Error(`Security Violation: Path traversal outside /workspace is forbidden (${userPath})`);
+    throw new Error(
+      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
+    );
   }
   const normalized = path.normalize(userPath).replace(/^(\/|\\)+/, "");
   const stripped = normalized.replace(/^workspace(?:[\/\\]+|$)/i, "");
@@ -71,7 +105,9 @@ export function resolveSafePath(userPath: string): string {
   const rootResolved = path.resolve(WORKSPACE_DIR);
 
   if (!resolved.startsWith(rootResolved)) {
-    throw new Error(`Security Violation: Path traversal outside /workspace is forbidden (${userPath})`);
+    throw new Error(
+      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
+    );
   }
   return resolved;
 }
@@ -85,7 +121,7 @@ const IGNORED_DIRS = new Set([
   "dist",
   "build",
   ".venv",
-  ".cache"
+  ".cache",
 ]);
 
 // Helper: Guard against Catastrophic Backtracking (ReDoS) and excessive complexity
@@ -93,7 +129,7 @@ export function validateRegexPattern(pattern: string): { safe: boolean; reason?:
   if (pattern.length > 500) {
     return {
       safe: false,
-      reason: `Regex pattern length (${pattern.length}) exceeds safety limit of 500 characters.`
+      reason: `Regex pattern length (${pattern.length}) exceeds safety limit of 500 characters.`,
     };
   }
 
@@ -102,16 +138,16 @@ export function validateRegexPattern(pattern: string): { safe: boolean; reason?:
   const dangerousConstructs = [
     /\([^)]*[*+]\??[^)]*\)\s*(\{[0-9]+,?[0-9]*\}|[*+])/, // (x+)+, (x*)*, ([a-z]+)*, (.*a){10}
     /\([^)]*\{[0-9]+,?[0-9]*\}[^)]*\)\s*(\{[0-9]+,?[0-9]*\}|[*+])/, // (x{1,5})+
-    /\([^)]+\|[^)]+\)[*+]/,                     // (a|aa)+
-    /([*+]\??)\1+/,                             // ++, **, +*
-    /(\.\*|\.\+){2,}/                           // .*.*, .+.+
+    /\([^)]+\|[^)]+\)[*+]/, // (a|aa)+
+    /([*+]\??)\1+/, // ++, **, +*
+    /(\.\*|\.\+){2,}/, // .*.*, .+.+
   ];
 
   for (const regex of dangerousConstructs) {
     if (regex.test(pattern)) {
       return {
         safe: false,
-        reason: `Catastrophic backtracking (ReDoS) guard: pattern contains dangerous nested or overlapping quantifiers.`
+        reason: `Catastrophic backtracking (ReDoS) guard: pattern contains dangerous nested or overlapping quantifiers.`,
       };
     }
   }
@@ -120,17 +156,23 @@ export function validateRegexPattern(pattern: string): { safe: boolean; reason?:
 }
 
 // Helper: Guard against invalid code AST (TypeScript, JavaScript, Python) before file writes (nexus-agent pattern)
-export function validateCodeAst(filePath: string, content: string): { valid: boolean; error?: string } {
+export function validateCodeAst(
+  filePath: string,
+  content: string
+): { valid: boolean; error?: string } {
   const ext = path.extname(filePath).toLowerCase();
 
   // 1. TypeScript & JavaScript AST parsing via TypeScript compiler API
   if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
     try {
       const scriptKind =
-        ext === ".tsx" ? ts.ScriptKind.TSX :
-          ext === ".jsx" ? ts.ScriptKind.JSX :
-            ext === ".js" || ext === ".mjs" || ext === ".cjs" ? ts.ScriptKind.JS :
-              ts.ScriptKind.TS;
+        ext === ".tsx"
+          ? ts.ScriptKind.TSX
+          : ext === ".jsx"
+            ? ts.ScriptKind.JSX
+            : ext === ".js" || ext === ".mjs" || ext === ".cjs"
+              ? ts.ScriptKind.JS
+              : ts.ScriptKind.TS;
 
       const sourceFile = ts.createSourceFile(
         filePath,
@@ -140,19 +182,21 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
         scriptKind
       );
 
-      const diagnostics = (sourceFile as any).parseDiagnostics || [];
+      const diagnostics =
+        (sourceFile as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ||
+        [];
       if (diagnostics.length > 0) {
         const first = diagnostics[0];
         const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.start || 0);
         const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
         return {
           valid: false,
-          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`
+          error: `Syntax error in ${filePath} [line ${line + 1}, col ${character + 1}]: ${message}`,
         };
       }
       return { valid: true };
-    } catch (err: any) {
-      return { valid: false, error: `AST parser failure: ${err.message}` };
+    } catch (err: unknown) {
+      return { valid: false, error: `AST parser failure: ${toErrorInfo(err).message}` };
     }
   }
 
@@ -160,26 +204,25 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
   if (ext === ".py") {
     // Try python3 (Unix) then python (Windows) - python3 often missing on Windows
     const pythonCmds = ["python3", "python"];
-    let lastErr: any = null;
     for (const cmd of pythonCmds) {
       try {
         execFileSync(cmd, ["-c", "import ast, sys; ast.parse(sys.stdin.read())"], {
           input: content,
           encoding: "utf8",
           timeout: 3000,
-          stdio: ["pipe", "pipe", "pipe"]
+          stdio: ["pipe", "pipe", "pipe"],
         });
         return { valid: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         // ENOENT = command not found; 9009 / app execution alias stub on Windows = not installed
-        const stderr = err.stderr ? err.stderr.trim() : (err.message || "");
-        if (err.code === "ENOENT" || err.status === 9009 || stderr.includes("Python was not found")) {
-          lastErr = err;
+        const e = toErrorInfo(err);
+        const stderr = e.stderr ? e.stderr.trim() : e.message || "";
+        if (e.code === "ENOENT" || e.status === 9009 || stderr.includes("Python was not found")) {
           continue;
         }
         return {
           valid: false,
-          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`
+          error: `Python SyntaxError in ${filePath}: ${stderr || "Invalid Python syntax"}`,
         };
       }
     }
@@ -194,16 +237,23 @@ export function validateCodeAst(filePath: string, content: string): { valid: boo
 
 export function registerWorkspaceTools(mcp: McpServer) {
   // Initialize workspace at startup
-  ensureWorkspaceInitialized().catch(() => { });
+  ensureWorkspaceInitialized().catch(() => {});
 
   // 1. workspace_get_tree
   mcp.tool(
     "workspace_get_tree",
     "Retrieve a compact visual directory tree of /workspace (skipping node_modules, .git, etc.) providing repo structure in ~300 tokens.",
     {
-      max_depth: z.number().optional().default(3).describe("Maximum directory depth to traverse (default: 3)"),
-      sub_path: z.string().optional().describe("Optional subdirectory to inspect (relative to /workspace)")
-    } as any,
+      max_depth: z
+        .number()
+        .optional()
+        .default(3)
+        .describe("Maximum directory depth to traverse (default: 3)"),
+      sub_path: z
+        .string()
+        .optional()
+        .describe("Optional subdirectory to inspect (relative to /workspace)"),
+    },
     async ({ max_depth = 3, sub_path }: { max_depth?: number; sub_path?: string }) => {
       await ensureWorkspaceInitialized();
       const targetDir = sub_path ? resolveSafePath(sub_path) : WORKSPACE_DIR;
@@ -235,8 +285,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
               lines.push(`${prefix}${pointer}${entry.name}`);
             }
           }
-        } catch (err: any) {
-          lines.push(`${prefix}[Error reading directory: ${err.message}]`);
+        } catch (err: unknown) {
+          lines.push(`${prefix}[Error reading directory: ${toErrorInfo(err).message}]`);
         }
         return lines;
       }
@@ -246,14 +296,20 @@ export function registerWorkspaceTools(mcp: McpServer) {
       const treeOutput = [rootLabel, ...treeLines].join("\n");
 
       return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({
-            status: "SUCCESS",
-            workspace_root: WORKSPACE_DIR,
-            tree: treeOutput
-          }, null, 2)
-        }]
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                status: "SUCCESS",
+                workspace_root: WORKSPACE_DIR,
+                tree: treeOutput,
+              },
+              null,
+              2
+            ),
+          },
+        ],
       };
     }
   );
@@ -264,36 +320,51 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "Fast regex/substring search across codebase in /workspace. Returns matching file paths and line snippets.",
     {
       pattern: z.string().describe("Regex or substring pattern to search for"),
-      file_glob: z.string().optional().describe("Optional filename filter or extension (e.g. '*.ts', '*.py')")
-    } as any,
+      file_glob: z
+        .string()
+        .optional()
+        .describe("Optional filename filter or extension (e.g. '*.ts', '*.py')"),
+    },
     async ({ pattern, file_glob }: { pattern: string; file_glob?: string }) => {
       await ensureWorkspaceInitialized();
 
       const validation = validateRegexPattern(pattern);
       if (!validation.safe) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: validation.reason
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: validation.reason,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
 
       let regex: RegExp;
       try {
         regex = new RegExp(pattern, "i");
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `Invalid regular expression syntax: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `Invalid regular expression syntax: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
 
@@ -312,7 +383,6 @@ export function registerWorkspaceTools(mcp: McpServer) {
             await searchDir(fullPath);
           } else if (entry.isFile()) {
             if (file_glob) {
-              const ext = path.extname(entry.name);
               if (file_glob.startsWith("*") && !entry.name.endsWith(file_glob.slice(1))) {
                 continue;
               }
@@ -327,7 +397,7 @@ export function registerWorkspaceTools(mcp: McpServer) {
                   matches.push({
                     file: relPath.replace(/\\/g, "/"),
                     line: lineNum + 1,
-                    text: lines[lineNum].trim()
+                    text: lines[lineNum].trim(),
                   });
                   if (matches.length >= MAX_MATCHES) break;
                 }
@@ -342,15 +412,21 @@ export function registerWorkspaceTools(mcp: McpServer) {
       await searchDir(WORKSPACE_DIR);
 
       return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({
-            status: "SUCCESS",
-            pattern,
-            match_count: matches.length,
-            matches
-          }, null, 2)
-        }]
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                status: "SUCCESS",
+                pattern,
+                match_count: matches.length,
+                matches,
+              },
+              null,
+              2
+            ),
+          },
+        ],
       };
     }
   );
@@ -364,47 +440,77 @@ export function registerWorkspaceTools(mcp: McpServer) {
       start_line: z.number().optional().describe("Optional start line (1-indexed)"),
       end_line: z.number().optional().describe("Optional end line (1-indexed)"),
       offset: z.number().optional().describe("Optional line offset (if start_line not provided)"),
-      limit: z.number().optional().describe("Optional line count limit")
-    } as any,
-    async ({ path: filePath, start_line, end_line, offset, limit }: { path: string; start_line?: number; end_line?: number; offset?: number; limit?: number }) => {
+      limit: z.number().optional().describe("Optional line count limit"),
+    },
+    async ({
+      path: filePath,
+      start_line,
+      end_line,
+      offset,
+      limit,
+    }: {
+      path: string;
+      start_line?: number;
+      end_line?: number;
+      offset?: number;
+      limit?: number;
+    }) => {
       await ensureWorkspaceInitialized();
 
       try {
         const safePath = resolveSafePath(filePath);
         const raw = await fs.readFile(safePath, "utf8");
         const allLines = raw.split(/\r?\n/);
-        const start = start_line ? Math.max(1, start_line) : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
-        const end = end_line ? Math.min(allLines.length, end_line) : (limit !== undefined ? Math.min(allLines.length, start + limit - 1) : allLines.length);
+        const start = start_line
+          ? Math.max(1, start_line)
+          : offset !== undefined
+            ? Math.max(1, offset === 0 ? 1 : offset)
+            : 1;
+        const end = end_line
+          ? Math.min(allLines.length, end_line)
+          : limit !== undefined
+            ? Math.min(allLines.length, start + limit - 1)
+            : allLines.length;
 
         const slice = allLines.slice(start - 1, end);
-        const formatted = slice
-          .map((line, idx) => `${start + idx} | ${line}`)
-          .join("\n");
+        const formatted = slice.map((line, idx) => `${start + idx} | ${line}`).join("\n");
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              path: filePath,
-              total_lines: allLines.length,
-              total_bytes: Buffer.byteLength(raw, "utf8"),
-              showing_lines: `${start}-${end}`,
-              has_more: end < allLines.length,
-              next_start_line: end < allLines.length ? end + 1 : null,
-              content: formatted
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  path: filePath,
+                  total_lines: allLines.length,
+                  total_bytes: Buffer.byteLength(raw, "utf8"),
+                  showing_lines: `${start}-${end}`,
+                  has_more: end < allLines.length,
+                  next_start_line: end < allLines.length ? end + 1 : null,
+                  content: formatted,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `Failed to read file ${filePath}: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `Failed to read file ${filePath}: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -417,9 +523,21 @@ export function registerWorkspaceTools(mcp: McpServer) {
     {
       path: z.string().describe("File path relative to /workspace"),
       content: z.string().describe("The text content, code, or SVG/XML diagram to write"),
-      create_dirs: z.boolean().optional().default(true).describe("Create parent directories if they don't exist")
-    } as any,
-    async ({ path: filePath, content, create_dirs = true }: { path: string; content: string; create_dirs?: boolean }) => {
+      create_dirs: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Create parent directories if they don't exist"),
+    },
+    async ({
+      path: filePath,
+      content,
+      create_dirs = true,
+    }: {
+      path: string;
+      content: string;
+      create_dirs?: boolean;
+    }) => {
       await ensureWorkspaceInitialized();
 
       try {
@@ -429,13 +547,19 @@ export function registerWorkspaceTools(mcp: McpServer) {
         const astCheck = validateCodeAst(filePath, content);
         if (!astCheck.valid) {
           return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({
-                status: "EXECUTION_ERROR",
-                error: `AST validation failed before write: ${astCheck.error}`
-              }, null, 2)
-            }]
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    status: "EXECUTION_ERROR",
+                    error: `AST validation failed before write: ${astCheck.error}`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
           };
         }
 
@@ -447,25 +571,40 @@ export function registerWorkspaceTools(mcp: McpServer) {
         await fs.writeFile(safePath, content, "utf8");
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              path: filePath,
-              bytes_written: Buffer.byteLength(content, "utf8"),
-              is_diagram: filePath.endsWith(".drawio.svg") || filePath.endsWith(".drawio") || filePath.endsWith(".svg")
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  path: filePath,
+                  bytes_written: Buffer.byteLength(content, "utf8"),
+                  is_diagram:
+                    filePath.endsWith(".drawio.svg") ||
+                    filePath.endsWith(".drawio") ||
+                    filePath.endsWith(".svg"),
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `Failed to write file ${filePath}: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `Failed to write file ${filePath}: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -477,32 +616,48 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "Surgically applies search-and-replace patches to a file in /workspace. Rejects path traversal and missing targets.",
     {
       path: z.string().describe("File path relative to /workspace"),
-      patches: z.array(
-        z.object({
-          search: z.string().describe("Exact string to search for"),
-          replace: z.string().describe("Replacement string")
-        })
-      ).describe("Array of search-and-replace patches to apply in order")
-    } as any,
-    async ({ path: filePath, patches }: { path: string; patches: { search: string; replace: string }[] }) => {
+      patches: z
+        .array(
+          z.object({
+            search: z.string().describe("Exact string to search for"),
+            replace: z.string().describe("Replacement string"),
+          })
+        )
+        .describe("Array of search-and-replace patches to apply in order"),
+    },
+    async ({
+      path: filePath,
+      patches,
+    }: {
+      path: string;
+      patches: { search: string; replace: string }[];
+    }) => {
       await ensureWorkspaceInitialized();
       try {
         const result = await workspacePatchFile(WORKSPACE_DIR, filePath, patches);
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify(result, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `Failed to patch file ${filePath}: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `Failed to patch file ${filePath}: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -513,9 +668,17 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "workspace_run_command",
     "Executes commands (pytest, npm test, python3, bash) inside /workspace. Returns stdout, stderr, and exit code.",
     {
-      command: z.string().describe("Shell command to execute inside /workspace (e.g. 'pytest tests/', 'python3 script.py')"),
-      timeout_seconds: z.number().optional().default(30).describe("Timeout limit in seconds (default: 30)")
-    } as any,
+      command: z
+        .string()
+        .describe(
+          "Shell command to execute inside /workspace (e.g. 'pytest tests/', 'python3 script.py')"
+        ),
+      timeout_seconds: z
+        .number()
+        .optional()
+        .default(30)
+        .describe("Timeout limit in seconds (default: 30)"),
+    },
     async ({ command, timeout_seconds = 30 }: { command: string; timeout_seconds?: number }) => {
       await ensureWorkspaceInitialized();
       const startTime = performance.now();
@@ -524,38 +687,51 @@ export function registerWorkspaceTools(mcp: McpServer) {
         const { stdout, stderr } = await execAsync(command, {
           cwd: WORKSPACE_DIR,
           timeout: timeout_seconds * 1000,
-          maxBuffer: 4 * 1024 * 1024
+          maxBuffer: 4 * 1024 * 1024,
         });
 
         const durationMs = Math.round(performance.now() - startTime);
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              command,
-              exit_code: 0,
-              stdout: stdout.trim(),
-              stderr: stderr.trim(),
-              execution_time_ms: durationMs
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  command,
+                  exit_code: 0,
+                  stdout: stdout.trim(),
+                  stderr: stderr.trim(),
+                  execution_time_ms: durationMs,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e = toErrorInfo(err);
         const durationMs = Math.round(performance.now() - startTime);
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              command,
-              exit_code: err.code || 1,
-              stdout: err.stdout ? err.stdout.trim() : "",
-              stderr: err.stderr ? err.stderr.trim() : err.message,
-              execution_time_ms: durationMs
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  command,
+                  exit_code: e.code || 1,
+                  stdout: e.stdout ? e.stdout.trim() : "",
+                  stderr: e.stderr ? e.stderr.trim() : e.message,
+                  execution_time_ms: durationMs,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -566,8 +742,8 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "git_status",
     "Inspect current git branch, uncommitted files, and colored unified diff in /workspace.",
     {
-      cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff")
-    } as any,
+      cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff"),
+    },
     async ({ cached = false }: { cached?: boolean }) => {
       await ensureWorkspaceInitialized();
 
@@ -582,26 +758,38 @@ export function registerWorkspaceTools(mcp: McpServer) {
         const diffRes = await execGit(diffArgs, WORKSPACE_DIR);
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              branch,
-              has_changes: statusLines.length > 0,
-              modified_files: statusLines,
-              diff: diffRes.stdout.trim()
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  branch,
+                  has_changes: statusLines.length > 0,
+                  modified_files: statusLines,
+                  diff: diffRes.stdout.trim(),
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `git_status error: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `git_status error: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -612,9 +800,12 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "git_diff",
     "Show changes between commits, commit and working tree, or staged changes in /workspace.",
     {
-      target: z.string().optional().describe("Optional commit, branch, or file path to diff against"),
-      cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff")
-    } as any,
+      target: z
+        .string()
+        .optional()
+        .describe("Optional commit, branch, or file path to diff against"),
+      cached: z.boolean().optional().default(false).describe("If true, show staged/cached diff"),
+    },
     async ({ target, cached = false }: { target?: string; cached?: boolean }) => {
       await ensureWorkspaceInitialized();
 
@@ -625,23 +816,35 @@ export function registerWorkspaceTools(mcp: McpServer) {
         const diffRes = await execGit(diffArgs, WORKSPACE_DIR);
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              diff: diffRes.stdout.trim()
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  diff: diffRes.stdout.trim(),
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `git diff error: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `git diff error: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -653,34 +856,52 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "Create or switch to an autonomous feature/fix branch (e.g. agent/add-jwt-rotation) in /workspace.",
     {
       branch_name: z.string().describe("Target branch name (e.g. 'agent/fix-tests')"),
-      create_new: z.boolean().optional().default(true).describe("Whether to create a new branch (-b)")
-    } as any,
+      create_new: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Whether to create a new branch (-b)"),
+    },
     async ({ branch_name, create_new = true }: { branch_name: string; create_new?: boolean }) => {
       await ensureWorkspaceInitialized();
 
       try {
-        const checkoutArgs = create_new ? ["checkout", "-B", branch_name] : ["checkout", branch_name];
+        const checkoutArgs = create_new
+          ? ["checkout", "-B", branch_name]
+          : ["checkout", branch_name];
         const res = await execGit(checkoutArgs, WORKSPACE_DIR);
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              current_branch: branch_name,
-              output: (res.stdout + "\n" + res.stderr).trim()
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  current_branch: branch_name,
+                  output: (res.stdout + "\n" + res.stderr).trim(),
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `git checkout error: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `git checkout error: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -691,8 +912,10 @@ export function registerWorkspaceTools(mcp: McpServer) {
     "git_commit",
     "Stage all changes and commit with semantic commit message in /workspace.",
     {
-      message: z.string().describe("Semantic commit message (e.g. 'feat(auth): add jwt token refresh')")
-    } as any,
+      message: z
+        .string()
+        .describe("Semantic commit message (e.g. 'feat(auth): add jwt token refresh')"),
+    },
     async ({ message }: { message: string }) => {
       await ensureWorkspaceInitialized();
 
@@ -701,36 +924,55 @@ export function registerWorkspaceTools(mcp: McpServer) {
         const commitRes = await execGit(["commit", "-m", message], WORKSPACE_DIR);
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              commit_message: message,
-              output: commitRes.stdout.trim()
-            }, null, 2)
-          }]
-        };
-      } catch (err: any) {
-        if (err.stdout?.includes("nothing to commit") || err.message?.includes("nothing to commit")) {
-          return {
-            content: [{
+          content: [
+            {
               type: "text" as const,
-              text: JSON.stringify({
-                status: "SUCCESS",
-                commit_message: message,
-                output: "nothing to commit, working tree clean"
-              }, null, 2)
-            }]
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  commit_message: message,
+                  output: commitRes.stdout.trim(),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (err: unknown) {
+        const e = toErrorInfo(err);
+        if (e.stdout?.includes("nothing to commit") || e.message?.includes("nothing to commit")) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    status: "SUCCESS",
+                    commit_message: message,
+                    output: "nothing to commit, working tree clean",
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
           };
         }
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: `git commit error: ${err.message}`
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: `git commit error: ${toErrorInfo(err).message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }

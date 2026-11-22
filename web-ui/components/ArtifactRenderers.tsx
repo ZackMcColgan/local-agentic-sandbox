@@ -22,13 +22,25 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
         <span key={lineIdx} className="block leading-5">
           {parts.map((p, pIdx) => {
             if (/^<\/?[a-zA-Z0-9:-]+$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-700 dark:text-emerald-400 font-semibold">{p}</span>;
+              return (
+                <span key={pIdx} className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                  {p}
+                </span>
+              );
             }
             if (/^["'].*["']$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
+              return (
+                <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">
+                  {p}
+                </span>
+              );
             }
             if (p === ">" || p === "/>") {
-              return <span key={pIdx} className="text-slate-500 dark:text-zinc-400 font-semibold">{p}</span>;
+              return (
+                <span key={pIdx} className="text-slate-500 dark:text-zinc-400 font-semibold">
+                  {p}
+                </span>
+              );
             }
             return <span key={pIdx}>{p}</span>;
           })}
@@ -43,13 +55,25 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
         <span key={lineIdx} className="block leading-5">
           {parts.map((p, pIdx) => {
             if (/^"[^"]*"\s*:$/.test(p)) {
-              return <span key={pIdx} className="text-sky-700 dark:text-sky-400 font-semibold">{p}</span>;
+              return (
+                <span key={pIdx} className="text-sky-700 dark:text-sky-400 font-semibold">
+                  {p}
+                </span>
+              );
             }
             if (/^"[^"]*"$/.test(p)) {
-              return <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">{p}</span>;
+              return (
+                <span key={pIdx} className="text-emerald-600 dark:text-emerald-400">
+                  {p}
+                </span>
+              );
             }
             if (/^(?:true|false|null|\d+)$/.test(p)) {
-              return <span key={pIdx} className="text-amber-600 dark:text-amber-400 font-bold">{p}</span>;
+              return (
+                <span key={pIdx} className="text-amber-600 dark:text-amber-400 font-bold">
+                  {p}
+                </span>
+              );
             }
             return <span key={pIdx}>{p}</span>;
           })}
@@ -58,7 +82,8 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
     }
 
     // General typescript / javascript / python / bash keywords
-    const keywordRegex = /\b(const|let|var|function|return|import|from|export|default|class|interface|type|async|await|if|else|for|while|try|catch|def|print|self|None|True|False)\b|("[^"]*"|'[^']*'|`[^`]*`)|(\/\/.*$|#.*$)/g;
+    const keywordRegex =
+      /\b(const|let|var|function|return|import|from|export|default|class|interface|type|async|await|if|else|for|while|try|catch|def|print|self|None|True|False)\b|("[^"]*"|'[^']*'|`[^`]*`)|(\/\/.*$|#.*$)/g;
     const tokens: React.ReactNode[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
@@ -69,13 +94,25 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
       }
       if (match[1]) {
         // Keyword
-        tokens.push(<span key={match.index} className="text-emerald-700 dark:text-emerald-400 font-semibold">{match[1]}</span>);
+        tokens.push(
+          <span key={match.index} className="text-emerald-700 dark:text-emerald-400 font-semibold">
+            {match[1]}
+          </span>
+        );
       } else if (match[2]) {
         // String literal
-        tokens.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{match[2]}</span>);
+        tokens.push(
+          <span key={match.index} className="text-emerald-600 dark:text-emerald-400">
+            {match[2]}
+          </span>
+        );
       } else if (match[3]) {
         // Comment
-        tokens.push(<span key={match.index} className="text-slate-400 dark:text-zinc-400 italic">{match[3]}</span>);
+        tokens.push(
+          <span key={match.index} className="text-slate-400 dark:text-zinc-400 italic">
+            {match[3]}
+          </span>
+        );
       }
       lastIndex = keywordRegex.lastIndex;
     }
@@ -116,8 +153,11 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
   const canvas = useCanvas();
 
   const isSvg = isSvgCode(code, language);
-  const isHtml = language === "html" || (code.trim().startsWith("<!DOCTYPE html") || code.trim().startsWith("<html"));
-  const langDisplay = language ? language.toLowerCase() : (isSvg ? "svg" : "text");
+  const isHtml =
+    language === "html" ||
+    code.trim().startsWith("<!DOCTYPE html") ||
+    code.trim().startsWith("<html");
+  const langDisplay = language ? language.toLowerCase() : isSvg ? "svg" : "text";
   const resolvedFilename =
     filename ||
     (isSvg
@@ -200,7 +240,9 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
       <div className="my-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
         <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
           <div className="flex items-center gap-2">
-            <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{filename || "index.html"}</span>
+            <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+              {filename || "index.html"}
+            </span>
             <div className="flex items-center rounded-lg bg-slate-200/70 dark:bg-zinc-800 p-0.5 text-[10px]">
               <button
                 type="button"
@@ -322,8 +364,12 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
     <div className="my-3 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-surface-variant bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
       <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
         <div className="flex items-center gap-2">
-          {filename && <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>}
-          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">{langDisplay === "text" ? "plain text" : langDisplay}</span>
+          {filename && (
+            <span className="font-semibold text-slate-800 dark:text-zinc-200">{filename}</span>
+          )}
+          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+            {langDisplay === "text" ? "plain text" : langDisplay}
+          </span>
           {isLong && (
             <span className="text-[10px] text-slate-500 dark:text-zinc-400">
               ({lines.length} lines)
@@ -406,7 +452,7 @@ export function SvgRendererBlock({
   code,
   title,
   initialTab = "preview",
-  allowFullscreen = true
+  allowFullscreen = true,
 }: {
   code: string;
   title?: string;
@@ -425,18 +471,6 @@ export function SvgRendererBlock({
   );
 }
 
-export function MermaidBlock({
-  code,
-  title
-}: {
-  code: string;
-  title?: string;
-}) {
-  return (
-    <CodeBlock
-      language="mermaid"
-      code={code}
-      filename={title || "diagram.mmd"}
-    />
-  );
+export function MermaidBlock({ code, title }: { code: string; title?: string }) {
+  return <CodeBlock language="mermaid" code={code} filename={title || "diagram.mmd"} />;
 }

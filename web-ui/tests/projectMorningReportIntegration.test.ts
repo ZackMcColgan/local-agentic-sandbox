@@ -9,15 +9,18 @@ import { renderToString } from "react-dom/server";
 import { Window } from "happy-dom";
 
 import { TaskManifest } from "../lib/subagents/types";
-import {
-  generateOvernightMorningReport,
-  generateMorningReport
-} from "../lib/subagents/morningReport";
+import { generateOvernightMorningReport } from "../lib/subagents/morningReport";
 import { MorningReportView } from "../components/MorningReportView";
-import { registerProject, createProjectTask, getProject, getFileReviews } from "../lib/projects/projectStore";
-import { runGit, getProjectDiffSummary, acceptProjectFile, revertProjectFile } from "../lib/projects/projectGit";
-import { runProjectOvernightTask, setEngineRunningCheckOverride } from "../lib/projects/projectRunner";
-import { GET as getProjectDiff, POST as postProjectDiff } from "../app/api/projects/[id]/diff/route";
+import { registerProject, getFileReviews } from "../lib/projects/projectStore";
+import { runGit } from "../lib/projects/projectGit";
+import {
+  runProjectOvernightTask,
+  setEngineRunningCheckOverride,
+} from "../lib/projects/projectRunner";
+import {
+  GET as getProjectDiff,
+  POST as postProjectDiff,
+} from "../app/api/projects/[id]/diff/route";
 import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
 describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
@@ -86,8 +89,8 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
           diffSummary: "Created auth routes",
           acceptanceCriteria: [],
           builderIterations: 1,
-          criticRounds: 1
-        }
+          criticRounds: 1,
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
@@ -95,7 +98,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       projectId: "proj-core-auth",
       projectName: "Core Auth Service",
       projectRoot: "/workspace/projects/core-auth",
-      reviewUrl: "/projects?projectId=proj-core-auth&tab=diffs"
+      reviewUrl: "/projects?projectId=proj-core-auth&tab=diffs",
     };
 
     const report = generateOvernightMorningReport([projectTask]);
@@ -123,7 +126,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       milestones: [],
       checkpoints: [],
       ambiguityFlags: [],
-      journal: []
+      journal: [],
     };
 
     const report = generateOvernightMorningReport([standaloneTask]);
@@ -139,7 +142,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
   it("Item 3: MorningReportView renders project badge and review link for project tasks, omits them for standalone tasks", () => {
     const sharedStartedAt = new Date(Date.now() - 60000).toISOString();
     const sharedNow = new Date().toISOString();
-    const projectTaskEntry: any = {
+    const projectTaskEntry = {
       taskId: "task-view-proj",
       goal: "Build payment gateway",
       branch: "feat/payment",
@@ -157,10 +160,10 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       testsFailed: 0,
       projectId: "proj-payment-gw",
       projectName: "Payment Gateway",
-      reviewUrl: "/projects?projectId=proj-payment-gw&tab=diffs"
+      reviewUrl: "/projects?projectId=proj-payment-gw&tab=diffs",
     };
 
-    const standaloneTaskEntry: any = {
+    const standaloneTaskEntry = {
       taskId: "task-view-standalone",
       goal: "Generate standalone chart",
       branch: "feat/chart",
@@ -175,10 +178,10 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       milestones: [],
       ambiguityFlags: [],
       testsPassed: 2,
-      testsFailed: 0
+      testsFailed: 0,
     };
 
-    const overnightReport: any = {
+    const overnightReport = {
       reportId: "rep-view-test",
       generatedAt: new Date().toISOString(),
       windowLabel: "Autonomous Run",
@@ -191,12 +194,12 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       tasks: [projectTaskEntry, standaloneTaskEntry],
       artifactsProduced: [],
       attentionItems: [],
-      summaryMarkdown: ""
-    };
+      summaryMarkdown: "",
+    } as unknown as NonNullable<React.ComponentProps<typeof MorningReportView>["overnightReport"]>;
 
     const html = renderToString(
       React.createElement(MorningReportView, {
-        overnightReport
+        overnightReport,
       })
     );
 
@@ -208,11 +211,17 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
 
     const projectBadges = window.document.querySelectorAll('[data-testid="project-badge"]');
     assert.equal(projectBadges.length, 1, "Exactly 1 project badge rendered for project task");
-    assert.ok(projectBadges[0].textContent?.includes("Payment Gateway"), "Project badge has project name");
+    assert.ok(
+      projectBadges[0].textContent?.includes("Payment Gateway"),
+      "Project badge has project name"
+    );
 
     const reviewLinks = window.document.querySelectorAll('[data-testid="project-review-link"]');
     assert.equal(reviewLinks.length, 1, "Exactly 1 project review link rendered");
-    assert.equal(reviewLinks[0].getAttribute("href"), "/projects?projectId=proj-payment-gw&tab=diffs");
+    assert.equal(
+      reviewLinks[0].getAttribute("href"),
+      "/projects?projectId=proj-payment-gw&tab=diffs"
+    );
   });
 
   it("Item 4: Full lifecycle end-to-end integration", async () => {
@@ -220,7 +229,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
     const project = registerProject({
       name: "Lifecycle Project",
       rootPath: testRepoDir,
-      baseBranch: "develop"
+      baseBranch: "develop",
     });
     assert.equal(project.allowlisted, 1);
 
@@ -229,13 +238,21 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       projectId: project.project_id,
       prompt: "Implement user management module",
       executeInline: true,
-      milestonesExecutor: async (proj, branch) => {
+      milestonesExecutor: async (proj) => {
         // Milestone 1: modify index.ts and create user.ts
-        fs.writeFileSync(path.join(testRepoDir, "index.ts"), "export const base = 1;\nexport * from './user';\n", "utf8");
-        fs.writeFileSync(path.join(testRepoDir, "user.ts"), "export interface User { id: string; name: string; }\n", "utf8");
+        fs.writeFileSync(
+          path.join(testRepoDir, "index.ts"),
+          "export const base = 1;\nexport * from './user';\n",
+          "utf8"
+        );
+        fs.writeFileSync(
+          path.join(testRepoDir, "user.ts"),
+          "export interface User { id: string; name: string; }\n",
+          "utf8"
+        );
         runGit(proj, ["add", "."]);
         runGit(proj, ["commit", "-m", "feat: implement user management"]);
-      }
+      },
     });
 
     assert.ok(taskResult);
@@ -265,8 +282,8 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
           diffSummary: "Modified index.ts, added user.ts",
           acceptanceCriteria: [],
           builderIterations: 1,
-          criticRounds: 1
-        }
+          criticRounds: 1,
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
@@ -274,7 +291,7 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       projectId: project.project_id,
       projectName: project.name,
       projectRoot: project.root_path,
-      reviewUrl: `/projects?projectId=${project.project_id}&tab=diffs`
+      reviewUrl: `/projects?projectId=${project.project_id}&tab=diffs`,
     };
 
     const morningReport = generateOvernightMorningReport([taskManifest]);
@@ -285,8 +302,12 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
     assert.ok(morningEntry.reviewUrl?.includes(project.project_id));
 
     // 4. Follow reviewUrl to inspect diff via GET /api/projects/[id]/diff
-    const getReq = new Request(`http://localhost:3000/api/projects/${project.project_id}/diff?taskId=${taskResult.task_id}`);
-    const getRes = await getProjectDiff(getReq, { params: Promise.resolve({ id: project.project_id }) });
+    const getReq = new Request(
+      `http://localhost:3000/api/projects/${project.project_id}/diff?taskId=${taskResult.task_id}`
+    );
+    const getRes = await getProjectDiff(getReq, {
+      params: Promise.resolve({ id: project.project_id }),
+    });
     assert.equal(getRes.status, 200);
     const diffData = await getRes.json();
     assert.equal(diffData.files.length, 2, "2 modified/added files in diff review");
@@ -298,10 +319,12 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
       body: JSON.stringify({
         action: "accept",
         taskId: taskResult.task_id,
-        filePath: "user.ts"
-      })
+        filePath: "user.ts",
+      }),
     });
-    const acceptRes = await postProjectDiff(acceptReq, { params: Promise.resolve({ id: project.project_id }) });
+    const acceptRes = await postProjectDiff(acceptReq, {
+      params: Promise.resolve({ id: project.project_id }),
+    });
     assert.equal(acceptRes.status, 200);
 
     const revertReq = new Request(`http://localhost:3000/api/projects/${project.project_id}/diff`, {
@@ -311,10 +334,12 @@ describe("PHASE 4: Project Morning Report Integration & Full Lifecycle", () => {
         action: "revert",
         taskId: taskResult.task_id,
         filePath: "index.ts",
-        baseSha: taskResult.base_sha
-      })
+        baseSha: taskResult.base_sha,
+      }),
     });
-    const revertRes = await postProjectDiff(revertReq, { params: Promise.resolve({ id: project.project_id }) });
+    const revertRes = await postProjectDiff(revertReq, {
+      params: Promise.resolve({ id: project.project_id }),
+    });
     assert.equal(revertRes.status, 200);
 
     // 6. Verify filesystem and store statuses

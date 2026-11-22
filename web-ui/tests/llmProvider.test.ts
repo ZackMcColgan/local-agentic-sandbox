@@ -7,9 +7,39 @@ import {
   getLLMProvider,
   OllamaProvider,
   LlamaCppProvider,
-  type LLMChatRequest
+  type LLMChatRequest,
+  type LLMStreamChunk,
 } from "../lib/llm/provider";
 import { resolveRoundModelOptions } from "../lib/contextBudget";
+
+interface CapturedRequestBody {
+  stream?: boolean;
+  model?: string;
+  keep_alive?: number | string;
+  options?: {
+    temperature?: number;
+    num_predict?: number;
+    num_ctx?: number;
+    [key: string]: unknown;
+  };
+  tools?: unknown[];
+  temperature?: number;
+  max_tokens?: number;
+  n_keep?: number;
+  parallel_tool_calls?: boolean;
+  reasoning_effort?: string;
+  messages?: Array<{
+    role?: string;
+    content?: string | Array<{ type?: string; text?: string; image_url?: { url?: string } }>;
+    tool_calls?: Array<{
+      id?: string;
+      type?: string;
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+    images?: string[];
+  }>;
+}
 
 function createMockSseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -19,11 +49,11 @@ function createMockSseResponse(chunks: string[]): Response {
         controller.enqueue(encoder.encode(chunk));
       }
       controller.close();
-    }
+    },
   });
   return new Response(stream, {
     status: 200,
-    headers: { "Content-Type": "text/event-stream" }
+    headers: { "Content-Type": "text/event-stream" },
   });
 }
 
@@ -35,11 +65,11 @@ function createMockNdjsonResponse(chunks: string[]): Response {
         controller.enqueue(encoder.encode(chunk));
       }
       controller.close();
-    }
+    },
   });
   return new Response(stream, {
     status: 200,
-    headers: { "Content-Type": "application/x-ndjson" }
+    headers: { "Content-Type": "application/x-ndjson" },
   });
 }
 
@@ -105,24 +135,25 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
   describe("Task 2: OllamaProvider.streamChat behavioral test", () => {
     it("calls ${baseUrl}/api/chat with stream: true and yields normalized chunks from NDJSON", async () => {
       let capturedUrl = "";
-      let capturedBody: any = null;
+      let capturedBody: CapturedRequestBody | null = null;
 
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         capturedUrl = String(url);
-        capturedBody = JSON.parse(String(init?.body || "{}"));
+        capturedBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return createMockNdjsonResponse([
           JSON.stringify({ message: { role: "assistant", content: "Hello " }, done: false }) + "\n",
-          JSON.stringify({ message: { role: "assistant", thinking: "Planning..." }, done: false }) + "\n",
+          JSON.stringify({ message: { role: "assistant", thinking: "Planning..." }, done: false }) +
+            "\n",
           JSON.stringify({
             message: {
               role: "assistant",
               content: "world!",
-              tool_calls: [{ function: { name: "search_web", arguments: { query: "local" } } }]
+              tool_calls: [{ function: { name: "search_web", arguments: { query: "local" } } }],
             },
-            done: true
-          }) + "\n"
+            done: true,
+          }) + "\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new OllamaProvider();
       const payload: LLMChatRequest = {
@@ -130,20 +161,22 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
         messages: [{ role: "user", content: "Hi" }],
         keep_alive: -1,
         options: { temperature: 0.2, num_predict: 256 },
-        tools: [{ type: "function", function: { name: "search_web" } }]
+        tools: [{ type: "function", function: { name: "search_web" } }],
       };
 
-      const chunks: any[] = [];
+      const chunks: LLMStreamChunk[] = [];
       for await (const chunk of provider.streamChat("http://127.0.0.1:11434", payload)) {
         chunks.push(chunk);
       }
 
       assert.equal(capturedUrl, "http://127.0.0.1:11434/api/chat");
-      assert.equal(capturedBody.stream, true);
-      assert.equal(capturedBody.model, "test-model");
-      assert.equal(capturedBody.keep_alive, -1);
-      assert.equal(capturedBody.options?.temperature, 0.2);
-      assert.equal(capturedBody.tools?.length, 1);
+      assert.ok(capturedBody);
+      const body = capturedBody as CapturedRequestBody;
+      assert.equal(body.stream, true);
+      assert.equal(body.model, "test-model");
+      assert.equal(body.keep_alive, -1);
+      assert.equal(body.options?.temperature, 0.2);
+      assert.equal(body.tools?.length, 1);
 
       assert.equal(chunks.length, 3);
       assert.equal(chunks[0].message?.content, "Hello ");
@@ -157,44 +190,47 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
   describe("Task 3: LlamaCppProvider.streamChat behavioral test", () => {
     it("calls ${baseUrl}/v1/chat/completions with SSE, sets n_keep, and normalizes reasoning, content, and tool calls", async () => {
       let capturedUrl = "";
-      let capturedBody: any = null;
+      let capturedBody: CapturedRequestBody | null = null;
 
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         capturedUrl = String(url);
-        capturedBody = JSON.parse(String(init?.body || "{}"));
+        capturedBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return createMockSseResponse([
           'data: {"choices":[{"delta":{"reasoning_content":"Let me analyze the request"}}]}\n\n',
           'data: {"choices":[{"delta":{"content":"I will generate an SVG deliverable."}}]}\n\n',
           'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"workspace_write_file","arguments":"{\\"path\\""}}]}}]}\n\n',
           'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":": \\"test.svg\\", \\"content\\": \\"<svg></svg>\\"}"}}]}}]}\n\n',
-          'data: [DONE]\n\n'
+          "data: [DONE]\n\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      const systemMessage = "You are an autonomous AI coding assistant. Maintain high security and quality.";
+      const systemMessage =
+        "You are an autonomous AI coding assistant. Maintain high security and quality.";
       const payload: LLMChatRequest = {
         model: "qwen-27b",
         messages: [
           { role: "system", content: systemMessage },
-          { role: "user", content: "Draw an architecture diagram" }
+          { role: "user", content: "Draw an architecture diagram" },
         ],
         tools: [{ type: "function", function: { name: "workspace_write_file" } }],
-        options: { temperature: 0.1, num_predict: 1024 }
+        options: { temperature: 0.1, num_predict: 1024 },
       };
 
-      const chunks: any[] = [];
+      const chunks: LLMStreamChunk[] = [];
       for await (const chunk of provider.streamChat("http://127.0.0.1:8080", payload)) {
         chunks.push(chunk);
       }
 
       assert.equal(capturedUrl, "http://127.0.0.1:8080/v1/chat/completions");
-      assert.equal(capturedBody.stream, true);
-      assert.equal(capturedBody.temperature, 0.1);
-      assert.equal(capturedBody.max_tokens, 1024);
-      assert.equal(capturedBody.tools?.length, 1);
-      assert.ok(typeof capturedBody.n_keep === "number");
-      assert.ok(capturedBody.n_keep >= 15 && capturedBody.n_keep <= 2048);
+      assert.ok(capturedBody);
+      const body = capturedBody as CapturedRequestBody;
+      assert.equal(body.stream, true);
+      assert.equal(body.temperature, 0.1);
+      assert.equal(body.max_tokens, 1024);
+      assert.equal(body.tools?.length, 1);
+      assert.ok(typeof body.n_keep === "number");
+      assert.ok(body.n_keep >= 15 && body.n_keep <= 2048);
 
       // Check normalized reasoning
       const thinkingChunks = chunks.filter((c) => c.message?.thinking);
@@ -213,7 +249,7 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(emittedCall?.function?.name, "workspace_write_file");
       assert.deepEqual(emittedCall?.function?.arguments, {
         path: "test.svg",
-        content: "<svg></svg>"
+        content: "<svg></svg>",
       });
     });
 
@@ -221,23 +257,26 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       globalThis.fetch = (async () => {
         return createMockSseResponse([
           'data: {"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_2","type":"function","function":{"name":"fetch_webpage_markdown","arguments":"{\\"url\\":\\"https://example.com\\"}"}}]}}]}\n\n',
-          'data: [DONE]\n\n'
+          "data: [DONE]\n\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      const chunks: any[] = [];
+      const chunks: LLMStreamChunk[] = [];
       for await (const chunk of provider.streamChat("http://127.0.0.1:8080", {
-        messages: [{ role: "user", content: "Look up example.com" }]
+        messages: [{ role: "user", content: "Look up example.com" }],
       })) {
         chunks.push(chunk);
       }
 
       const toolCallChunks = chunks.filter((c) => c.message?.tool_calls);
       assert.ok(toolCallChunks.length > 0);
-      assert.equal(toolCallChunks[0].message?.tool_calls?.[0]?.function?.name, "fetch_webpage_markdown");
+      assert.equal(
+        toolCallChunks[0].message?.tool_calls?.[0]?.function?.name,
+        "fetch_webpage_markdown"
+      );
       assert.deepEqual(toolCallChunks[0].message?.tool_calls?.[0]?.function?.arguments, {
-        url: "https://example.com"
+        url: "https://example.com",
       });
     });
 
@@ -246,11 +285,12 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       let calledUrl = "";
       globalThis.fetch = (async (url: string | URL | Request) => {
         calledUrl = String(url);
-        return createMockSseResponse(['data: [DONE]\n\n']);
-      }) as any;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      for await (const _ of provider.streamChat("http://127.0.0.1:11434", { messages: [] })) {}
+      for await (const _ of provider.streamChat("http://127.0.0.1:11434", { messages: [] })) {
+      }
 
       assert.equal(calledUrl, "http://llama-server.internal:8082/v1/chat/completions");
     });
@@ -262,14 +302,17 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       const content = fs.readFileSync(routePath, "utf8");
 
       assert.ok(
-        content.includes('getLLMProvider') && (content.includes('@/lib/llm/provider') || content.includes('../lib/llm/provider') || content.includes('lib/llm/provider')),
+        content.includes("getLLMProvider") &&
+          (content.includes("@/lib/llm/provider") ||
+            content.includes("../lib/llm/provider") ||
+            content.includes("lib/llm/provider")),
         "route.ts must import getLLMProvider from provider module"
       );
 
       assert.ok(
-        content.includes('getLLMProvider().streamChat') ||
-        content.includes('getLLMProvider(') ||
-        content.includes('streamLLMChat'),
+        content.includes("getLLMProvider().streamChat") ||
+          content.includes("getLLMProvider(") ||
+          content.includes("streamLLMChat"),
         "route.ts streamOllamaChat must delegate to LLMProvider.streamChat"
       );
     });
@@ -279,22 +322,26 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     it("OllamaProvider.chat delegates to streamChat and accumulates content, thinking, and tool_calls", async () => {
       globalThis.fetch = (async () => {
         return createMockNdjsonResponse([
-          JSON.stringify({ message: { role: "assistant", content: "Part 1, " }, done: false }) + "\n",
-          JSON.stringify({ message: { role: "assistant", thinking: "Deep thought" }, done: false }) + "\n",
+          JSON.stringify({ message: { role: "assistant", content: "Part 1, " }, done: false }) +
+            "\n",
+          JSON.stringify({
+            message: { role: "assistant", thinking: "Deep thought" },
+            done: false,
+          }) + "\n",
           JSON.stringify({
             message: {
               role: "assistant",
               content: "Part 2",
-              tool_calls: [{ function: { name: "test_tool", arguments: { a: 1 } } }]
+              tool_calls: [{ function: { name: "test_tool", arguments: { a: 1 } } }],
             },
-            done: true
-          }) + "\n"
+            done: true,
+          }) + "\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new OllamaProvider();
-      const res = await (provider as any).chat("http://127.0.0.1:11434", {
-        messages: [{ role: "user", content: "Hi" }]
+      const res = await provider.chat("http://127.0.0.1:11434", {
+        messages: [{ role: "user", content: "Hi" }],
       });
 
       assert.equal(res.done, true);
@@ -311,13 +358,13 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
           'data: {"choices":[{"delta":{"reasoning_content":"Solving..."}}]}\n\n',
           'data: {"choices":[{"delta":{"content":"Answer is "}}]}\n\n',
           'data: {"choices":[{"delta":{"content":"42"}}]}\n\n',
-          'data: [DONE]\n\n'
+          "data: [DONE]\n\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      const res = await (provider as any).chat("http://127.0.0.1:8080", {
-        messages: [{ role: "user", content: "What is the answer?" }]
+      const res = await provider.chat("http://127.0.0.1:8080", {
+        messages: [{ role: "user", content: "What is the answer?" }],
       });
 
       assert.equal(res.done, true);
@@ -329,32 +376,42 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
   describe("Task 6: LLMProvider.generate method", () => {
     it("OllamaProvider.generate sends to /api/generate and returns GenerateResult with thinking chunks", async () => {
       let sentUrl = "";
-      let sentBody: any = null;
+      let sentBody: CapturedRequestBody | null = null;
       const thinkingChunks: string[] = [];
 
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         sentUrl = String(url);
-        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return createMockNdjsonResponse([
           JSON.stringify({ response: "<think>Analyzing", done: false }) + "\n",
           JSON.stringify({ response: " problem</think>Here is the fix", done: false }) + "\n",
-          JSON.stringify({ response: "!", done: true, total_duration: 50_000_000, load_duration: 10_000_000 }) + "\n"
+          JSON.stringify({
+            response: "!",
+            done: true,
+            total_duration: 50_000_000,
+            load_duration: 10_000_000,
+          }) + "\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new OllamaProvider();
-      const res = await (provider as any).generate({
-        model: "swift-15-27b-mtp",
-        prompt: "Fix the bug",
-        options: { num_predict: 2048 },
-        reasoningEffort: "fast",
-        onThinkingChunk: (chunk: string) => thinkingChunks.push(chunk)
-      }, "http://127.0.0.1:11434");
+      const res = await provider.generate(
+        {
+          model: "swift-15-27b-mtp",
+          prompt: "Fix the bug",
+          options: { num_predict: 2048 },
+          reasoningEffort: "fast",
+          onThinkingChunk: (chunk: string) => thinkingChunks.push(chunk),
+        },
+        "http://127.0.0.1:11434"
+      );
 
       assert.equal(sentUrl, "http://127.0.0.1:11434/api/generate");
-      assert.equal(sentBody.model, "swift-15-27b-mtp");
-      assert.equal(sentBody.stream, true);
-      assert.equal(sentBody.options?.num_predict, 2048 + 1024); // requested + fast thinking budget
+      assert.ok(sentBody);
+      const body = sentBody as CapturedRequestBody;
+      assert.equal(body.model, "swift-15-27b-mtp");
+      assert.equal(body.stream, true);
+      assert.equal(body.options?.num_predict, 2048 + 1024); // requested + fast thinking budget
       assert.ok(res.text.includes("Here is the fix!"));
       assert.ok(thinkingChunks.length > 0);
       assert.equal(res.totalDurationMs, 50);
@@ -363,35 +420,40 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
 
     it("LlamaCppProvider.generate sends to /v1/chat/completions with n_keep, max_tokens, signal, and thinking chunks", async () => {
       let sentUrl = "";
-      let sentBody: any = null;
-      let receivedSignal: any = null;
+      let sentBody: CapturedRequestBody | null = null;
+      let receivedSignal: AbortSignal | null | undefined = null;
       const thinkingChunks: string[] = [];
 
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         sentUrl = String(url);
-        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         receivedSignal = init?.signal;
         return createMockSseResponse([
           'data: {"choices":[{"delta":{"reasoning_content":"Drafting solution"}}]}\n\n',
           'data: {"choices":[{"delta":{"content":"const x = 1;"}}]}\n\n',
-          'data: [DONE]\n\n'
+          "data: [DONE]\n\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       const abortController = new AbortController();
-      const res = await (provider as any).generate({
-        model: "qwen-27b",
-        prompt: "Write a TS constant",
-        options: { num_predict: 512, n_keep: 128 },
-        signal: abortController.signal,
-        onThinkingChunk: (chunk: string) => thinkingChunks.push(chunk)
-      }, "http://127.0.0.1:8080");
+      const res = await provider.generate(
+        {
+          model: "qwen-27b",
+          prompt: "Write a TS constant",
+          options: { num_predict: 512, n_keep: 128 },
+          signal: abortController.signal,
+          onThinkingChunk: (chunk: string) => thinkingChunks.push(chunk),
+        },
+        "http://127.0.0.1:8080"
+      );
 
       assert.equal(sentUrl, "http://127.0.0.1:8080/v1/chat/completions");
-      assert.equal(sentBody.model, "qwen-27b");
-      assert.equal(sentBody.max_tokens, 512);
-      assert.equal(sentBody.n_keep, 128);
+      assert.ok(sentBody);
+      const body = sentBody as CapturedRequestBody;
+      assert.equal(body.model, "qwen-27b");
+      assert.equal(body.max_tokens, 512);
+      assert.equal(body.n_keep, 128);
       assert.ok(receivedSignal);
       assert.equal(res.text, "const x = 1;");
       assert.equal(res.thinking, "Drafting solution");
@@ -404,13 +466,16 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       let capturedUrl = "";
       globalThis.fetch = (async (url: string | URL | Request) => {
         capturedUrl = String(url);
-        return new Response(JSON.stringify({
-          models: [{ name: "swift-15-27b-mtp:latest" }, { name: "all-minilm:latest" }]
-        }), { status: 200, headers: { "Content-Type": "application/json" } });
-      }) as any;
+        return new Response(
+          JSON.stringify({
+            models: [{ name: "swift-15-27b-mtp:latest" }, { name: "all-minilm:latest" }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof globalThis.fetch;
 
       const provider = new OllamaProvider();
-      const models = await (provider as any).listModels("http://127.0.0.1:11434");
+      const models = await provider.listModels("http://127.0.0.1:11434");
       assert.equal(capturedUrl, "http://127.0.0.1:11434/api/tags");
       assert.deepEqual(models, ["swift-15-27b-mtp:latest", "all-minilm:latest"]);
     });
@@ -419,13 +484,16 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       let capturedUrl = "";
       globalThis.fetch = (async (url: string | URL | Request) => {
         capturedUrl = String(url);
-        return new Response(JSON.stringify({
-          data: [{ id: "qwen-27b" }, { id: "deepseek-coder" }]
-        }), { status: 200, headers: { "Content-Type": "application/json" } });
-      }) as any;
+        return new Response(
+          JSON.stringify({
+            data: [{ id: "qwen-27b" }, { id: "deepseek-coder" }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      const models = await (provider as any).listModels("http://127.0.0.1:8080");
+      const models = await provider.listModels("http://127.0.0.1:8080");
       assert.equal(capturedUrl, "http://127.0.0.1:8080/v1/models");
       assert.deepEqual(models, ["qwen-27b", "deepseek-coder"]);
     });
@@ -435,50 +503,58 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     it("OllamaProvider.healthCheck returns true on 200 and false on network failure", async () => {
       const provider = new OllamaProvider();
 
-      globalThis.fetch = (async () => new Response("{\"version\":\"0.5.1\"}", { status: 200 })) as any;
-      const ok = await (provider as any).healthCheck("http://127.0.0.1:11434");
+      globalThis.fetch = (async () =>
+        new Response('{"version":"0.5.1"}', { status: 200 })) as typeof globalThis.fetch;
+      const ok = await provider.healthCheck("http://127.0.0.1:11434");
       assert.equal(ok, true);
 
-      globalThis.fetch = (async () => { throw new Error("Connection refused"); }) as any;
-      const fail = await (provider as any).healthCheck("http://127.0.0.1:11434");
+      globalThis.fetch = (async () => {
+        throw new Error("Connection refused");
+      }) as typeof globalThis.fetch;
+      const fail = await provider.healthCheck("http://127.0.0.1:11434");
       assert.equal(fail, false);
     });
 
     it("LlamaCppProvider.healthCheck returns true on 200 and false on network failure", async () => {
       const provider = new LlamaCppProvider();
 
-      globalThis.fetch = (async () => new Response("{\"status\":\"ok\"}", { status: 200 })) as any;
-      const ok = await (provider as any).healthCheck("http://127.0.0.1:8080");
+      globalThis.fetch = (async () =>
+        new Response('{"status":"ok"}', { status: 200 })) as typeof globalThis.fetch;
+      const ok = await provider.healthCheck("http://127.0.0.1:8080");
       assert.equal(ok, true);
 
-      globalThis.fetch = (async () => { throw new Error("Connection refused"); }) as any;
-      const fail = await (provider as any).healthCheck("http://127.0.0.1:8080");
+      globalThis.fetch = (async () => {
+        throw new Error("Connection refused");
+      }) as typeof globalThis.fetch;
+      const fail = await provider.healthCheck("http://127.0.0.1:8080");
       assert.equal(fail, false);
     });
 
     it("OllamaProvider.ensureResident posts /api/generate with keep_alive: -1", async () => {
-      let capturedBody: any = null;
+      let capturedBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        capturedBody = JSON.parse(String(init?.body || "{}"));
+        capturedBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return new Response("{}", { status: 200 });
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new OllamaProvider();
-      const success = await (provider as any).ensureResident("swift-15-27b-mtp", "http://127.0.0.1:11434");
+      const success = await provider.ensureResident("swift-15-27b-mtp", "http://127.0.0.1:11434");
       assert.equal(success, true);
-      assert.equal(capturedBody.model, "swift-15-27b-mtp");
-      assert.equal(capturedBody.keep_alive, -1);
+      assert.ok(capturedBody);
+      const body = capturedBody as CapturedRequestBody;
+      assert.equal(body.model, "swift-15-27b-mtp");
+      assert.equal(body.keep_alive, -1);
     });
 
     it("LlamaCppProvider.ensureResident checks health and returns true when server is ready", async () => {
       let capturedUrl = "";
       globalThis.fetch = (async (url: string | URL | Request) => {
         capturedUrl = String(url);
-        return new Response("{\"status\":\"ok\"}", { status: 200 });
-      }) as any;
+        return new Response('{"status":"ok"}', { status: 200 });
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      const success = await (provider as any).ensureResident("qwen-27b", "http://127.0.0.1:8080");
+      const success = await provider.ensureResident("qwen-27b", "http://127.0.0.1:8080");
       assert.equal(success, true);
       assert.ok(capturedUrl.includes("/health"));
     });
@@ -488,27 +564,28 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     it("createOllamaGenerate delegates to LlamaCppProvider.generate when resolveLLMEngine() is llamacpp", async () => {
       process.env.LLM_ENGINE = "llamacpp";
       let calledUrl = "";
-      let requestBody: any = null;
+      let requestBody: CapturedRequestBody | null = null;
 
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         calledUrl = String(url);
-        requestBody = JSON.parse(String(init?.body || "{}"));
+        requestBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return createMockSseResponse([
           'data: {"choices":[{"delta":{"content":"export const pi = 3.14;"}}]}\n\n',
-          'data: [DONE]\n\n'
+          "data: [DONE]\n\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const { createOllamaGenerate } = await import("../lib/subagents/llmClient.js");
       const generate = createOllamaGenerate({ baseUrl: "http://127.0.0.1:8080" });
       const result = await generate({
         model: "llama-model",
         prompt: "export pi",
-        options: { num_predict: 256 }
+        options: { num_predict: 256 },
       });
 
       assert.ok(calledUrl.includes("/v1/chat/completions"));
-      assert.equal(requestBody.max_tokens, 256);
+      assert.ok(requestBody);
+      assert.equal((requestBody as CapturedRequestBody).max_tokens, 256);
       assert.equal(result.text, "export const pi = 3.14;");
     });
 
@@ -519,28 +596,37 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       globalThis.fetch = (async (url: string | URL | Request) => {
         if (String(url).includes("/health")) {
           healthChecked = true;
-          return new Response("{\"status\":\"ok\"}", { status: 200 });
+          return new Response('{"status":"ok"}', { status: 200 });
         }
         return new Response("{}", { status: 200 });
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const { enforceResidency, planResidency } = await import("../lib/subagents/residency.js");
       const plan = planResidency({
         roster: { builder: "swift-15-27b-mtp" },
         modelSizes: { "swift-15-27b-mtp": 16 * 1024 ** 3 },
-        vramBudgetBytes: 24 * 1024 ** 3
+        vramBudgetBytes: 24 * 1024 ** 3,
       });
 
       const actions = await enforceResidency(plan, "http://127.0.0.1:8080");
-      assert.ok(healthChecked, "Must check health on llamacpp endpoint during residency enforcement");
-      assert.ok(actions.some((a) => a.includes("llamacpp")), "Actions must record llamacpp provider residency");
+      assert.ok(
+        healthChecked,
+        "Must check health on llamacpp endpoint during residency enforcement"
+      );
+      assert.ok(
+        actions.some((a) => a.includes("llamacpp")),
+        "Actions must record llamacpp provider residency"
+      );
     });
   });
 
   describe("Task 10: Multi-Turn OpenAI Tool Message Normalization & K8s Manifests", () => {
     it("normalizeOpenAIMessages formats assistant tool_calls and tool messages correctly", async () => {
-      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
-      assert.ok(typeof normalizeOpenAIMessages === "function", "normalizeOpenAIMessages must be exported");
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
+      assert.ok(
+        typeof normalizeOpenAIMessages === "function",
+        "normalizeOpenAIMessages must be exported"
+      );
 
       const inputMessages = [
         { role: "system", content: "You are an assistant." },
@@ -552,16 +638,16 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
             {
               function: {
                 name: "search_web",
-                arguments: { query: "weather" }
-              }
-            }
-          ]
+                arguments: { query: "weather" },
+              },
+            },
+          ],
         },
         {
           role: "tool",
           name: "search_web",
-          content: "72F and sunny"
-        }
+          content: "72F and sunny",
+        },
       ];
 
       const normalized = normalizeOpenAIMessages(inputMessages);
@@ -575,42 +661,46 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       const tc = assistantMsg.tool_calls[0];
       assert.equal(tc.type, "function");
       assert.ok(tc.id, "Tool call must have an ID");
-      assert.equal(typeof tc.function.arguments, "string");
-      assert.deepEqual(JSON.parse(tc.function.arguments), { query: "weather" });
+      assert.equal(typeof tc.function?.arguments, "string");
+      assert.deepEqual(JSON.parse(String(tc.function?.arguments)), { query: "weather" });
 
       // Tool message normalization
       const toolMsg = normalized[3];
       assert.equal(toolMsg.role, "tool");
-      assert.equal(toolMsg.tool_call_id, tc.id, "Tool message must have tool_call_id matching preceding assistant tool_call");
+      assert.equal(
+        toolMsg.tool_call_id,
+        tc.id,
+        "Tool message must have tool_call_id matching preceding assistant tool_call"
+      );
       assert.equal(toolMsg.content, "72F and sunny");
     });
 
     it("normalizeOpenAIMessages consolidates stray system messages at index > 0 into index 0", async () => {
-      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
 
       const strayMessages = [
         { role: "system", content: "Initial system prompt" },
         { role: "user", content: "Hello" },
         { role: "system", content: "Mid-array directive" },
-        { role: "user", content: "Next prompt" }
+        { role: "user", content: "Next prompt" },
       ];
 
       const normalized = normalizeOpenAIMessages(strayMessages);
 
       assert.equal(normalized[0].role, "system");
-      assert.ok(normalized[0].content.includes("Initial system prompt"));
-      assert.ok(normalized[0].content.includes("Mid-array directive"));
+      assert.ok(String(normalized[0].content).includes("Initial system prompt"));
+      assert.ok(String(normalized[0].content).includes("Mid-array directive"));
 
-      const midSystem = normalized.filter((m: any, idx: number) => idx > 0 && m.role === "system");
+      const midSystem = normalized.filter((m, idx) => idx > 0 && m.role === "system");
       assert.equal(midSystem.length, 0, "No mid-array system messages allowed after normalization");
     });
 
     it("LlamaCppProvider.streamChat normalizes messages before sending to /v1/chat/completions", async () => {
-      let sentBody: any = null;
+      let sentBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        sentBody = JSON.parse(String(init?.body || "{}"));
-        return createMockSseResponse(['data: [DONE]\n\n']);
-      }) as any;
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       const round2Messages = [
@@ -623,42 +713,56 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
             {
               function: {
                 name: "workspace_read_file",
-                arguments: { path: "README.md" }
-              }
-            }
-          ]
+                arguments: { path: "README.md" },
+              },
+            },
+          ],
         },
         {
           role: "tool",
           name: "workspace_read_file",
-          content: "# README"
-        }
+          content: "# README",
+        },
       ];
 
-      for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: round2Messages })) {}
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        messages: round2Messages,
+      })) {
+      }
 
       assert.ok(sentBody, "Must send request body");
-      const assistantMsg = sentBody.messages[2];
-      assert.equal(assistantMsg.tool_calls[0].type, "function");
-      assert.equal(typeof assistantMsg.tool_calls[0].function.arguments, "string");
-      assert.equal(sentBody.messages[3].tool_call_id, assistantMsg.tool_calls[0].id);
+      const body = sentBody as CapturedRequestBody;
+      const assistantMsg = body.messages?.[2];
+      assert.equal(assistantMsg?.tool_calls?.[0]?.type, "function");
+      assert.equal(typeof assistantMsg?.tool_calls?.[0]?.function.arguments, "string");
+      assert.equal(body.messages?.[3]?.tool_call_id, assistantMsg?.tool_calls?.[0]?.id);
     });
 
     it("LlamaCppProvider.streamChat sends parallel_tool_calls: false when tools are present", async () => {
-      let sentBody: any = null;
+      let sentBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        sentBody = JSON.parse(String(init?.body || "{}"));
-        return createMockSseResponse(['data: [DONE]\n\n']);
-      }) as any;
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
+        return createMockSseResponse(["data: [DONE]\n\n"]);
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
         messages: [{ role: "user", content: "hello" }],
-        tools: [{ type: "function", function: { name: "search_web", description: "search", parameters: { type: "object" } } }]
-      })) {}
+        tools: [
+          {
+            type: "function",
+            function: { name: "search_web", description: "search", parameters: { type: "object" } },
+          },
+        ],
+      })) {
+      }
 
       assert.ok(sentBody, "Must send request body");
-      assert.equal(sentBody.parallel_tool_calls, false, "Must explicitly set parallel_tool_calls: false to prevent runaway loops");
+      assert.equal(
+        (sentBody as CapturedRequestBody).parallel_tool_calls,
+        false,
+        "Must explicitly set parallel_tool_calls: false to prevent runaway loops"
+      );
     });
 
     it("LlamaCppProvider streamChat retries against baseUrl if llamacppBaseUrl fails with connection error", async () => {
@@ -672,30 +776,42 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
         }
         return createMockSseResponse([
           'data: {"choices":[{"delta":{"content":"Recovered!"}}]}\n\n',
-          'data: [DONE]\n\n'
+          "data: [DONE]\n\n",
         ]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
-      const chunks: any[] = [];
+      const chunks: LLMStreamChunk[] = [];
       for await (const chunk of provider.streamChat("http://llm-service:11434", { messages: [] })) {
         chunks.push(chunk);
       }
 
-      assert.ok(attemptedUrls.some((u) => u.includes("bad-host:11435")), "Must first attempt LLAMACPP_BASE_URL");
-      assert.ok(attemptedUrls.some((u) => u.includes("llm-service:11434") || u.includes("ollama-service:11434")), "Must fall back to baseUrl");
-      assert.equal(chunks.some((c) => c.message?.content === "Recovered!"), true);
+      assert.ok(
+        attemptedUrls.some((u) => u.includes("bad-host:11435")),
+        "Must first attempt LLAMACPP_BASE_URL"
+      );
+      assert.ok(
+        attemptedUrls.some(
+          (u) => u.includes("llm-service:11434") || u.includes("ollama-service:11434")
+        ),
+        "Must fall back to baseUrl"
+      );
+      assert.equal(
+        chunks.some((c) => c.message?.content === "Recovered!"),
+        true
+      );
     });
 
     it("LlamaCppProvider throws error with engine identifier (llama.cpp engine returned)", async () => {
       globalThis.fetch = (async () => {
         return new Response("Internal Server Error", { status: 500 });
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       await assert.rejects(
         async () => {
-          for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: [] })) {}
+          for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: [] })) {
+          }
         },
         (err: Error) => {
           return err.message.includes("llama.cpp engine returned 500");
@@ -708,28 +824,36 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       const content = fs.readFileSync(k8sManifestPath, "utf8");
 
       assert.ok(
-        content.includes('name: LLM_ENGINE') && (content.includes('value: "llamacpp"') || content.includes('value: "strata"')),
+        content.includes("name: LLM_ENGINE") &&
+          (content.includes('value: "llamacpp"') || content.includes('value: "strata"')),
         "deploy/k8s/web-ui.yaml must set LLM_ENGINE to llamacpp or strata"
       );
       assert.ok(
-        content.includes('name: LLAMACPP_BASE_URL'),
+        content.includes("name: LLAMACPP_BASE_URL"),
         "deploy/k8s/web-ui.yaml must set LLAMACPP_BASE_URL"
       );
     });
   });
 
   describe("Task 11: Zero Remaining Ollama Touchpoints & Standalone llama-server Supervisor", () => {
-    it("web-ui/app/api/chat/route.ts triageComplexity uses getLLMProvider().chat instead of raw /api/chat", () => {
+    it("web-ui/lib/chat/triage.ts _triageComplexity uses provider chat instead of raw /api/chat", async () => {
       const routePath = path.resolve(__dirname, "../app/api/chat/route.ts");
       const content = fs.readFileSync(routePath, "utf8");
       assert.ok(
         !content.includes("/api/chat"),
         "web-ui/app/api/chat/route.ts must not contain raw /api/chat calls"
       );
-      assert.ok(
-        content.includes("getLLMProvider().chat("),
-        "triageComplexity must delegate to getLLMProvider().chat"
-      );
+      const { _triageComplexity } = await import("../lib/chat/triage");
+      let calledChat = false;
+      const result = await _triageComplexity("refactor module", "http://127.0.0.1:11434", "fast", {
+        chat: async () => {
+          calledChat = true;
+          return { message: { role: "assistant", content: '{"complexity":"DEEP_SYNTHESIS"}' } };
+        },
+        warn: () => {},
+      });
+      assert.equal(calledChat, true, "triageComplexity must delegate to provider chat");
+      assert.equal(result, "DEEP_SYNTHESIS");
     });
 
     it("web-ui/app/api/sandbox-status/route.ts uses getLLMProvider().healthCheck and listModels instead of /api/tags", () => {
@@ -740,7 +864,9 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
         "web-ui/app/api/sandbox-status/route.ts must not call /api/tags directly"
       );
       assert.ok(
-        content.includes("getLLMProvider") && content.includes("healthCheck") && content.includes("listModels"),
+        content.includes("getLLMProvider") &&
+          content.includes("healthCheck") &&
+          content.includes("listModels"),
         "sandbox-status route must use getLLMProvider().healthCheck and listModels"
       );
     });
@@ -766,15 +892,19 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
         if (String(url).includes("/v1/models")) {
           return new Response(JSON.stringify({ data: [{ id: "swift-15-27b-mtp" }] }), {
             status: 200,
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
           });
         }
         throw new Error(`Unexpected Ollama endpoint called in llamacpp mode: ${url}`);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
-      const { fetchModelSizes, fetchLoadedModels, unloadAllModels } = await import("../lib/subagents/residency.js");
+      const { fetchModelSizes, fetchLoadedModels, unloadAllModels } =
+        await import("../lib/subagents/residency.js");
       const sizes = await fetchModelSizes("http://127.0.0.1:11434", mockFetch);
-      assert.ok(sizes["swift-15-27b-mtp"] > 0, "fetchModelSizes must return model size estimate in llamacpp mode");
+      assert.ok(
+        sizes["swift-15-27b-mtp"] > 0,
+        "fetchModelSizes must return model size estimate in llamacpp mode"
+      );
 
       const loaded = await fetchLoadedModels("http://127.0.0.1:11434", mockFetch);
       assert.equal(loaded.length, 1);
@@ -783,7 +913,9 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       const unloaded = await unloadAllModels("http://127.0.0.1:11434", mockFetch);
       assert.deepEqual(unloaded, [], "unloadAllModels must be a safe no-op in llamacpp mode");
       assert.ok(
-        calledUrls.every((u) => !u.includes("/api/tags") && !u.includes("/api/ps") && !u.includes("/api/generate")),
+        calledUrls.every(
+          (u) => !u.includes("/api/tags") && !u.includes("/api/ps") && !u.includes("/api/generate")
+        ),
         "Must never call /api/tags, /api/ps, or /api/generate when LLM_ENGINE=llamacpp"
       );
     });
@@ -796,37 +928,61 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(typeof standalone.buildLlamaServerArgs, "function");
       assert.equal(typeof standalone.buildLlamaServerEnv, "function");
       assert.equal(standalone.DEFAULT_BINARY_PATH, "C:\\AI\\llamacpp\\bin\\llama-server.exe");
-      assert.ok(!standalone.DEFAULT_BINARY_PATH.toLowerCase().includes("ollama"), "Binary path must not reference Ollama");
+      assert.ok(
+        !standalone.DEFAULT_BINARY_PATH.toLowerCase().includes("ollama"),
+        "Binary path must not reference Ollama"
+      );
 
       const args: string[] = standalone.buildLlamaServerArgs();
       assert.ok(
         args.includes("C:\\AI\\llamacpp\\models\\Swift-1.5-Qwen3.8-27B-IQ3_XS.gguf") ||
-        args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"),
+          args.includes("C:\\AI\\llamacpp\\models\\swift-15-27b-mtp.gguf"),
         "Must use standalone GGUF path in C:\\AI\\llamacpp\\models"
       );
-      assert.ok(args.every((a) => !a.toLowerCase().includes("ollama") && !a.includes("blobs\\sha256-")), "Args must not reference Ollama or its blob store");
-      assert.ok(args.includes("-c") && (args.includes("12288") || args.includes("8192")), "Must set context window");
-      assert.ok(args.includes("--spec-type") && args.includes("draft-mtp"), "Must enable draft-mtp speculative decoding");
-      assert.ok(args.includes("--cache-type-k") && args.includes("q8_0"), "Must enable q8_0 KV cache");
-      assert.ok(args.includes("--flash-attn") && args.includes("auto"), "Must enable flash-attn auto");
+      assert.ok(
+        args.every((a) => !a.toLowerCase().includes("ollama") && !a.includes("blobs\\sha256-")),
+        "Args must not reference Ollama or its blob store"
+      );
+      assert.ok(
+        args.includes("-c") && (args.includes("12288") || args.includes("8192")),
+        "Must set context window"
+      );
+      assert.ok(
+        args.includes("--spec-type") && args.includes("draft-mtp"),
+        "Must enable draft-mtp speculative decoding"
+      );
+      assert.ok(
+        args.includes("--cache-type-k") && args.includes("q8_0"),
+        "Must enable q8_0 KV cache"
+      );
+      assert.ok(
+        args.includes("--flash-attn") && args.includes("auto"),
+        "Must enable flash-attn auto"
+      );
       assert.ok(args.includes("--context-shift"), "Must enable context-shift");
 
       const env = standalone.buildLlamaServerEnv({ PATH: "C:\\Windows\\System32" });
-      assert.ok(String(env.PATH).includes("C:\\AI\\llamacpp\\bin"), "Must prepend C:\\AI\\llamacpp\\bin to PATH");
-      assert.ok(!String(env.PATH).toLowerCase().includes("ollama"), "Env PATH must not inject Ollama directories");
+      assert.ok(
+        String(env.PATH).includes("C:\\AI\\llamacpp\\bin"),
+        "Must prepend C:\\AI\\llamacpp\\bin to PATH"
+      );
+      assert.ok(
+        !String(env.PATH).toLowerCase().includes("ollama"),
+        "Env PATH must not inject Ollama directories"
+      );
     });
   });
 
   describe("Task 12: Multimodal OpenAI Vision Message Normalization (Bug 2)", () => {
     it("normalizeOpenAIMessages converts message.images to OpenAI content parts and deletes images property", async () => {
-      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
 
       const inputMessages = [
         {
           role: "user",
           content: "What diagram is this?",
-          images: ["iVBORw0KGgoAAAANSUhEUg=="]
-        }
+          images: ["iVBORw0KGgoAAAANSUhEUg=="],
+        },
       ];
 
       const normalized = normalizeOpenAIMessages(inputMessages);
@@ -834,86 +990,105 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(normalized.length, 1);
       const userMsg = normalized[0];
       assert.equal(userMsg.role, "user");
-      assert.ok(Array.isArray(userMsg.content), "Message content must be converted to an array of content parts");
+      assert.ok(
+        Array.isArray(userMsg.content),
+        "Message content must be converted to an array of content parts"
+      );
       assert.equal(userMsg.content.length, 2);
       assert.deepEqual(userMsg.content[0], { type: "text", text: "What diagram is this?" });
       assert.deepEqual(userMsg.content[1], {
         type: "image_url",
-        image_url: { url: "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUg==" }
+        image_url: { url: "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUg==" },
       });
-      assert.equal("images" in userMsg, false, "The 'images' property must be stripped from normalized message");
+      assert.equal(
+        "images" in userMsg,
+        false,
+        "The 'images' property must be stripped from normalized message"
+      );
     });
 
     it("normalizeOpenAIMessages preserves existing data: URI schemes in images", async () => {
-      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
 
       const inputMessages = [
         {
           role: "user",
           content: "Analyze this PNG",
-          images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="]
-        }
+          images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="],
+        },
       ];
 
       const normalized = normalizeOpenAIMessages(inputMessages);
       const userMsg = normalized[0];
       assert.ok(Array.isArray(userMsg.content));
-      assert.equal(userMsg.content[1].image_url.url, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==");
+      const imgPart = userMsg.content[1] as { image_url?: { url?: string } };
+      assert.equal(imgPart.image_url?.url, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==");
       assert.equal("images" in userMsg, false);
     });
 
     it("normalizeOpenAIMessages handles messages with images and no text content", async () => {
-      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js") as any;
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
 
       const inputMessages = [
         {
           role: "user",
-          images: ["rawbase64data"]
-        }
+          images: ["rawbase64data"],
+        },
       ];
 
       const normalized = normalizeOpenAIMessages(inputMessages);
       const userMsg = normalized[0];
       assert.ok(Array.isArray(userMsg.content));
       assert.deepEqual(userMsg.content[0], { type: "text", text: "" });
-      assert.equal(userMsg.content[1].image_url.url, "data:image/jpeg;base64,rawbase64data");
+      const imgPart = userMsg.content[1] as { image_url?: { url?: string } };
+      assert.equal(imgPart.image_url?.url, "data:image/jpeg;base64,rawbase64data");
       assert.equal("images" in userMsg, false);
     });
 
     it("LlamaCppProvider.streamChat sends content parts with image_url to /v1/chat/completions without images property", async () => {
-      let sentBody: any = null;
+      let sentBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return createMockSseResponse(["data: [DONE]\n\n"]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       const visionMessages = [
         {
           role: "user",
           content: "Describe image",
-          images: ["mybase64image"]
-        }
+          images: ["mybase64image"],
+        },
       ];
 
-      for await (const _ of provider.streamChat("http://127.0.0.1:8080", { messages: visionMessages })) {}
+      for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
+        messages: visionMessages,
+      })) {
+      }
 
       assert.ok(sentBody, "Must send request body");
-      const userMsg = sentBody.messages[0];
-      assert.ok(Array.isArray(userMsg.content), "Sent message content must be content parts array");
+      const userMsg = (sentBody as CapturedRequestBody).messages?.[0];
+      assert.ok(
+        userMsg && Array.isArray(userMsg.content),
+        "Sent message content must be content parts array"
+      );
       assert.equal(userMsg.content[0].type, "text");
       assert.equal(userMsg.content[0].text, "Describe image");
-      assert.equal("images" in userMsg, false, "Must not send 'images' property to /v1/chat/completions");
+      assert.equal(
+        "images" in userMsg,
+        false,
+        "Must not send 'images' property to /v1/chat/completions"
+      );
     });
 
     it("LlamaCppProvider.streamChat forwards reasoning_effort and signal to /v1/chat/completions", async () => {
-      let sentBody: any = null;
-      let sentSignal: any = null;
+      let sentBody: CapturedRequestBody | null = null;
+      let sentSignal: AbortSignal | null | undefined = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         sentSignal = init?.signal;
         return createMockSseResponse(["data: [DONE]\n\n"]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       const controller = new AbortController();
@@ -921,11 +1096,16 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
         messages: [{ role: "user", content: "Hi" }],
         reasoning_effort: "low",
-        signal: controller.signal
-      })) {}
+        signal: controller.signal,
+      })) {
+      }
 
       assert.ok(sentBody, "Must send request body");
-      assert.equal(sentBody.reasoning_effort, "low", "Must forward reasoning_effort in requestBody");
+      assert.equal(
+        (sentBody as CapturedRequestBody).reasoning_effort,
+        "low",
+        "Must forward reasoning_effort in requestBody"
+      );
       assert.equal(sentSignal, controller.signal, "Must forward AbortSignal to fetch");
     });
   });
@@ -940,34 +1120,45 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     });
 
     it("injects Host 127.0.0.1:8080 header on outbound calls to pass Strata DNS rebinding check", async () => {
-      let capturedHeaders: any = null;
+      let capturedHeaders: HeadersInit | undefined;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
         capturedHeaders = init?.headers;
         return createMockSseResponse(["data: [DONE]\n\n"]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       process.env.LLM_ENGINE = "strata";
       const provider = getLLMProvider("strata");
-      for await (const _ of provider.streamChat("http://strata-service:8080", { messages: [{ role: "user", content: "Hi" }] })) {}
+      for await (const _ of provider.streamChat("http://strata-service:8080", {
+        messages: [{ role: "user", content: "Hi" }],
+      })) {
+      }
 
       assert.ok(capturedHeaders, "Headers must be passed");
-      const hostVal = capturedHeaders instanceof Headers ? capturedHeaders.get("Host") : capturedHeaders["Host"];
+      const hostVal =
+        capturedHeaders instanceof Headers
+          ? capturedHeaders.get("Host")
+          : (capturedHeaders as Record<string, string>)["Host"];
       assert.equal(hostVal, "127.0.0.1:8080");
     });
 
     it("throws error with Strata engine identifier when LLM_ENGINE is strata", async () => {
       globalThis.fetch = (async () => {
         throw new Error("fetch failed");
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       process.env.LLM_ENGINE = "strata";
       const provider = getLLMProvider("strata");
       await assert.rejects(
         async () => {
-          for await (const _ of provider.streamChat("http://strata-service:8080", { messages: [] })) {}
+          for await (const _ of provider.streamChat("http://strata-service:8080", {
+            messages: [],
+          })) {
+          }
         },
         (err: Error) => {
-          return err.message.includes("Strata engine returned network error at http://strata-service:8080/v1/chat/completions: fetch failed");
+          return err.message.includes(
+            "Strata engine returned network error at http://strata-service:8080/v1/chat/completions: fetch failed"
+          );
         }
       );
     });
@@ -975,36 +1166,40 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
 
   describe("Task 14: Provider Context Window & Request Budget Enforcement (F4.1)", () => {
     it("OllamaProvider.streamChat sends num_ctx: 131072 in request body options", async () => {
-      let sentBody: any = null;
+      let sentBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        sentBody = JSON.parse(String(init?.body || "{}"));
-        return createMockNdjsonResponse([JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true })]);
-      }) as any;
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
+        return createMockNdjsonResponse([
+          JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }),
+        ]);
+      }) as typeof globalThis.fetch;
 
       const provider = new OllamaProvider();
       const roundOptions = resolveRoundModelOptions({
         round: 1,
         model: "swift-15-27b-mtp",
-        isArtifactTurn: false
-      } as any);
+        isArtifactTurn: false,
+      } as unknown as Parameters<typeof resolveRoundModelOptions>[0]);
 
       for await (const _ of provider.streamChat("http://127.0.0.1:11434", {
         model: "swift-15-27b-mtp",
         messages: [{ role: "user", content: "test context window" }],
-        options: roundOptions
-      })) {}
+        options: roundOptions,
+      })) {
+      }
 
       assert.ok(sentBody, "Must send request body");
-      assert.ok(sentBody.options, "Must include options in request body");
-      assert.equal(sentBody.options.num_ctx, 131072, "OllamaProvider must pass num_ctx: 131072");
+      const body = sentBody as CapturedRequestBody;
+      assert.ok(body.options, "Must include options in request body");
+      assert.equal(body.options.num_ctx, 131072, "OllamaProvider must pass num_ctx: 131072");
     });
 
     it("LlamaCppProvider.streamChat captures n_keep: 512 and max_tokens: 2560", async () => {
-      let sentBody: any = null;
+      let sentBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-        sentBody = JSON.parse(String(init?.body || "{}"));
+        sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
         return createMockSseResponse(["data: [DONE]\n\n"]);
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       const provider = new LlamaCppProvider();
       // LlamaCppProvider targets llama-server / Strata /v1/chat/completions (where the
@@ -1015,21 +1210,23 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
         round: 1,
         model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
         isArtifactTurn: false,
-        numKeep: 512
-      } as any);
+        numKeep: 512,
+      } as unknown as Parameters<typeof resolveRoundModelOptions>[0]);
 
       for await (const _ of provider.streamChat("http://127.0.0.1:8080", {
         model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
         messages: [
           { role: "system", content: "S".repeat(2048) }, // 512 tokens -> n_keep = 512
-          { role: "user", content: "test provider options" }
+          { role: "user", content: "test provider options" },
         ],
-        options: roundOptions
-      })) {}
+        options: roundOptions,
+      })) {
+      }
 
       assert.ok(sentBody, "Must send request body");
-      assert.equal(sentBody.n_keep, 512, "Must pin system prompt prefix with n_keep === 512");
-      assert.equal(sentBody.max_tokens, 2560, "Must set max_tokens === 2560 for output budget");
+      const body = sentBody as CapturedRequestBody;
+      assert.equal(body.n_keep, 512, "Must pin system prompt prefix with n_keep === 512");
+      assert.equal(body.max_tokens, 2560, "Must set max_tokens === 2560 for output budget");
     });
   });
 
@@ -1047,9 +1244,9 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
         model: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
         messages: [
           { role: "system", content: "You are a concise assistant." },
-          { role: "user", content: "Reply with the word PONG." }
+          { role: "user", content: "Reply with the word PONG." },
         ],
-        options: { maxTokens: 64, temperature: 0.1 } as any
+        options: { maxTokens: 64, temperature: 0.1 },
       })) {
         const text = chunk.message?.content || chunk.content || "";
         if (text) {
@@ -1062,8 +1259,3 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     });
   });
 });
-
-
-
-
-

@@ -5,7 +5,7 @@ export function sanitizeScheduleBranchName(id: string): string {
 
 import fs from "fs";
 import path from "path";
-import { TaskManifest, TaskStatus, Milestone } from "./types";
+import { TaskManifest } from "./types";
 import { OvernightSupervisor, createProductionStepExecutor, type StepExecutor } from "./supervisor";
 import { generatePlanSpec, type PlanSpec, type PlanSpecInput } from "./planner";
 import { WorkerPool } from "./workerPool";
@@ -67,7 +67,7 @@ export function calculateNextRun(cronExpr: string, fromDate?: Date): Date {
   start.setUTCSeconds(0);
   start.setUTCMilliseconds(0);
 
-  function matchesField(val: number, expr: string, minRange: number, maxRange: number): boolean {
+  function matchesField(val: number, expr: string): boolean {
     if (expr === "*") return true;
     if (expr.startsWith("*/")) {
       const step = parseInt(expr.slice(2), 10);
@@ -96,11 +96,11 @@ export function calculateNextRun(cronExpr: string, fromDate?: Date): Date {
     const dow = candidate.getUTCDay();
 
     if (
-      matchesField(min, minPart, 0, 59) &&
-      matchesField(hr, hrPart, 0, 23) &&
-      matchesField(dom, domPart, 1, 31) &&
-      matchesField(mon, monPart, 1, 12) &&
-      matchesField(dow, dowPart, 0, 6)
+      matchesField(min, minPart) &&
+      matchesField(hr, hrPart) &&
+      matchesField(dom, domPart) &&
+      matchesField(mon, monPart) &&
+      matchesField(dow, dowPart)
     ) {
       return candidate;
     }
@@ -154,8 +154,11 @@ export class UnattendedScheduler {
   saveSchedules(schedules: Schedule[]) {
     try {
       fs.writeFileSync(this.storageFile, JSON.stringify(schedules, null, 2), "utf8");
-    } catch (err: any) {
-      console.warn("[Scheduler] Could not save schedules:", err.message);
+    } catch (err: unknown) {
+      console.warn(
+        "[Scheduler] Could not save schedules:",
+        err instanceof Error ? err.message : String(err)
+      );
       throw err;
     }
   }
@@ -170,7 +173,7 @@ export class UnattendedScheduler {
       enabled: true,
       createdAt: new Date().toISOString(),
       nextRun,
-      failureCount: 0
+      failureCount: 0,
     };
 
     const schedules = this.loadSchedules();
@@ -200,11 +203,21 @@ export class UnattendedScheduler {
     const totalCount = milestones.length;
     const ambiguities = manifest?.ambiguityFlags || [];
 
-    const milestonesTable = milestones.length > 0
-      ? milestones.map((m) => `| ${m.id} | ${m.title} | ${m.status} | ${m.builderIterations || 1} | ${m.criticRounds || 0} |`).join("\n")
-      : "| None | None | None | 0 | 0 |";
+    const milestonesTable =
+      milestones.length > 0
+        ? milestones
+            .map(
+              (m) =>
+                `| ${m.id} | ${m.title} | ${m.status} | ${m.builderIterations || 1} | ${m.criticRounds || 0} |`
+            )
+            .join("\n")
+        : "| None | None | None | 0 | 0 |";
 
-    const commitsSummary = milestones.filter((m) => m.commitSha).map((m) => `- \`${m.commitSha}\`: Milestone [${m.id}] ${m.title}`).join("\n") || "No new commits recorded.";
+    const commitsSummary =
+      milestones
+        .filter((m) => m.commitSha)
+        .map((m) => `- \`${m.commitSha}\`: Milestone [${m.id}] ${m.title}`)
+        .join("\n") || "No new commits recorded.";
 
     const passedTests = milestones.reduce((sum, m) => sum + (m.testsPassed || 0), 0);
     const failedTests = milestones.reduce((sum, m) => sum + (m.testsFailed || 0), 0);
@@ -247,7 +260,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         scheduleId,
         lastHeartbeat: new Date().toISOString(),
         attempt,
-        active
+        active,
       };
       fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(payload, null, 2), "utf8");
     } catch {}
@@ -261,7 +274,11 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
     } catch {}
   }
 
-  async checkCrashAndRecover(): Promise<{ recovered: boolean; scheduleId?: string; attempt?: number }> {
+  async checkCrashAndRecover(): Promise<{
+    recovered: boolean;
+    scheduleId?: string;
+    attempt?: number;
+  }> {
     const hbPath = this.getHeartbeatPath();
     if (!fs.existsSync(hbPath)) return { recovered: false };
 
@@ -281,7 +298,9 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
       if (sched.failureCount >= 5) {
         sched.enabled = false;
-        console.warn(`[SCHEDULER CRASH BACKOFF] Schedule ${sched.id} disabled after 5 consecutive failed restarts. Flagged for morning review.`);
+        console.warn(
+          `[SCHEDULER CRASH BACKOFF] Schedule ${sched.id} disabled after 5 consecutive failed restarts. Flagged for morning review.`
+        );
         this.clearHeartbeat();
         this.saveSchedules(schedules);
         return { recovered: false, scheduleId: sched.id, attempt: nextAttempt };
@@ -327,14 +346,18 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       } catch {}
     };
 
-    logStream(`Starting unattended scheduled run for schedule: ${sched.id} (${sched.taskDescription})`);
+    logStream(
+      `Starting unattended scheduled run for schedule: ${sched.id} (${sched.taskDescription})`
+    );
 
-    const planGen = (options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined)?.planGenerator;
+    const planGen = (
+      options as { planGenerator?: (input: PlanSpecInput) => Promise<PlanSpec> } | undefined
+    )?.planGenerator;
     let planSpec: PlanSpec;
     if (planGen) {
       planSpec = await planGen({
         taskId: runId,
-        goal: sched.taskDescription
+        goal: sched.taskDescription,
       });
     } else if (options?.stepExecutor || options?.workerPool) {
       planSpec = {
@@ -351,14 +374,14 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
             status: "pending",
             builderIterations: 0,
             criticRounds: 0,
-            acceptanceCriteria: []
-          }
-        ]
+            acceptanceCriteria: [],
+          },
+        ],
       };
     } else {
       planSpec = await generatePlanSpec({
         taskId: runId,
-        goal: sched.taskDescription
+        goal: sched.taskDescription,
       });
     }
     const manifest: TaskManifest = {
@@ -371,14 +394,14 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         ...m,
         status: m.status || "pending",
         builderIterations: m.builderIterations ?? 0,
-        criticRounds: m.criticRounds ?? 0
+        criticRounds: m.criticRounds ?? 0,
       })),
       currentMilestoneIndex: 0,
       checkpoints: [],
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     try {
@@ -386,9 +409,11 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       if (options?.runner) {
         result = await options.runner(manifest);
       } else {
-        const supervisor = this.supervisor || new OvernightSupervisor({
-          checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints")
-        });
+        const supervisor =
+          this.supervisor ||
+          new OvernightSupervisor({
+            checkpointDirectory: path.join(this.workspaceDir, ".agent/checkpoints"),
+          });
         const executor =
           options?.stepExecutor ||
           this.stepExecutor ||
@@ -396,11 +421,11 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
             workerPool: options?.workerPool || this.workerPool,
             repoRoot: this.workspaceDir,
             model: process.env.BUILDER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,
-            scope: manifest.scope
+            scope: manifest.scope,
           });
 
         result = await supervisor.executeTaskWithRecovery(manifest, {
-          stepExecutor: executor
+          stepExecutor: executor,
         });
       }
       if (result.status === "completed") {
@@ -427,10 +452,13 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 
         await this.triggerMorningReport(runId, result);
         this.clearHeartbeat();
-        logStream(`Scheduled run finished with status '${result.status}': ${result.parkedReason || "Milestone execution failed"}`);
+        logStream(
+          `Scheduled run finished with status '${result.status}': ${result.parkedReason || "Milestone execution failed"}`
+        );
         return result;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       sched.failureCount = (sched.failureCount || 0) + 1;
       const backoffIdx = Math.min(sched.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
       sched.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
@@ -439,15 +467,18 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       }
       try {
         this.saveSchedules(schedules);
-      } catch (saveErr: any) {
-        console.warn("[Scheduler] Could not save schedules during crash handler:", saveErr.message);
+      } catch (saveErr: unknown) {
+        console.warn(
+          "[Scheduler] Could not save schedules during crash handler:",
+          saveErr instanceof Error ? saveErr.message : String(saveErr)
+        );
       }
 
       manifest.status = "parked";
-      manifest.parkedReason = err.message;
+      manifest.parkedReason = errMsg;
       await this.triggerMorningReport(runId, manifest).catch(() => {});
       this.clearHeartbeat();
-      logStream(`Scheduled run crashed: ${err.message}`);
+      logStream(`Scheduled run crashed: ${errMsg}`);
       throw err;
     }
   }
@@ -464,13 +495,17 @@ export function getGlobalScheduler(options?: SchedulerOptions): UnattendedSchedu
   if (!globalScheduler || options || globalScheduler.workspaceDir !== currentWorkspace) {
     globalScheduler = new UnattendedScheduler({
       workspaceDir: currentWorkspace,
-      ...options
+      ...options,
     });
   }
   return globalScheduler;
 }
 
-export async function scheduleTask(cronExpr: string, taskDesc: string, options?: SchedulerOptions): Promise<ScheduleId> {
+export async function scheduleTask(
+  cronExpr: string,
+  taskDesc: string,
+  options?: SchedulerOptions
+): Promise<ScheduleId> {
   return await getGlobalScheduler(options).scheduleTask(cronExpr, taskDesc);
 }
 
@@ -482,7 +517,11 @@ export async function listSchedules(options?: SchedulerOptions): Promise<Schedul
   return await getGlobalScheduler(options).listSchedules();
 }
 
-export async function triggerMorningReport(runId: string, manifest?: TaskManifest, options?: SchedulerOptions): Promise<string> {
+export async function triggerMorningReport(
+  runId: string,
+  manifest?: TaskManifest,
+  options?: SchedulerOptions
+): Promise<string> {
   return await getGlobalScheduler(options).triggerMorningReport(runId, manifest);
 }
 
@@ -499,6 +538,6 @@ export async function triggerScheduleRun(
   if (!manifest) return null;
   return {
     runId: manifest.taskId,
-    status: manifest.status
+    status: manifest.status,
   };
 }

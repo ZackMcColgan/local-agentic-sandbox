@@ -2,14 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { POST } from "../app/api/chat/route";
-import { NextRequest } from "next/server";
-import { ThreadStore, activeExecutionSet, registerTurnAbortController, clearTurnAbortController } from "../lib/threads/threadStore";
+import {
+  ThreadStore,
+  activeExecutionSet,
+  clearTurnAbortController,
+} from "../lib/threads/threadStore";
 import {
   formatSseWriterError,
   transitionOnStreamDisconnect,
   transitionOnDetachedTurnReconciliation,
-  TurnDeliveryState
+  TurnDeliveryState,
 } from "../lib/turnReconciliation";
 
 test("Deliverable 1: SSE writer error formatting includes name, message, and first stack frame", async () => {
@@ -33,14 +35,14 @@ test("Deliverable 4: Zombie reaping on thread read", async () => {
       id: threadId,
       title: "Zombie Test Thread",
       model: "strata",
-      reasoningEffort: "medium"
+      reasoningEffort: "medium",
     });
 
     store.addMessage(threadId, {
       id: "user-1",
       role: "user",
       content: "Hello zombie test",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     store.addMessage(threadId, {
@@ -48,7 +50,7 @@ test("Deliverable 4: Zombie reaping on thread read", async () => {
       role: "assistant",
       content: "Partial streaming content before crash",
       timestamp: new Date().toISOString(),
-      status: "streaming"
+      status: "streaming",
     });
 
     // Case A: No live execution registered -> zombie reaped on read
@@ -58,7 +60,7 @@ test("Deliverable 4: Zombie reaping on thread read", async () => {
 
     const reapedThread = await store.getThread(threadId);
     assert.ok(reapedThread, "Thread should exist");
-    const asstMsg = reapedThread.messages.find(m => m.id === "asst-1");
+    const asstMsg = reapedThread.messages.find((m) => m.id === "asst-1");
     assert.equal(asstMsg?.status, "incomplete");
     assert.ok(asstMsg?.content.includes("Partial streaming content before crash"));
     assert.ok(asstMsg?.content.includes("⚠️ [Turn incomplete:"));
@@ -69,7 +71,7 @@ test("Deliverable 4: Zombie reaping on thread read", async () => {
       id: liveThreadId,
       title: "Live Test Thread",
       model: "strata",
-      reasoningEffort: "medium"
+      reasoningEffort: "medium",
     });
 
     store.addMessage(liveThreadId, {
@@ -77,14 +79,14 @@ test("Deliverable 4: Zombie reaping on thread read", async () => {
       role: "assistant",
       content: "Still actively generating",
       timestamp: new Date().toISOString(),
-      status: "streaming"
+      status: "streaming",
     });
 
     activeExecutionSet.add(liveThreadId);
     try {
       const liveThread = await store.getThread(liveThreadId);
       assert.ok(liveThread);
-      const liveMsg = liveThread.messages.find(m => m.id === "asst-2");
+      const liveMsg = liveThread.messages.find((m) => m.id === "asst-2");
       assert.equal(liveMsg?.status, "streaming", "Live turn must stay streaming");
       assert.equal(liveMsg?.content, "Still actively generating");
     } finally {
@@ -107,7 +109,7 @@ test("Deliverable 2: Honest turn records (finish_reason, outputTokens, honest tr
       id: threadId,
       title: "Honest Records Test",
       model: "strata",
-      reasoningEffort: "medium"
+      reasoningEffort: "medium",
     });
 
     // 1. Abnormal generation with finish_reason: "length"
@@ -118,11 +120,11 @@ test("Deliverable 2: Honest turn records (finish_reason, outputTokens, honest tr
       timestamp: new Date().toISOString(),
       finish_reason: "length",
       outputTokens: 4096,
-      status: "incomplete" // Must never be plain completed!
+      status: "incomplete", // Must never be plain completed!
     });
 
     const thread = await store.getThread(threadId);
-    const msg = thread?.messages.find(m => m.id === "asst-len");
+    const msg = thread?.messages.find((m) => m.id === "asst-len");
     assert.equal(msg?.finish_reason, "length");
     assert.equal(msg?.outputTokens, 4096);
     assert.equal(msg?.status, "incomplete");
@@ -133,8 +135,15 @@ test("Deliverable 2: Honest turn records (finish_reason, outputTokens, honest tr
 
 test("Deliverable 3: Client reconciliation state mapping (pure transition logic)", () => {
   // Case 1: Mid-turn stream failure transitions to TRANSIENT state
-  const initialStreaming: TurnDeliveryState = { state: "streaming", content: "Partial text received before cut" };
-  const transient = transitionOnStreamDisconnect(initialStreaming, "thread-recon-1", "Partial text received before cut");
+  const initialStreaming: TurnDeliveryState = {
+    state: "streaming",
+    content: "Partial text received before cut",
+  };
+  const transient = transitionOnStreamDisconnect(
+    initialStreaming,
+    "thread-recon-1",
+    "Partial text received before cut"
+  );
 
   assert.equal(transient.state, "transient_disconnected");
   if (transient.state === "transient_disconnected") {
@@ -145,7 +154,7 @@ test("Deliverable 3: Client reconciliation state mapping (pure transition logic)
   // Case 2: Intermediate poll while turn is still running detached -> stays transient
   const stillRunning = transitionOnDetachedTurnReconciliation(transient, {
     content: "Partial text received before cut plus more tokens",
-    status: "streaming"
+    status: "streaming",
   });
   assert.equal(stillRunning.state, "transient_disconnected");
 
@@ -154,7 +163,7 @@ test("Deliverable 3: Client reconciliation state mapping (pure transition logic)
     content: "Complete turn content persisted by detached backend.",
     status: "completed",
     finish_reason: "stop",
-    outputTokens: 512
+    outputTokens: 512,
   });
   assert.equal(resolved.state, "resolved_reconciled");
   if (resolved.state === "resolved_reconciled") {
@@ -170,9 +179,9 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
   fs.mkdirSync(tmpThreadsDir, { recursive: true });
   process.env.THREADS_DIR = tmpThreadsDir;
 
-  let fakeServer: any;
+  let fakeServer: import("node:http").Server | undefined;
   let serverPort: number;
-  let prevLlamacppUrl = process.env.LLAMACPP_BASE_URL;
+  const prevLlamacppUrl = process.env.LLAMACPP_BASE_URL;
   const prevLlmUrl = process.env.LLM_BASE_URL;
   const prevOllamaUrl = process.env.OLLAMA_BASE_URL;
   const prevMcpUrl = process.env.MCP_SERVER_URL;
@@ -199,17 +208,28 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
           res.writeHead(200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
-            Connection: "keep-alive"
+            Connection: "keep-alive",
           });
-          res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Beginning part of generation... " } }] })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "Beginning part of generation... " } }] })}\n\n`
+          );
 
           setTimeout(() => {
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "Middle part of detached execution... " } }] })}\n\n`);
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: "Middle part of detached execution... " } }] })}\n\n`
+            );
             setTimeout(() => {
-              res.write(`data: ${JSON.stringify({
-                choices: [{ delta: { content: "Final conclusion successfully finished server-side." }, finish_reason: "stop" }],
-                usage: { completion_tokens: 128 }
-              })}\n\n`);
+              res.write(
+                `data: ${JSON.stringify({
+                  choices: [
+                    {
+                      delta: { content: "Final conclusion successfully finished server-side." },
+                      finish_reason: "stop",
+                    },
+                  ],
+                  usage: { completion_tokens: 128 },
+                })}\n\n`
+              );
               res.write("data: [DONE]\n\n");
               res.end();
             }, 50);
@@ -219,28 +239,36 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
 
         // Ollama streaming fallback
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        res.write(JSON.stringify({
-          message: { content: "Beginning part of generation... " }
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            message: { content: "Beginning part of generation... " },
+          }) + "\n"
+        );
 
         setTimeout(() => {
-          res.write(JSON.stringify({
-            message: { content: "Middle part of detached execution... " }
-          }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: { content: "Middle part of detached execution... " },
+            }) + "\n"
+          );
           setTimeout(() => {
-            res.write(JSON.stringify({
-              message: { content: "Final conclusion successfully finished server-side." },
-              done: true,
-              eval_count: 128
-            }) + "\n");
+            res.write(
+              JSON.stringify({
+                message: { content: "Final conclusion successfully finished server-side." },
+                done: true,
+                eval_count: 128,
+              }) + "\n"
+            );
             res.end();
           }, 50);
         }, 50);
       });
     });
 
-    await new Promise<void>((r) => fakeServer.listen(0, "127.0.0.1", () => r()));
-    serverPort = fakeServer.address().port;
+    const srv = fakeServer;
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const addr = srv.address();
+    serverPort = typeof addr === "object" && addr ? addr.port : 0;
     process.env.LLM_BASE_URL = `http://127.0.0.1:${serverPort}`;
     process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${serverPort}`;
     process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${serverPort}`;
@@ -267,11 +295,11 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
         assistantMessageId: "a-sever-1",
         messages: [{ role: "user", content: "Tell me a story", id: "u-sever-1" }],
         model: "swift-15-27b-mtp",
-        enableTools: false
-      })
+        enableTools: false,
+      }),
     });
 
-    const res = await chatRoutePost(req as any);
+    const res = await chatRoutePost(req as unknown as Parameters<typeof chatRoutePost>[0]);
     assert.ok(res.body, "Response should have body stream");
     const reader = res.body.getReader();
 
@@ -291,7 +319,8 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
     assert.equal(clientState.state, "transient_disconnected");
 
     // Wait for detached turn to finish in threadStore
-    let finalAsstMsg: any = null;
+    let finalAsstMsg:
+      NonNullable<Awaited<ReturnType<typeof store.getThread>>>["messages"][number] | null = null;
     for (let i = 0; i < 50; i++) {
       const thread = await store.getThread(threadId);
       const asst = thread?.messages.find((m) => m.id === "a-sever-1");
@@ -312,15 +341,22 @@ test("Deliverable 3: Stub e2e sever client stream mid-turn -> detached turn comp
     clientState = transitionOnDetachedTurnReconciliation(clientState, finalAsstMsg);
     assert.equal(clientState.state, "resolved_reconciled");
     if (clientState.state === "resolved_reconciled") {
-      assert.ok(clientState.finalContent.includes("Final conclusion successfully finished server-side."));
+      assert.ok(
+        clientState.finalContent.includes("Final conclusion successfully finished server-side.")
+      );
     }
   } finally {
     if (fakeServer) fakeServer.close();
-    if (prevLlamacppUrl !== undefined) process.env.LLAMACPP_BASE_URL = prevLlamacppUrl; else delete process.env.LLAMACPP_BASE_URL;
-    if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl; else delete process.env.LLM_BASE_URL;
-    if (prevOllamaUrl !== undefined) process.env.OLLAMA_BASE_URL = prevOllamaUrl; else delete process.env.OLLAMA_BASE_URL;
-    if (prevMcpUrl !== undefined) process.env.MCP_SERVER_URL = prevMcpUrl; else delete process.env.MCP_SERVER_URL;
-    if (prevBrowserMcpUrl !== undefined) process.env.BROWSER_MCP_URL = prevBrowserMcpUrl; else delete process.env.BROWSER_MCP_URL;
+    if (prevLlamacppUrl !== undefined) process.env.LLAMACPP_BASE_URL = prevLlamacppUrl;
+    else delete process.env.LLAMACPP_BASE_URL;
+    if (prevLlmUrl !== undefined) process.env.LLM_BASE_URL = prevLlmUrl;
+    else delete process.env.LLM_BASE_URL;
+    if (prevOllamaUrl !== undefined) process.env.OLLAMA_BASE_URL = prevOllamaUrl;
+    else delete process.env.OLLAMA_BASE_URL;
+    if (prevMcpUrl !== undefined) process.env.MCP_SERVER_URL = prevMcpUrl;
+    else delete process.env.MCP_SERVER_URL;
+    if (prevBrowserMcpUrl !== undefined) process.env.BROWSER_MCP_URL = prevBrowserMcpUrl;
+    else delete process.env.BROWSER_MCP_URL;
     fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
   }
 });

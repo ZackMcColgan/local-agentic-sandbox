@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { getBridgeManifest, computeBridgeSourceSha256, PROTOCOL_VERSION } from "../../host-bridge/manifest";
+import {
+  getBridgeManifest,
+  computeBridgeSourceSha256,
+  PROTOCOL_VERSION,
+} from "../../host-bridge/manifest";
 
 describe("Architecture Deletion & Provenance Conformance Suite", () => {
   const repoRoot = path.resolve(__dirname, "../..");
@@ -47,22 +51,34 @@ describe("Architecture Deletion & Provenance Conformance Suite", () => {
     );
   });
 
-  it("Test 3: asserts C:\\AI\\ai-control\\bin\\host-runner.exe exists and is a valid compiled executable (> 50MB)", { skip: process.platform !== "win32" ? "Windows-only compiled binary path" : false }, () => {
-    const exePath = "C:\\AI\\ai-control\\bin\\host-runner.exe";
-    assert.strictEqual(fs.existsSync(exePath), true, `Compiled executable must exist at ${exePath}`);
-    const stats = fs.statSync(exePath);
-    const sizeInMB = stats.size / (1024 * 1024);
-    assert.ok(
-      sizeInMB > 50,
-      `Compiled binary at ${exePath} must be > 50MB, but got ${sizeInMB.toFixed(2)} MB`
-    );
-  });
+  it(
+    "Test 3: asserts C:\\AI\\ai-control\\bin\\host-runner.exe exists and is a valid compiled executable (> 50MB)",
+    { skip: process.platform !== "win32" ? "Windows-only compiled binary path" : false },
+    () => {
+      const exePath = "C:\\AI\\ai-control\\bin\\host-runner.exe";
+      assert.strictEqual(
+        fs.existsSync(exePath),
+        true,
+        `Compiled executable must exist at ${exePath}`
+      );
+      const stats = fs.statSync(exePath);
+      const sizeInMB = stats.size / (1024 * 1024);
+      assert.ok(
+        sizeInMB > 50,
+        `Compiled binary at ${exePath} must be > 50MB, but got ${sizeInMB.toFixed(2)} MB`
+      );
+    }
+  );
 
   it("Test 4: asserts host-bridge/manifest.ts exports protocolVersion: 1 and deterministic SHA-256 matching manifest.json", () => {
     const hostBridgeDir = path.join(repoRoot, "host-bridge");
     const manifestJsonPath = path.join(hostBridgeDir, "manifest.json");
 
-    assert.strictEqual(fs.existsSync(manifestJsonPath), true, "host-bridge/manifest.json must exist");
+    assert.strictEqual(
+      fs.existsSync(manifestJsonPath),
+      true,
+      "host-bridge/manifest.json must exist"
+    );
     const manifestJson = JSON.parse(fs.readFileSync(manifestJsonPath, "utf8"));
 
     assert.strictEqual(PROTOCOL_VERSION, 1, "PROTOCOL_VERSION must equal 1");
@@ -88,7 +104,11 @@ describe("Architecture Deletion & Provenance Conformance Suite", () => {
     const { spawn } = await import("node:child_process");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { swapBinary } = require("../../scripts/build-host-runner.js");
-    assert.strictEqual(typeof swapBinary, "function", "build-host-runner.js must export swapBinary");
+    assert.strictEqual(
+      typeof swapBinary,
+      "function",
+      "build-host-runner.js must export swapBinary"
+    );
 
     const tmpDir = fs.mkdtempSync(path.join(os.default.tmpdir(), "swap-bin-test-"));
     const targetExe = path.join(tmpDir, "test-runner.exe");

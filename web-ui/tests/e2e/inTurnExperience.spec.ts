@@ -152,19 +152,19 @@ for (const width of PHONE_WIDTHS) {
       await composer.fill("run tools");
       await composer.press("Enter");
 
-      const headerCard = page.getByTestId("live-activity-header");
-      await expect(headerCard).toBeVisible();
-      await expect(headerCard).not.toContainText("0 traces");
+      const nowLine = page.getByTestId("header-now-line");
+      await expect(nowLine).toBeVisible();
+      await expect(page.getByTestId("live-activity-header")).toHaveCount(0);
 
-      const rows = page.getByTestId("live-trace-row");
+      const rows = page.getByTestId("timeline-row");
       await expect(rows).toHaveCount(1);
-      await expect(rows.nth(0)).toContainText("read_file");
-      await expect(rows.nth(0)).toHaveAttribute("data-in-flight", "true");
+      await expect(rows.nth(0)).toContainText("app.ts");
+      await expect(rows.nth(0)).toHaveAttribute("data-row-status", "running");
 
       releaseSecondTrace();
       await expect(rows).toHaveCount(2);
-      await expect(rows.nth(1)).toContainText("write_file");
-      await expect(rows.nth(1)).toHaveAttribute("data-in-flight", "true");
+      await expect(rows.nth(1)).toContainText("out.ts");
+      await expect(rows.nth(1)).toHaveAttribute("data-row-status", "running");
 
       releaseDone();
       await expect(page.getByText("All done.")).toBeVisible();
@@ -231,10 +231,10 @@ for (const width of PHONE_WIDTHS) {
       await briefToggle.click();
       await expect(briefToggle).toContainText(/Show less|Collapse/i);
 
-      const headerCard = page.getByTestId("live-activity-header");
-      await expect(headerCard).toBeVisible();
-      await expect(page.getByTestId("live-activity-freshness")).toContainText("Live");
-      await expect(page.getByTestId("live-activity-elapsed")).toBeVisible();
+      const nowLine = page.getByTestId("header-now-line");
+      await expect(nowLine).toBeVisible();
+      await expect(page.getByTestId("now-line-action")).toBeVisible();
+      await expect(page.getByTestId("activity-timeline")).toBeVisible();
 
       releaseDone();
       await expect(page.getByText("Round 3 complete.")).toBeVisible();
@@ -434,7 +434,7 @@ for (const width of PHONE_WIDTHS) {
       await composer.fill("think real");
       await composer.press("Enter");
 
-      await expect(page.getByTestId("live-activity-header")).toBeVisible();
+      await expect(page.getByTestId("header-now-line")).toBeVisible();
       await expect(page.locator("body")).not.toContainText("formulating execution plan");
 
       releaseThought();
@@ -456,9 +456,7 @@ for (const width of PHONE_WIDTHS) {
       isMobile: true,
     });
 
-    test("renders greeting text intact without stray superscript or clipping", async ({
-      page,
-    }) => {
+    test("renders greeting text intact without stray superscript or clipping", async ({ page }) => {
       await setupStubbedEngineRoutes(page, { threads: [] });
       await page.goto("/");
 

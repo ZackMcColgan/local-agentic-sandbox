@@ -40,7 +40,6 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
   });
 
   it("Test A: POST /api/threads action='launchTask' returns 201 immediately with status 'planning' while planner is blocked", async () => {
-    let plannerStarted = false;
     let finishPlanner: (() => void) | null = null;
 
     const plannerPromise = new Promise<void>((resolve) => {
@@ -48,7 +47,6 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     });
 
     setPlanSpecGenerator(async (input) => {
-      plannerStarted = true;
       await plannerPromise;
       return {
         taskId: input.taskId,
@@ -63,10 +61,10 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
             acceptanceCriteria: [],
             status: "pending",
             builderIterations: 0,
-            criticRounds: 0
-          }
+            criticRounds: 0,
+          },
         ],
-        toMarkdown: () => "# Spec"
+        toMarkdown: () => "# Spec",
       };
     });
 
@@ -76,8 +74,8 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
       body: JSON.stringify({
         action: "launchTask",
         goal: "Build an architectural diagram of the cluster",
-        enableGitOps: false
-      })
+        enableGitOps: false,
+      }),
     });
 
     // POST must resolve quickly (under 2s) even though planner is waiting on finishPlanner
@@ -89,7 +87,10 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
 
     const res = await Promise.race([resPromise, timeoutPromise]);
     const duration = Date.now() - startTime;
-    assert.ok(duration < 2000, `POST /api/threads took ${duration}ms, must return immediately before planner finishes`);
+    assert.ok(
+      duration < 2000,
+      `POST /api/threads took ${duration}ms, must return immediately before planner finishes`
+    );
     assert.equal(res.status, 201);
 
     const data = await res.json();
@@ -119,8 +120,8 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
       body: JSON.stringify({
         action: "launchTask",
         goal: "Goal destined to fail planning",
-        enableGitOps: false
-      })
+        enableGitOps: false,
+      }),
     });
 
     const res = await threadsPost(req);
@@ -141,10 +142,16 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     }
 
     assert.ok(finalTask, "Checkpoint must exist on disk");
-    assert.equal(finalTask.status, "failed", "Task status in checkpoint must transition to 'failed'");
+    assert.equal(
+      finalTask.status,
+      "failed",
+      "Task status in checkpoint must transition to 'failed'"
+    );
     assert.ok(
       finalTask.parkedReason?.includes("Simulated planner decomposition crash") ||
-      finalTask.journal?.some((j) => j.message?.includes("Simulated planner decomposition crash")),
+        finalTask.journal?.some((j) =>
+          j.message?.includes("Simulated planner decomposition crash")
+        ),
       "Parked reason or journal must record planner error"
     );
 
@@ -154,7 +161,8 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     const lastMsg = threadOnDisk.messages[threadOnDisk.messages.length - 1];
     assert.equal(lastMsg.role, "assistant");
     assert.ok(
-      lastMsg.content.includes("Simulated planner decomposition crash") || lastMsg.content.includes("Task failed"),
+      lastMsg.content.includes("Simulated planner decomposition crash") ||
+        lastMsg.content.includes("Task failed"),
       `Assistant message must contain error details, got: ${lastMsg.content}`
     );
   });
@@ -174,7 +182,7 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date(Date.now() - 10000).toISOString(),
-      updatedAt: new Date(Date.now() - 10000).toISOString()
+      updatedAt: new Date(Date.now() - 10000).toISOString(),
     };
 
     const t2: TaskManifest = {
@@ -189,11 +197,19 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
       ambiguityFlags: [],
       journal: [],
       startedAt: new Date(Date.now() - 20000).toISOString(),
-      updatedAt: new Date(Date.now() - 5000).toISOString()
+      updatedAt: new Date(Date.now() - 5000).toISOString(),
     };
 
-    fs.writeFileSync(path.join(cpDir, `${t1.taskId}-checkpoint.json`), JSON.stringify(t1, null, 2), "utf8");
-    fs.writeFileSync(path.join(cpDir, `${t2.taskId}-checkpoint.json`), JSON.stringify(t2, null, 2), "utf8");
+    fs.writeFileSync(
+      path.join(cpDir, `${t1.taskId}-checkpoint.json`),
+      JSON.stringify(t1, null, 2),
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(cpDir, `${t2.taskId}-checkpoint.json`),
+      JSON.stringify(t2, null, 2),
+      "utf8"
+    );
 
     const req = new Request("http://localhost:3000/api/tasks");
     const res = await tasksGet(req);
@@ -201,8 +217,12 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     const data = await res.json();
 
     assert.ok(Array.isArray(data.tasks), "Response must contain 'tasks' array");
-    const foundPlanning = data.tasks.find((t: any) => t.taskId === "task-test-planning-1");
-    const foundParked = data.tasks.find((t: any) => t.taskId === "task-test-parked-2");
+    const foundPlanning = data.tasks.find(
+      (t: { taskId: string; status: string }) => t.taskId === "task-test-planning-1"
+    );
+    const foundParked = data.tasks.find(
+      (t: { taskId: string; status: string }) => t.taskId === "task-test-parked-2"
+    );
 
     assert.ok(foundPlanning, "Tasks list must include planning task");
     assert.equal(foundPlanning.status, "planning");
@@ -212,17 +232,23 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
 
   it("Test D: BuildsView component contract: accepts tasks list and renders multiple tasks", async () => {
     const buildsViewMod = await import("../components/BuildsView.js");
-    assert.ok(typeof buildsViewMod.BuildsView === "function", "BuildsView component must be exported");
+    assert.ok(
+      typeof buildsViewMod.BuildsView === "function",
+      "BuildsView component must be exported"
+    );
 
     const source = fs.readFileSync(path.resolve(__dirname, "../components/BuildsView.tsx"), "utf8");
     assert.ok(
-      source.includes("tasks?: TaskManifest[]") || source.includes("tasks: TaskManifest[]") || source.includes("/api/tasks"),
+      source.includes("tasks?: TaskManifest[]") ||
+        source.includes("tasks: TaskManifest[]") ||
+        source.includes("/api/tasks"),
       "BuildsView must support tasks list from props or API"
     );
   });
 
   it("Test E: Task builder thinking emitted in chunks exposes full thinking in checkpoint and GET /api/tasks?taskId without truncation to 180 chars", async () => {
-    const longThinking = "This is a detailed step-by-step reasoning trace that exceeds the previous 180-character truncation limit. It explains architectural decisions, file mappings, test fixtures, security invariants, and edge case validations in extensive technical depth so that the user and downstream tooling can inspect the complete thought process without clipping or missing sentences.";
+    const longThinking =
+      "This is a detailed step-by-step reasoning trace that exceeds the previous 180-character truncation limit. It explains architectural decisions, file mappings, test fixtures, security invariants, and edge case validations in extensive technical depth so that the user and downstream tooling can inspect the complete thought process without clipping or missing sentences.";
     assert.ok(longThinking.length > 250, "Test string must exceed 250 chars");
 
     const t: TaskManifest = {
@@ -242,8 +268,8 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
           status: "in_progress",
           builderThinking: longThinking,
           builderIterations: 1,
-          criticRounds: 0
-        }
+          criticRounds: 0,
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
@@ -251,11 +277,11 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
         {
           timestamp: new Date().toISOString(),
           role: "builder",
-          message: `Builder reasoning: ${longThinking}`
-        }
+          message: `Builder reasoning: ${longThinking}`,
+        },
       ],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     supervisor.saveCheckpoint(t);
@@ -266,10 +292,24 @@ describe("BUILD-2: Build Launch Visibility, Listing, and Streamed Thinking", () 
     const data = await res.json();
 
     assert.ok(data.task, "Response must include task");
-    assert.equal(data.task.builderThinking, longThinking, "Task builderThinking must match full longThinking without truncation");
-    assert.equal(data.task.milestones[0].builderThinking, longThinking, "Milestone builderThinking must match full longThinking");
-    const journalThinking = data.task.journal.find((j: any) => j.role === "builder" && j.message?.includes("Builder reasoning:"));
+    assert.equal(
+      data.task.builderThinking,
+      longThinking,
+      "Task builderThinking must match full longThinking without truncation"
+    );
+    assert.equal(
+      data.task.milestones[0].builderThinking,
+      longThinking,
+      "Milestone builderThinking must match full longThinking"
+    );
+    const journalThinking = data.task.journal.find(
+      (j: { role: string; message?: string }) =>
+        j.role === "builder" && j.message?.includes("Builder reasoning:")
+    );
     assert.ok(journalThinking, "Journal entry for builder reasoning must exist");
-    assert.ok(journalThinking.message.length > 200, "Journal reasoning message must not be truncated to 180 chars");
+    assert.ok(
+      journalThinking.message.length > 200,
+      "Journal reasoning message must not be truncated to 180 chars"
+    );
   });
 });

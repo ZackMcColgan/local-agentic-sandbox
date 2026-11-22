@@ -85,7 +85,9 @@ const server = http.createServer(async (req, res) => {
   if (rawBody.trim()) {
     try {
       jsonBody = JSON.parse(rawBody);
-    } catch {}
+    } catch {
+      /* ignore non-JSON request body */
+    }
   }
 
   // --- CONTROL ENDPOINTS ---
@@ -117,7 +119,7 @@ const server = http.createServer(async (req, res) => {
       process.env.THREADS_DIR,
       path.resolve(process.cwd(), ".tmp-e2e-threads"),
       path.resolve(__dirname, "../../../.tmp-e2e-threads"),
-      path.resolve(__dirname, "../../.tmp-e2e-threads")
+      path.resolve(__dirname, "../../.tmp-e2e-threads"),
     ].filter(Boolean);
 
     for (const d of candidateThreadDirs) {
@@ -127,9 +129,13 @@ const server = http.createServer(async (req, res) => {
           for (const f of files) {
             try {
               fs.rmSync(path.join(d, f), { recursive: true, force: true });
-            } catch {}
+            } catch {
+              /* ignore locked thread file removal error */
+            }
           }
-        } catch {}
+        } catch {
+          /* ignore thread dir read error */
+        }
       }
     }
 
@@ -137,7 +143,7 @@ const server = http.createServer(async (req, res) => {
       process.env.AGENT_CHECKPOINT_DIR,
       path.resolve(process.cwd(), ".tmp-e2e-checkpoints"),
       path.resolve(__dirname, "../../../.tmp-e2e-checkpoints"),
-      path.resolve(__dirname, "../../.tmp-e2e-checkpoints")
+      path.resolve(__dirname, "../../.tmp-e2e-checkpoints"),
     ].filter(Boolean);
 
     for (const d of candidateCheckpointDirs) {
@@ -147,9 +153,13 @@ const server = http.createServer(async (req, res) => {
           for (const f of files) {
             try {
               fs.rmSync(path.join(d, f), { recursive: true, force: true });
-            } catch {}
+            } catch {
+              /* ignore locked checkpoint file removal error */
+            }
           }
-        } catch {}
+        } catch {
+          /* ignore checkpoint dir read error */
+        }
       }
     }
 
@@ -161,27 +171,31 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/__stub/status" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      activeScript,
-      pendingReleases: pendingReleases.length,
-      roundCounter,
-      historyCount: requestHistory.length,
-      history: requestHistory
-    }));
+    res.end(
+      JSON.stringify({
+        activeScript,
+        pendingReleases: pendingReleases.length,
+        roundCounter,
+        historyCount: requestHistory.length,
+        history: requestHistory,
+      })
+    );
     return;
   }
 
   // --- HEALTH & ENGINE STATUS ---
   if (pathname === "/control/status") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      status: "running",
-      active: true,
-      reachable: true,
-      model: "swift-15-27b-mtp",
-      vram_mb: 16000,
-      uptime_s: 3600
-    }));
+    res.end(
+      JSON.stringify({
+        status: "running",
+        active: true,
+        reachable: true,
+        model: "swift-15-27b-mtp",
+        vram_mb: 16000,
+        uptime_s: 3600,
+      })
+    );
     return;
   }
 
@@ -199,16 +213,15 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/tags" || pathname === "/v1/models") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      models: [
-        { name: "swift-15-27b-mtp", model: "swift-15-27b-mtp" },
-        { name: "qwen3.8-flash-next-gyro-gyro-s", model: "qwen3.8-flash-next-gyro-gyro-s" }
-      ],
-      data: [
-        { id: "swift-15-27b-mtp" },
-        { id: "qwen3.8-flash-next-gyro-gyro-s" }
-      ]
-    }));
+    res.end(
+      JSON.stringify({
+        models: [
+          { name: "swift-15-27b-mtp", model: "swift-15-27b-mtp" },
+          { name: "qwen3.8-flash-next-gyro-gyro-s", model: "qwen3.8-flash-next-gyro-gyro-s" },
+        ],
+        data: [{ id: "swift-15-27b-mtp" }, { id: "qwen3.8-flash-next-gyro-gyro-s" }],
+      })
+    );
     return;
   }
 
@@ -218,7 +231,7 @@ const server = http.createServer(async (req, res) => {
     method: req.method,
     pathname,
     script,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   });
 
   // --- POST /api/chat ---
@@ -244,21 +257,23 @@ async function handleChatRequest(req, res, body, script) {
   // Internal triage call detection in /api/chat:
   const messages = body.messages || [];
   const isTriage = messages.some(
-    (m) => typeof m.content === "string" && m.content.includes("Classify this user request into COMPLEXITY")
+    (m) =>
+      typeof m.content === "string" &&
+      m.content.includes("Classify this user request into COMPLEXITY")
   );
 
   if (isTriage) {
     log("Handling internal triage call -> SIMPLE_EXECUTION");
     res.writeHead(200, {
       "Content-Type": "application/x-ndjson; charset=utf-8",
-      "Cache-Control": "no-cache"
+      "Cache-Control": "no-cache",
     });
     const triageResult = {
       message: {
         role: "assistant",
-        content: JSON.stringify({ complexity: "SIMPLE_EXECUTION", reasoning: "standard request" })
+        content: JSON.stringify({ complexity: "SIMPLE_EXECUTION", reasoning: "standard request" }),
       },
-      done: true
+      done: true,
     };
     res.write(JSON.stringify(triageResult) + "\n");
     res.end();
@@ -271,7 +286,7 @@ async function handleChatRequest(req, res, body, script) {
     res.writeHead(200, {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
+      Connection: "keep-alive",
     });
 
     let released = stubReleased;
@@ -291,7 +306,7 @@ async function handleChatRequest(req, res, body, script) {
       "Evaluating tool availability and potential side effects...",
       "Synthesizing intermediate reasoning steps...",
       "Verifying boundary invariants against system directives...",
-      "Preparing final deliverable synthesis..."
+      "Preparing final deliverable synthesis...",
     ];
 
     let step = 0;
@@ -304,12 +319,14 @@ async function handleChatRequest(req, res, body, script) {
         const chunk = {
           message: {
             role: "assistant",
-            thinking: `[Step ${step + 1}] ${thinkingSteps[step]}\n`
+            thinking: `[Step ${step + 1}] ${thinkingSteps[step]}\n`,
           },
-          done: false
+          done: false,
         };
         res.write(JSON.stringify(chunk) + "\n");
-      } catch {}
+      } catch {
+        /* ignore write error on closed stream */
+      }
       step++;
     }, 200);
 
@@ -323,15 +340,15 @@ async function handleChatRequest(req, res, body, script) {
         const contentChunk = {
           message: {
             role: "assistant",
-            content: "Deliberation complete. Here is the verified answer."
+            content: "Deliberation complete. Here is the verified answer.",
           },
-          done: false
+          done: false,
         };
         res.write(JSON.stringify(contentChunk) + "\n");
 
         const doneChunk = {
           message: { role: "assistant" },
-          done: true
+          done: true,
         };
         res.write(JSON.stringify(doneChunk) + "\n");
         res.end();
@@ -351,7 +368,7 @@ async function handleChatRequest(req, res, body, script) {
     res.writeHead(200, {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
+      Connection: "keep-alive",
     });
 
     if (!hasSteer && roundCounter === 0) {
@@ -359,21 +376,26 @@ async function handleChatRequest(req, res, body, script) {
       roundCounter = 1;
       log("two-round: Round 1 emitting thinking + partial content");
 
-      res.write(JSON.stringify({
-        message: {
-          role: "assistant",
-          thinking: "Round 1 Thinking: Assessing user weather request and current meteorological telemetry...\n"
-        },
-        done: false
-      }) + "\n");
+      res.write(
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            thinking:
+              "Round 1 Thinking: Assessing user weather request and current meteorological telemetry...\n",
+          },
+          done: false,
+        }) + "\n"
+      );
 
-      res.write(JSON.stringify({
-        message: {
-          role: "assistant",
-          content: "The weather today is partly cloudy, 68°F. "
-        },
-        done: false
-      }) + "\n");
+      res.write(
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            content: "The weather today is partly cloudy, 68°F. ",
+          },
+          done: false,
+        }) + "\n"
+      );
 
       let closed = false;
       req.on("close", () => {
@@ -402,26 +424,34 @@ async function handleChatRequest(req, res, body, script) {
       roundCounter = 2;
       log("two-round: Round 2 emitting redirected response");
 
-      res.write(JSON.stringify({
-        message: {
-          role: "assistant",
-          thinking: "Round 2 Thinking: User requested an SVG diagram. Redirecting generation to produce SVG weather chart...\n"
-        },
-        done: false
-      }) + "\n");
+      res.write(
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            thinking:
+              "Round 2 Thinking: User requested an SVG diagram. Redirecting generation to produce SVG weather chart...\n",
+          },
+          done: false,
+        }) + "\n"
+      );
 
-      res.write(JSON.stringify({
-        message: {
-          role: "assistant",
-          content: "Redirected Answer: Here is the SVG diagram you requested with full weather visualization."
-        },
-        done: false
-      }) + "\n");
+      res.write(
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            content:
+              "Redirected Answer: Here is the SVG diagram you requested with full weather visualization.",
+          },
+          done: false,
+        }) + "\n"
+      );
 
-      res.write(JSON.stringify({
-        message: { role: "assistant" },
-        done: true
-      }) + "\n");
+      res.write(
+        JSON.stringify({
+          message: { role: "assistant" },
+          done: true,
+        }) + "\n"
+      );
       res.end();
       return;
     }
@@ -431,29 +461,35 @@ async function handleChatRequest(req, res, body, script) {
   log("Serving default chat response");
   res.writeHead(200, {
     "Content-Type": "application/x-ndjson; charset=utf-8",
-    "Cache-Control": "no-cache"
+    "Cache-Control": "no-cache",
   });
 
-  res.write(JSON.stringify({
-    message: {
-      role: "assistant",
-      thinking: "Thinking about response in stub engine...\n"
-    },
-    done: false
-  }) + "\n");
+  res.write(
+    JSON.stringify({
+      message: {
+        role: "assistant",
+        thinking: "Thinking about response in stub engine...\n",
+      },
+      done: false,
+    }) + "\n"
+  );
 
-  res.write(JSON.stringify({
-    message: {
-      role: "assistant",
-      content: "Hello from stub engine."
-    },
-    done: false
-  }) + "\n");
+  res.write(
+    JSON.stringify({
+      message: {
+        role: "assistant",
+        content: "Hello from stub engine.",
+      },
+      done: false,
+    }) + "\n"
+  );
 
-  res.write(JSON.stringify({
-    message: { role: "assistant" },
-    done: true
-  }) + "\n");
+  res.write(
+    JSON.stringify({
+      message: { role: "assistant" },
+      done: true,
+    }) + "\n"
+  );
   res.end();
 }
 
@@ -465,22 +501,27 @@ async function handleGenerateRequest(req, res, body, script) {
   if (script === "planner-fail") {
     log("planner-fail: returning HTTP 500");
     res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Planner model capacity exceeded: forced failure for testing"
-    }));
+    res.end(
+      JSON.stringify({
+        error: "Planner model capacity exceeded: forced failure for testing",
+      })
+    );
     return;
   }
 
   // 4. SCRIPT: planner-slow (BUILD-2 hang repro)
   if (script === "planner-slow") {
     // Only block the PLANNER call, not subsequent builder or critic calls
-    const isPlanner = prompt.includes("milestone") || prompt.includes("Decompose the following") || prompt.includes("expert autonomous engineering planner");
+    const isPlanner =
+      prompt.includes("milestone") ||
+      prompt.includes("Decompose the following") ||
+      prompt.includes("expert autonomous engineering planner");
 
     if (isPlanner) {
       log("planner-slow: blocking planner until release hook triggered");
       res.writeHead(200, {
         "Content-Type": "application/x-ndjson; charset=utf-8",
-        "Cache-Control": "no-cache"
+        "Cache-Control": "no-cache",
       });
 
       let closed = false;
@@ -511,17 +552,19 @@ async function handleGenerateRequest(req, res, body, script) {
               acceptanceCriteria: [
                 {
                   id: "AC-1",
-                  assertion: "Backend service operational"
-                }
-              ]
-            }
-          ]
+                  assertion: "Backend service operational",
+                },
+              ],
+            },
+          ],
         };
         const responsePayload = `<think>Decomposing engineering goal into milestones...</think>${JSON.stringify(planJson)}`;
-        res.write(JSON.stringify({
-          response: responsePayload,
-          done: true
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            response: responsePayload,
+            done: true,
+          }) + "\n"
+        );
         res.end();
       }
       return;
@@ -531,33 +574,47 @@ async function handleGenerateRequest(req, res, body, script) {
   // DEFAULT / WORKER GENERATE RESPONSES:
   res.writeHead(200, {
     "Content-Type": "application/x-ndjson; charset=utf-8",
-    "Cache-Control": "no-cache"
+    "Cache-Control": "no-cache",
   });
 
   // A. Critic review call
-  if (prompt.includes("Critic") || prompt.includes("review") || prompt.includes("Review the deliverable") || prompt.includes("VERDICT")) {
+  if (
+    prompt.includes("Critic") ||
+    prompt.includes("review") ||
+    prompt.includes("Review the deliverable") ||
+    prompt.includes("VERDICT")
+  ) {
     log("handleGenerateRequest: serving Critic approval");
     const criticJson = {
       approved: true,
       feedback: [],
-      analysis: "Implementation satisfies all contract requirements."
+      analysis: "Implementation satisfies all contract requirements.",
     };
-    res.write(JSON.stringify({
-      response: `<think>Reviewing implementation...</think>${JSON.stringify(criticJson)}`,
-      done: true
-    }) + "\n");
+    res.write(
+      JSON.stringify({
+        response: `<think>Reviewing implementation...</think>${JSON.stringify(criticJson)}`,
+        done: true,
+      }) + "\n"
+    );
     res.end();
     return;
   }
 
   // B. Builder code generation call
-  if (prompt.includes("builder") || prompt.includes("generate the exact, complete, production-grade file content") || prompt.includes("Provide the complete file content")) {
+  if (
+    prompt.includes("builder") ||
+    prompt.includes("generate the exact, complete, production-grade file content") ||
+    prompt.includes("Provide the complete file content")
+  ) {
     log("handleGenerateRequest: serving Builder valid TypeScript code");
-    const code = "```typescript\nexport const status = \"operational\";\nexport function run() { return true; }\n```";
-    res.write(JSON.stringify({
-      response: `<think>Writing production implementation...</think>\n${code}`,
-      done: true
-    }) + "\n");
+    const code =
+      '```typescript\nexport const status = "operational";\nexport function run() { return true; }\n```';
+    res.write(
+      JSON.stringify({
+        response: `<think>Writing production implementation...</think>\n${code}`,
+        done: true,
+      }) + "\n"
+    );
     res.end();
     return;
   }
@@ -575,17 +632,19 @@ async function handleGenerateRequest(req, res, body, script) {
         acceptanceCriteria: [
           {
             id: "AC-1",
-            assertion: "Milestone criteria satisfied"
-          }
-        ]
-      }
-    ]
+            assertion: "Milestone criteria satisfied",
+          },
+        ],
+      },
+    ],
   };
 
-  res.write(JSON.stringify({
-    response: `<think>Standard reasoning...</think>${JSON.stringify(defaultPlan)}`,
-    done: true
-  }) + "\n");
+  res.write(
+    JSON.stringify({
+      response: `<think>Standard reasoning...</think>${JSON.stringify(defaultPlan)}`,
+      done: true,
+    }) + "\n"
+  );
   res.end();
 }
 

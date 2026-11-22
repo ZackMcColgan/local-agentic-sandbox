@@ -70,10 +70,7 @@ export function BoardView({
     return map;
   }, [filteredItems]);
 
-  const itemById = useMemo(
-    () => new Map(items.map((i) => [i.id, i])),
-    [items]
-  );
+  const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
   const handleCreateManual = async (input: {
     title: string;
@@ -108,20 +105,23 @@ export function BoardView({
   const renderCard = (item: BoardItem) => {
     const isLive = item.status === "working";
     const isDone = item.status === "done";
-    const dotColor = isLive ? "bg-cyan-400 animate-pulse" : isDone ? "bg-emerald-400" : "bg-stone-500";
+    const dotColor = isLive
+      ? "bg-emerald-400 animate-pulse"
+      : isDone
+        ? "bg-emerald-400"
+        : "bg-stone-500";
     const deps = item.dependencies ?? [];
     const allDepsDone =
-      deps.length > 0 &&
-      deps.every((depId) => itemById.get(depId)?.status === "done");
-    const waitingOn = deps
-      .map((depId) => itemById.get(depId)?.key || depId)
-      .join(", ");
+      deps.length > 0 && deps.every((depId) => itemById.get(depId)?.status === "done");
+    const waitingOn = deps.map((depId) => itemById.get(depId)?.key || depId).join(", ");
 
     return (
       <div
         key={item.id}
         className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] surface-card p-3.5 transition-all ${
-          isLive ? "shadow-[0_0_0_1px_rgba(34,211,238,0.6)_inset] border-cyan-500/40" : "hover:border-white/[0.18]"
+          isLive
+            ? "shadow-[0_0_0_1px_rgba(52,211,153,0.6)_inset] border-emerald-500/40"
+            : "hover:border-white/[0.18]"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -143,16 +143,14 @@ export function BoardView({
         </div>
 
         {item.evidence?.liveLine && (
-          <div className="flex items-center gap-1.5 pt-2 text-[12px] text-cyan-300">
-            <span className="text-cyan-400">●</span>
+          <div className="flex items-center gap-1.5 pt-2 text-[12px] text-emerald-300">
+            <span className="text-emerald-400">●</span>
             <span>{item.evidence.liveLine}</span>
           </div>
         )}
 
         {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
-          <div className="pt-2 text-[12px] text-emerald-300">
-            {item.parkedReason}
-          </div>
+          <div className="pt-2 text-[12px] text-emerald-300">{item.parkedReason}</div>
         )}
 
         {item.status === "done" && item.evidence?.prNumber && (
@@ -256,28 +254,28 @@ export function BoardView({
           data-testid="board-control-pill"
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
             controlState === "running"
-              ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300"
+              ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
               : controlState === "paused"
-              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-              : "border-white/[0.12] bg-[#15151b] text-stone-300"
+                ? "border-white/[0.16] bg-[#1f1f28] text-stone-200"
+                : "border-white/[0.12] bg-[#15151b] text-stone-300"
           }`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               controlState === "running"
-                ? "bg-cyan-400 animate-pulse"
+                ? "bg-emerald-400 animate-pulse"
                 : controlState === "paused"
-                ? "bg-emerald-400"
-                : "bg-stone-400"
+                  ? "bg-stone-300"
+                  : "bg-stone-400"
             }`}
           />
           {controlState === "running"
             ? "Running"
             : controlState === "paused"
-            ? stopAtBoundary
-              ? "Paused · boundary"
-              : "Paused"
-            : "Stopped"}
+              ? stopAtBoundary
+                ? "Paused · boundary"
+                : "Paused"
+              : "Stopped"}
         </span>
         <div
           role="group"
@@ -381,9 +379,7 @@ export function BoardView({
               aria-label={`Show ${col.label}`}
               onClick={() => setActiveColIndex(idx)}
               className={`h-1.5 rounded-full transition-all ${
-                idx === activeColIndex
-                  ? "w-5 rounded-[3px] bg-emerald-500"
-                  : "w-1.5 bg-stone-700"
+                idx === activeColIndex ? "w-5 rounded-[3px] bg-emerald-500" : "w-1.5 bg-stone-700"
               }`}
             />
           ))}
@@ -400,15 +396,14 @@ export function BoardView({
             <div className="mt-3.5 rounded-[14px] border-[1.5px] border-dashed border-[#26262b] p-4 text-center text-[12.5px] leading-relaxed text-zinc-400">
               One job at a time.
               <br />
-              The next item starts itself when this one lands.
+              When board control is running, the next queued item starts when this one lands.
             </div>
           )}
-          {byStatus[activeCol.status].length === 0 &&
-            activeCol.status !== "working" && (
-              <div className="mt-3.5 rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-6 text-center text-[12.5px] text-zinc-400">
-                No items in {activeCol.label}
-              </div>
-            )}
+          {byStatus[activeCol.status].length === 0 && activeCol.status !== "working" && (
+            <div className="mt-3.5 rounded-[12px] border-[1.5px] border-dashed border-[#26262b] py-6 text-center text-[12.5px] text-zinc-400">
+              No items in {activeCol.label}
+            </div>
+          )}
         </div>
 
         <button
@@ -431,9 +426,7 @@ export function BoardView({
                 <h2 className="text-[12px] font-bold tracking-[1.1px] text-zinc-300">
                   {col.label}
                 </h2>
-                <span className="text-[11.5px] text-zinc-400">
-                  {colItems.length}
-                </span>
+                <span className="text-[11.5px] text-zinc-400">{colItems.length}</span>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto touch-pan-y overscroll-contain pr-1">
                 {colItems.length === 0 ? (

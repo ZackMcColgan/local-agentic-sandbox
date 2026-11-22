@@ -43,26 +43,55 @@ describe("command-dialect-guard", () => {
     assert.deepEqual(res.traceNotes, []);
   });
 
+  it("preserves && and || inside double and single quotes byte-identical", () => {
+    const doubleQuoted = 'echo "a && b"';
+    const resDouble = lintHostCommand(doubleQuoted);
+    assert.equal(resDouble.rejected, false);
+    assert.equal(resDouble.rewritten, false);
+    assert.equal(resDouble.command, doubleQuoted);
+    assert.deepEqual(resDouble.ruleIds, []);
+    assert.deepEqual(resDouble.traceNotes, []);
+
+    const singleQuoted = "echo 'a || b'";
+    const resSingle = lintHostCommand(singleQuoted);
+    assert.equal(resSingle.rejected, false);
+    assert.equal(resSingle.rewritten, false);
+    assert.equal(resSingle.command, singleQuoted);
+    assert.deepEqual(resSingle.ruleIds, []);
+    assert.deepEqual(resSingle.traceNotes, []);
+  });
+
+  it("rewrites unquoted chains while preserving quoted && and || literals", () => {
+    const cmd = `echo "a && b" && echo 'c || d'`;
+    const res = lintHostCommand(cmd);
+    assert.equal(res.rejected, false);
+    assert.equal(res.rewritten, true);
+    assert.equal(res.command, `echo "a && b" ; echo 'c || d'`);
+    assert.deepEqual(res.ruleIds, ["ps-chain-and"]);
+    assert.ok(res.traceNotes.some((n) => n.includes("ps-chain-and")));
+  });
+
   it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on && rewrite", async () => {
     const origFetch = globalThis.fetch;
-    let capturedBody: any = null;
-    globalThis.fetch = (async (_url: any, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { args?: { command?: string } } | null = null;
+    globalThis.fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return {
         ok: true,
         json: async () => ({ ok: true, stdout: "done" }),
-      } as any;
-    }) as any;
+      } as unknown as Response;
+    };
     try {
       const result = await executeHostTool("host_run_powershell", {
         command: "echo a && echo b",
       });
-      assert.equal(capturedBody.args.command, "echo a ; echo b");
+      assert.equal(
+        (capturedBody as unknown as { args?: { command?: string } } | null)?.args?.command,
+        "echo a ; echo b"
+      );
       assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
       assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-and"));
-      assert.ok(
-        result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-and"))
-      );
+      assert.ok(result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-and")));
     } finally {
       globalThis.fetch = origFetch;
     }
@@ -70,24 +99,25 @@ describe("command-dialect-guard", () => {
 
   it("surfaces dialectGuard ruleIds and traceNotes in executeHostTool result on || rewrite", async () => {
     const origFetch = globalThis.fetch;
-    let capturedBody: any = null;
-    globalThis.fetch = (async (_url: any, init: any) => {
-      capturedBody = JSON.parse(init.body);
+    let capturedBody: { args?: { command?: string } } | null = null;
+    globalThis.fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
       return {
         ok: true,
         json: async () => ({ ok: true, stdout: "done" }),
-      } as any;
-    }) as any;
+      } as unknown as Response;
+    };
     try {
       const result = await executeHostTool("host_run_powershell", {
         command: "echo a || echo b",
       });
-      assert.equal(capturedBody.args.command, "echo a ; echo b");
+      assert.equal(
+        (capturedBody as unknown as { args?: { command?: string } } | null)?.args?.command,
+        "echo a ; echo b"
+      );
       assert.ok(result.dialectGuard, "expected dialectGuard on rewritten tool result");
       assert.ok(result.dialectGuard.ruleIds.includes("ps-chain-or"));
-      assert.ok(
-        result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-or"))
-      );
+      assert.ok(result.dialectGuard.traceNotes.some((n: string) => n.includes("ps-chain-or")));
     } finally {
       globalThis.fetch = origFetch;
     }

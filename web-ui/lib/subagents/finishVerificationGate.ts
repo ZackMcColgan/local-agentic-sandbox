@@ -37,8 +37,9 @@ export function verifyJobCompletion(input: FinishVerificationInput): FinishVerif
       if (Number(countStr) <= 0) {
         reasons.push(`No new commits found since baseCommit ${input.baseCommit}.`);
       }
-    } catch (err: any) {
-      reasons.push(`Failed to verify git commits: ${err?.message || String(err)}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      reasons.push(`Failed to verify git commits: ${msg}`);
     }
   }
 

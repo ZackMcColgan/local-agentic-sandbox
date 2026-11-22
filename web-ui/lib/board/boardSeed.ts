@@ -114,7 +114,8 @@ export const BOARD_SEED_ITEMS: CreateBoardItemInput[] = [
     id: "item-17",
     key: "#17",
     title: "evidence-linked-summaries",
-    brief: "Completion claims must cite resolvable commits, PRs, or gate lines — or flag unverified.",
+    brief:
+      "Completion claims must cite resolvable commits, PRs, or gate lines — or flag unverified.",
     dependencies: [],
     status: "done",
     author: "Owner",

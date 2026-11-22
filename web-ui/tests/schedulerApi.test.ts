@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
-import { GET as getSchedules, POST as postSchedule, DELETE as deleteSchedule } from "../app/api/schedules/route.js";
+import {
+  GET as getSchedules,
+  POST as postSchedule,
+  DELETE as deleteSchedule,
+} from "../app/api/schedules/route.js";
 import { DELETE as deleteScheduleById } from "../app/api/schedules/[id]/route.js";
 import { POST as triggerSchedule } from "../app/api/schedules/[id]/trigger/route.js";
 import { resetGlobalScheduler } from "../lib/subagents/scheduler.js";
@@ -14,7 +18,10 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
   let savedWorkspace: string | undefined;
 
   function setup() {
-    testWorkspace = path.resolve(process.cwd(), `temp-test-sched-api-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-sched-api-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     savedWorkspace = process.env.WORKSPACE_DIR;
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
@@ -41,8 +48,8 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 2 * * *",
-          taskDescription: "Run overnight verification"
-        })
+          taskDescription: "Run overnight verification",
+        }),
       });
 
       const res = await postSchedule(req);
@@ -64,8 +71,8 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 2 * *",
-          taskDescription: "Incomplete cron format"
-        })
+          taskDescription: "Incomplete cron format",
+        }),
       });
 
       const res = await postSchedule(req);
@@ -86,8 +93,8 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 2 * * *",
-          taskDescription: "   "
-        })
+          taskDescription: "   ",
+        }),
       });
 
       const res = await postSchedule(req);
@@ -108,12 +115,11 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 * * * *",
-          taskDescription: "Hourly check"
-        })
+          taskDescription: "Hourly check",
+        }),
       });
       await postSchedule(postReq);
 
-      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
       const res = await getSchedules();
       assert.equal(res.status, 200);
       const data = await res.json();
@@ -133,22 +139,26 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 3 * * *",
-          taskDescription: "Schedule to cancel"
-        })
+          taskDescription: "Schedule to cancel",
+        }),
       });
       const postRes = await postSchedule(postReq);
       const { id } = await postRes.json();
 
-      const deleteReq = new Request(`http://localhost:3000/api/schedules?id=${id}`, { method: "DELETE" });
+      const deleteReq = new Request(`http://localhost:3000/api/schedules?id=${id}`, {
+        method: "DELETE",
+      });
       const delRes = await deleteSchedule(deleteReq);
       assert.equal(delRes.status, 200);
       const delData = await delRes.json();
       assert.equal(delData.success, true);
 
-      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
       const getRes = await getSchedules();
       const getData = await getRes.json();
-      assert.equal(getData.schedules.some((s: any) => s.id === id), false);
+      assert.equal(
+        getData.schedules.some((s: { id: string }) => s.id === id),
+        false
+      );
     } finally {
       teardown();
     }
@@ -162,22 +172,26 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 3 * * *",
-          taskDescription: "Path delete schedule"
-        })
+          taskDescription: "Path delete schedule",
+        }),
       });
       const postRes = await postSchedule(postReq);
       const { id } = await postRes.json();
 
-      const deleteReq = new Request(`http://localhost:3000/api/schedules/${id}`, { method: "DELETE" });
+      const deleteReq = new Request(`http://localhost:3000/api/schedules/${id}`, {
+        method: "DELETE",
+      });
       const delRes = await deleteScheduleById(deleteReq, { params: Promise.resolve({ id }) });
       assert.equal(delRes.status, 200);
       const delData = await delRes.json();
       assert.equal(delData.success, true);
 
-      const getReq = new Request("http://localhost:3000/api/schedules", { method: "GET" });
       const getRes = await getSchedules();
       const getData = await getRes.json();
-      assert.equal(getData.schedules.some((s: any) => s.id === id), false);
+      assert.equal(
+        getData.schedules.some((s: { id: string }) => s.id === id),
+        false
+      );
     } finally {
       teardown();
     }
@@ -187,8 +201,13 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
     setup();
     try {
       // 1. Non-existent schedule returns 404
-      const notFoundReq = new Request("http://localhost:3000/api/schedules/sched-nonexistent/trigger", { method: "POST" });
-      const notFoundRes = await triggerSchedule(notFoundReq, { params: Promise.resolve({ id: "sched-nonexistent" }) });
+      const notFoundReq = new Request(
+        "http://localhost:3000/api/schedules/sched-nonexistent/trigger",
+        { method: "POST" }
+      );
+      const notFoundRes = await triggerSchedule(notFoundReq, {
+        params: Promise.resolve({ id: "sched-nonexistent" }),
+      });
       assert.equal(notFoundRes.status, 404);
 
       // 2. Create a schedule and trigger it
@@ -197,13 +216,15 @@ describe("Phase 3 — Item 2: Scheduler API Routes Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cronExpression: "0 4 * * *",
-          taskDescription: "Triggerable run"
-        })
+          taskDescription: "Triggerable run",
+        }),
       });
       const postRes = await postSchedule(postReq);
       const { id } = await postRes.json();
 
-      const trigReq = new Request(`http://localhost:3000/api/schedules/${id}/trigger`, { method: "POST" });
+      const trigReq = new Request(`http://localhost:3000/api/schedules/${id}/trigger`, {
+        method: "POST",
+      });
       const trigRes = await triggerSchedule(trigReq, { params: Promise.resolve({ id }) });
       assert.equal(trigRes.status, 200);
       const trigData = await trigRes.json();

@@ -25,7 +25,7 @@ export async function GET() {
     const timeout = setTimeout(() => controller.abort(), 3000);
 
     const headers: Record<string, string> = {
-      Accept: "application/json"
+      Accept: "application/json",
     };
     if (token) {
       headers["X-Control-Token"] = token;
@@ -34,23 +34,27 @@ export async function GET() {
     const res = await fetch(`${supervisorUrl}/control/status`, {
       method: "GET",
       headers,
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
 
     if (!res.ok) {
       // If supervisor doesn't have /control/status (e.g. Strata on 8080), probe /health directly
       try {
-        const healthRes = await fetch(`${supervisorUrl}/health`, { method: "GET" }).catch(() => null);
+        const healthRes = await fetch(`${supervisorUrl}/health`, { method: "GET" }).catch(
+          () => null
+        );
         if (healthRes && healthRes.ok) {
           const healthData = await healthRes.json().catch(() => ({}));
           return NextResponse.json({
             status: healthData.loaded ? "running" : "starting",
             reachable: true,
-            model: healthData.model || "qwen3.8-flash-next-gyro-gyro-s",
-            vram_mb: 16000,
-            uptime_s: 3600,
-            pid: "active"
+            engine: healthData.engine || healthData.backend || "OpenAI-compatible server",
+            backend: healthData.backend ?? null,
+            model: healthData.model ?? null,
+            vram_mb: typeof healthData.vram_mb === "number" ? healthData.vram_mb : null,
+            uptime_s: typeof healthData.uptime_s === "number" ? healthData.uptime_s : null,
+            pid: healthData.pid ?? null,
           });
         }
       } catch {}
@@ -60,7 +64,7 @@ export async function GET() {
         {
           status: "unknown",
           reachable: true,
-          error: `Supervisor returned ${res.status}: ${errorText}`
+          error: `Supervisor returned ${res.status}: ${errorText}`,
         },
         { status: res.status }
       );
@@ -69,16 +73,19 @@ export async function GET() {
     const data = await res.json();
     return NextResponse.json({
       reachable: true,
-      ...data
+      ...data,
+      model: data.model ?? null,
+      vram_mb: typeof data.vram_mb === "number" ? data.vram_mb : null,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({
       status: "stopped",
       reachable: false,
-      error: `Supervisor offline: ${err.message}`,
-      model: "qwen3.8-flash-next-gyro-gyro-s",
-      vram_mb: 16384,
-      uptime_s: 0
+      error: `Supervisor offline: ${err instanceof Error ? err.message : String(err)}`,
+      engine: null,
+      model: null,
+      vram_mb: null,
+      uptime_s: 0,
     });
   }
 }
@@ -87,14 +94,11 @@ export async function POST(req: NextRequest) {
   const supervisorUrl = getSupervisorUrl();
   const token = getSupervisorToken();
 
-  let body: any = {};
+  let body: { action?: string } = {};
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const { action } = body;
@@ -106,7 +110,7 @@ export async function POST(req: NextRequest) {
   }
 
   const headers: Record<string, string> = {
-    Accept: "application/json"
+    Accept: "application/json",
   };
   if (token) {
     headers["X-Control-Token"] = token;
@@ -117,7 +121,7 @@ export async function POST(req: NextRequest) {
       // 1. Stop child
       await fetch(`${supervisorUrl}/control/stop`, {
         method: "POST",
-        headers
+        headers,
       }).catch(() => {});
 
       // 2. Short pause for port/process release
@@ -126,14 +130,14 @@ export async function POST(req: NextRequest) {
       // 3. Start child
       const startRes = await fetch(`${supervisorUrl}/control/start`, {
         method: "POST",
-        headers
+        headers,
       });
       const data = await startRes.json().catch(() => ({}));
       return NextResponse.json({
         success: true,
         action: "restart",
         status: data.status || "starting",
-        message: "Engine restarted successfully."
+        message: "Engine restarted successfully.",
       });
     }
 
@@ -147,7 +151,7 @@ export async function POST(req: NextRequest) {
     const endpoint = action === "start" ? "/control/start" : "/control/stop";
     const res = await fetch(`${supervisorUrl}${endpoint}`, {
       method: "POST",
-      headers
+      headers,
     });
 
     if (!res.ok) {
@@ -155,7 +159,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Supervisor command failed (${res.status}): ${errorText}`
+          error: `Supervisor command failed (${res.status}): ${errorText}`,
         },
         { status: res.status }
       );
@@ -165,13 +169,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       action,
-      status: data.status || (action === "start" ? "starting" : "stopped")
+      status: data.status || (action === "start" ? "starting" : "stopped"),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
       {
         success: false,
-        error: `Could not reach supervisor at ${supervisorUrl}: ${err.message}`
+        error: `Could not reach supervisor at ${supervisorUrl}: ${err instanceof Error ? err.message : String(err)}`,
       },
       { status: 502 }
     );

@@ -5,10 +5,9 @@ import path from "path";
 import {
   MAX_WEB_RESEARCH_CALLS,
   WEB_BUDGET_EXHAUSTED_DIRECTIVE,
-  WEB_RESEARCH_TOOL_NAMES,
   filterToolsForWebBudget,
   canContinueToolLoop,
-  CHAT_CONTEXT_BUDGET_TOKENS
+  CHAT_CONTEXT_BUDGET_TOKENS,
 } from "../lib/contextBudget.js";
 
 describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
@@ -31,7 +30,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
     const sampleTools = [
       { function: { name: "search_web" } },
       { function: { name: "fetch_webpage_markdown" } },
-      { function: { name: "workspace_write_file" } }
+      { function: { name: "workspace_write_file" } },
     ];
 
     // Calls = 3: still available
@@ -53,9 +52,13 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
     const content = fs.readFileSync(routePath, "utf8");
 
     assert.ok(!content.includes("Maximum 3 web research"), "No 'Maximum 3' in route.ts");
-    assert.ok(!content.includes("typically 1-2 searches"), "No 'typically 1-2 searches' near-cap in route.ts");
     assert.ok(
-      content.includes("100 web research calls") || content.includes("${MAX_WEB_RESEARCH_CALLS} web research calls"),
+      !content.includes("typically 1-2 searches"),
+      "No 'typically 1-2 searches' near-cap in route.ts"
+    );
+    assert.ok(
+      content.includes("100 web research calls") ||
+        content.includes("${MAX_WEB_RESEARCH_CALLS} web research calls"),
       "route.ts prompt must reference 100 web research calls"
     );
   });
@@ -71,7 +74,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
         contextTokens: 1000,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_write_file"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       }).canContinue,
       true
     );
@@ -81,7 +84,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
         contextTokens: 1000,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["workspace_write_file"],
-        webResearchCalls: 0
+        webResearchCalls: 0,
       }).canContinue,
       true
     );
@@ -93,7 +96,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
       contextTokens: over,
       budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
       lastRoundTools: ["workspace_write_file"],
-      webResearchCalls: 5
+      webResearchCalls: 5,
     });
     assert.equal(nonResearch.canContinue, false);
     assert.equal(nonResearch.stopReason, "budget");
@@ -103,7 +106,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
       contextTokens: over,
       budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
       lastRoundTools: ["search_web", "workspace_write_file"],
-      webResearchCalls: 5
+      webResearchCalls: 5,
     });
     assert.equal(mixed.canContinue, false);
     assert.equal(mixed.stopReason, "budget");
@@ -115,7 +118,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
         contextTokens: over,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["search_web"],
-        webResearchCalls: 8
+        webResearchCalls: 8,
       }).canContinue,
       true
     );
@@ -125,7 +128,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
         contextTokens: over,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         lastRoundTools: ["fetch_webpage_markdown"],
-        webResearchCalls: 15
+        webResearchCalls: 15,
       }).canContinue,
       true
     );
@@ -136,7 +139,7 @@ describe("Item 2: Web Research Cap 100 per turn & Loop Continuation", () => {
       contextTokens: over,
       budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
       lastRoundTools: ["search_web"],
-      webResearchCalls: MAX_WEB_RESEARCH_CALLS
+      webResearchCalls: MAX_WEB_RESEARCH_CALLS,
     });
     assert.equal(capped.canContinue, false);
     assert.equal(capped.stopReason, "web-research-cap");

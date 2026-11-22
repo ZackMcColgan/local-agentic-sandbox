@@ -30,9 +30,10 @@ export async function GET(req: Request) {
       runnerAvailable: hostStatus.runnerState === "READY",
       reason: hostStatus.reason,
       expectedSha: hostStatus.expectedSha,
-      actualSha: hostStatus.actualSha
+      actualSha: hostStatus.actualSha,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Failed to get host status" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : undefined;
+    return NextResponse.json({ error: message || "Failed to get host status" }, { status: 500 });
   }
 }

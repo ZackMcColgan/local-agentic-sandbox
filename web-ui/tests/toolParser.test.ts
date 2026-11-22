@@ -1,10 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  normalizeMcpUrl,
-  parseToolCallsFromText,
-  cleanResidualToolTags
-} from "../lib/toolParser";
+import { normalizeMcpUrl, parseToolCallsFromText, cleanResidualToolTags } from "../lib/toolParser";
 
 describe("Tool Parser & URL Normalization Suite", () => {
   describe("normalizeMcpUrl", () => {
@@ -89,14 +85,18 @@ describe("Tool Parser & URL Normalization Suite", () => {
     it("extracts raw JSON object tool calls and supports Map for tool check", () => {
       const toolMap = new Map([["search_web", { tier: "browser" }]]);
       const text = `{"name": "search_web", "arguments": {"query": "bulk import jira"}}`;
-      const calls = parseToolCallsFromText(text, toolMap as any);
+      const calls = parseToolCallsFromText(
+        text,
+        toolMap as unknown as Parameters<typeof parseToolCallsFromText>[1]
+      );
       assert.equal(calls.length, 1);
       assert.equal(calls[0].function.name, "search_web");
       assert.equal(calls[0].function.arguments.query, "bulk import jira");
     });
 
     it("returns empty array for plain conversational text", () => {
-      const text = "Sure! Here is the best way to bulk import JIRA stories using CSV import or Jira REST API.";
+      const text =
+        "Sure! Here is the best way to bulk import JIRA stories using CSV import or Jira REST API.";
       const calls = parseToolCallsFromText(text, allowedTools);
       assert.equal(calls.length, 0);
     });

@@ -1,7 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Menu, Rocket, CheckCircle2, AlertCircle, StopCircle, Hammer, Cpu, ArrowRight, FolderGit2, GitBranch, Clock, Loader2 } from "lucide-react";
+import {
+  Menu,
+  Rocket,
+  CheckCircle2,
+  AlertCircle,
+  StopCircle,
+  Hammer,
+  ArrowRight,
+  FolderGit2,
+  GitBranch,
+  Clock,
+  Loader2,
+} from "lucide-react";
 import { TaskManifest } from "@/lib/subagents/types";
 import { LiveRunBlock } from "./LiveRunBlock";
 
@@ -22,7 +34,7 @@ export function BuildsView({
   onStopTask,
   onSelectThread,
   onDeployRun,
-  onNavigateToProjects
+  onNavigateToProjects,
 }: BuildsViewProps) {
   const [internalTasks, setInternalTasks] = useState<TaskManifest[]>([]);
 
@@ -43,11 +55,27 @@ export function BuildsView({
             : Array.isArray(data.threads)
               ? data.threads
               : [];
-        const boardTasks: TaskManifest[] = rawItems.map((t: any) => ({
-          taskId: t.taskId || t.id || t.threadId,
+        interface BoardItemRaw {
+          taskId?: string;
+          id?: string;
+          threadId?: string;
+          title?: string;
+          goal?: string;
+          brief?: string;
+          status?: string;
+          toolchain?: string;
+          branchName?: string;
+          milestones?: TaskManifest["milestones"];
+          createdAt?: string;
+          updatedAt?: string;
+        }
+        const boardTasks: TaskManifest[] = (rawItems as BoardItemRaw[]).map((t) => ({
+          taskId: t.taskId || t.id || t.threadId || "",
           goal: t.title || t.goal || t.brief || "Board Item",
-          status: t.status === "working" ? "active" : t.status || "paused",
-          toolchain: t.toolchain || "node:22",
+          status: (t.status === "working"
+            ? "active"
+            : t.status || "paused") as TaskManifest["status"],
+          toolchain: (t.toolchain || "node:22") as TaskManifest["toolchain"],
           branchName: t.branchName || "main",
           milestones: Array.isArray(t.milestones) ? t.milestones : [],
           currentMilestoneIndex: 0,
@@ -55,7 +83,7 @@ export function BuildsView({
           ambiguityFlags: [],
           journal: [],
           startedAt: t.createdAt || new Date().toISOString(),
-          updatedAt: t.updatedAt || new Date().toISOString()
+          updatedAt: t.updatedAt || new Date().toISOString(),
         }));
         setInternalTasks(boardTasks);
       })
@@ -69,15 +97,24 @@ export function BuildsView({
   const pipelineTask = activeTask || displayedTasks[0] || null;
   const toolchains = [
     { name: "Node.js 22", tag: "node:22", status: "Active", desc: "TypeScript & Web UI toolchain" },
-    { name: "Python 3.11", tag: "python:3.11", status: "Ready", desc: "Scientific & LangGraph engine" },
-    { name: "Go 1.22", tag: "golang:1.22", status: "Ready", desc: "Systems & microservice sandbox" },
-    { name: "Rust 1.77", tag: "rust:1.77", status: "Ready", desc: "Zero-overhead native sandbox" }
+    {
+      name: "Python 3.11",
+      tag: "python:3.11",
+      status: "Ready",
+      desc: "Scientific & LangGraph engine",
+    },
+    {
+      name: "Go 1.22",
+      tag: "golang:1.22",
+      status: "Ready",
+      desc: "Systems & microservice sandbox",
+    },
+    { name: "Rust 1.77", tag: "rust:1.77", status: "Ready", desc: "Zero-overhead native sandbox" },
   ];
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-stone-50 dark:bg-black overflow-y-auto">
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
-        
         {/* Top Header */}
         <div className="bg-white dark:bg-[#0e0e12] rounded-3xl p-4 surface-card border border-stone-200/90 dark:border-white/[0.10] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -127,11 +164,7 @@ export function BuildsView({
             <h2 className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3 px-1">
               Active Build
             </h2>
-            <LiveRunBlock
-              task={activeTask}
-              onStopRun={onStopTask}
-              onDeployRun={onDeployRun}
-            />
+            <LiveRunBlock task={activeTask} onStopRun={onStopTask} onDeployRun={onDeployRun} />
           </div>
         ) : (
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-zinc-800 text-center space-y-2">
@@ -157,13 +190,21 @@ export function BuildsView({
                   <span>Self-Deploy Pipeline (SelfDeployPipeline)</span>
                 </span>
                 {pipelineTask?.testSummary ? (
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    pipelineTask.testSummary.failed === 0
-                      ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                      : "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                  }`}>
-                    {pipelineTask.testSummary.failed === 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
-                    <span>{pipelineTask.testSummary.failed === 0 ? "Gate Passed" : "Gate Failed"}</span>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      pipelineTask.testSummary.failed === 0
+                        ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {pipelineTask.testSummary.failed === 0 ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    )}
+                    <span>
+                      {pipelineTask.testSummary.failed === 0 ? "Gate Passed" : "Gate Failed"}
+                    </span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700">
@@ -174,7 +215,14 @@ export function BuildsView({
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
                 {pipelineTask ? (
                   <span>
-                    Branch <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">{pipelineTask.branchName || "feat/task"}</code> ({pipelineTask.status}) · {pipelineTask.status === "completed" ? "Ready for 1-Click Merge & Rollout" : `Task ${pipelineTask.status} — not ready to deploy`}
+                    Branch{" "}
+                    <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">
+                      {pipelineTask.branchName || "feat/task"}
+                    </code>{" "}
+                    ({pipelineTask.status}) ·{" "}
+                    {pipelineTask.status === "completed"
+                      ? "Ready for 1-Click Merge & Rollout"
+                      : `Task ${pipelineTask.status} — not ready to deploy`}
                   </span>
                 ) : (
                   <span>No active branch undergoing deployment.</span>
@@ -205,23 +253,33 @@ export function BuildsView({
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800 text-center">
             <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/80 border border-slate-100 dark:border-zinc-800/80">
-              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">1. Isolated Branch</div>
-              <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate mt-0.5">{activeTask?.branchName || "None"}</div>
+              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                1. Isolated Branch
+              </div>
+              <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate mt-0.5">
+                {activeTask?.branchName || "None"}
+              </div>
             </div>
             <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/80 border border-slate-100 dark:border-zinc-800/80">
-              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">2. Pre-Deploy Gate</div>
+              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                2. Pre-Deploy Gate
+              </div>
               <div className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {activeTask?.testSummary ? `${activeTask.testSummary.passed} passed` : "Pending"}
               </div>
             </div>
             <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/80 border border-slate-100 dark:border-zinc-800/80">
-              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">3. 1-Click Approval</div>
+              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                3. 1-Click Approval
+              </div>
               <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 mt-0.5">
                 {activeTask?.status === "completed" ? "Ready" : "Owner approval"}
               </div>
             </div>
             <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-850/80 border border-slate-100 dark:border-zinc-800/80">
-              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">4. K8s Health Check</div>
+              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                4. K8s Health Check
+              </div>
               <div className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {activeTask?.deploymentUrl ? "Verified" : "Not deployed"}
               </div>
@@ -256,16 +314,18 @@ export function BuildsView({
                             isPlanning
                               ? "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                               : isActive
-                              ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                              : isCompleted
-                              ? "bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                              : isFailed
-                              ? "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                              : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
+                                ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                : isCompleted
+                                  ? "bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                  : isFailed
+                                    ? "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                    : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
                           }`}
                         >
                           {isPlanning && <Loader2 className="h-3 w-3 animate-spin" />}
-                          {isActive && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                          {isActive && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          )}
                           {isCompleted && <CheckCircle2 className="h-3 w-3" />}
                           {isFailed && <AlertCircle className="h-3 w-3" />}
                           {isParked && <StopCircle className="h-3 w-3" />}
@@ -305,7 +365,8 @@ export function BuildsView({
                         <div className="flex items-center gap-1">
                           <Hammer className="h-3.5 w-3.5 text-slate-400" />
                           <span>
-                            {t.milestones.filter((m) => m.status === "completed").length}/{t.milestones.length} milestones
+                            {t.milestones.filter((m) => m.status === "completed").length}/
+                            {t.milestones.length} milestones
                           </span>
                         </div>
                       )}
@@ -337,14 +398,11 @@ export function BuildsView({
                     {tc.tag}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  {tc.desc}
-                </p>
+                <p className="text-xs text-slate-500 dark:text-zinc-400">{tc.desc}</p>
               </div>
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );

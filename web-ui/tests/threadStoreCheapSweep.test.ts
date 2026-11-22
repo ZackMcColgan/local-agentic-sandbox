@@ -35,7 +35,9 @@ test("A1: sweepStalledThreads with no candidates does not call listThreads or ge
       status: "stopped",
       createdAt: oldIso,
       updatedAt: oldIso,
-      messages: [{ id: "m2", role: "assistant", content: "done", status: "complete", createdAt: oldIso }],
+      messages: [
+        { id: "m2", role: "assistant", content: "done", status: "complete", createdAt: oldIso },
+      ],
     });
 
     const store = new ThreadStore(dir);
@@ -57,7 +59,11 @@ test("A1: sweepStalledThreads with no candidates does not call listThreads or ge
     const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
     assert.equal(acted, 0);
     assert.equal(listCalls, 0, "sweepStalledThreads must not call listThreads");
-    assert.equal(getCalls, 0, "sweepStalledThreads must not call getThread when there are no candidates");
+    assert.equal(
+      getCalls,
+      0,
+      "sweepStalledThreads must not call getThread when there are no candidates"
+    );
   } finally {
     clearTurnActive("t-stale-active");
     fs.rmSync(dir, { recursive: true, force: true });
@@ -85,7 +91,13 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
       updatedAt: staleIso,
       messages: [
         { id: "m1", role: "user", content: "run", createdAt: staleIso },
-        { id: "m2", role: "assistant", content: "working...", status: "streaming", createdAt: staleIso },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "working...",
+          status: "streaming",
+          createdAt: staleIso,
+        },
       ],
     });
 
@@ -136,7 +148,13 @@ test("A3: message-level streaming on a non-active thread is still detected and e
       updatedAt: staleIso,
       messages: [
         { id: "m1", role: "user", content: "hello", createdAt: staleIso },
-        { id: "m2", role: "assistant", content: "partial...", status: "streaming", createdAt: staleIso },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "partial...",
+          status: "streaming",
+          createdAt: staleIso,
+        },
       ],
     });
 
@@ -198,7 +216,7 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
         startedAt: nowIso,
         updatedAt: nowIso,
       }),
-      "utf8",
+      "utf8"
     );
 
     ThreadStore.prototype.listThreads = async () => {
@@ -295,7 +313,7 @@ test("A4b: mergeThreadsIntoBoard dedupes ghost when stored thread carries matchi
         startedAt: nowIso,
         updatedAt: nowIso,
       }),
-      "utf8",
+      "utf8"
     );
 
     const merged = await mergeThreadsIntoBoard([]);
@@ -372,7 +390,9 @@ test("A5: listThreadSummaries(query) matches title, preview, and body without ca
       status: "completed",
       createdAt: t2,
       updatedAt: t2,
-      messages: [{ id: "m1", role: "assistant", content: "last message has needle here", createdAt: t2 }],
+      messages: [
+        { id: "m1", role: "assistant", content: "last message has needle here", createdAt: t2 },
+      ],
     });
     writeThreadFile(dir, {
       id: "t-body",
@@ -405,7 +425,7 @@ test("A5: listThreadSummaries(query) matches title, preview, and body without ca
     assert.equal(listCalls, 0, "listThreadSummaries(query) must not call listThreads");
     assert.deepEqual(
       results.map((r) => r.id),
-      ["t-title", "t-preview", "t-body"],
+      ["t-title", "t-preview", "t-body"]
     );
     assert.equal(results[0].matchSnippet, undefined);
     assert.equal(results[1].matchSnippet, "last message has needle here");
@@ -429,7 +449,15 @@ test("A6: sweepStalledThreads does not block the event loop (>1000ms) on large s
         status: "completed",
         createdAt: oldIso,
         updatedAt: oldIso,
-        messages: [{ id: "m1", role: "assistant", content: bigContent, status: "complete", createdAt: oldIso }],
+        messages: [
+          {
+            id: "m1",
+            role: "assistant",
+            content: bigContent,
+            status: "complete",
+            createdAt: oldIso,
+          },
+        ],
       });
     }
 
@@ -477,7 +505,13 @@ test("A7: auto-resume for stale streaming JOB thread is preserved", async () => 
       updatedAt: staleIso,
       messages: [
         { id: "m1", role: "user", content: "do job", createdAt: staleIso },
-        { id: "m2", role: "assistant", content: "working...", status: "streaming", createdAt: staleIso },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "working...",
+          status: "streaming",
+          createdAt: staleIso,
+        },
       ],
     });
 
@@ -538,12 +572,16 @@ test("A8: supervisor sweep is a process-wide singleton across multiple ThreadSto
     assert.equal(
       setIntervalCalls,
       1,
-      `expected exactly 1 setInterval call across ${stores.length} ThreadStore constructions, got ${setIntervalCalls}`,
+      `expected exactly 1 setInterval call across ${stores.length} ThreadStore constructions, got ${setIntervalCalls}`
     );
 
     // Stopping via any instance clears the shared timer so a later construction can restart it.
     stores[stores.length - 1].stopSupervisorSweep();
-    assert.equal(clearIntervalCalls, 1, "expected stopSupervisorSweep to clear the shared interval once");
+    assert.equal(
+      clearIntervalCalls,
+      1,
+      "expected stopSupervisorSweep to clear the shared interval once"
+    );
 
     // Calling stopSupervisorSweep again is a no-op.
     stores[0].stopSupervisorSweep();
@@ -551,7 +589,11 @@ test("A8: supervisor sweep is a process-wide singleton across multiple ThreadSto
 
     // A subsequent construction restarts the singleton sweep.
     const restarted = new ThreadStore(dir);
-    assert.equal(setIntervalCalls, 2, "expected construction after stop to restart the singleton sweep");
+    assert.equal(
+      setIntervalCalls,
+      2,
+      "expected construction after stop to restart the singleton sweep"
+    );
     restarted.stopSupervisorSweep();
   } finally {
     globalThis.setInterval = origSetInterval;
@@ -559,6 +601,39 @@ test("A8: supervisor sweep is a process-wide singleton across multiple ThreadSto
     for (const t of createdTimers) {
       origClearInterval(t);
     }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("A9: createThread persists isSubagent and isScheduled when provided and omits them when absent", async () => {
+  const dir = makeTempDir("thread-flags-");
+  try {
+    const store = new ThreadStore(dir);
+    store.stopSupervisorSweep();
+
+    const subagent = store.createThread({
+      title: "Subagent Thread",
+      isSubagent: true,
+      isScheduled: false,
+    });
+    const scheduled = store.createThread({ title: "Scheduled Thread", isScheduled: true });
+    const plain = store.createThread({ title: "Plain Thread" });
+
+    const reloadedSubagent = await store.getThread(subagent.id);
+    assert.ok(reloadedSubagent);
+    assert.equal(reloadedSubagent.isSubagent, true);
+    assert.equal(reloadedSubagent.isScheduled, false);
+
+    const reloadedScheduled = await store.getThread(scheduled.id);
+    assert.ok(reloadedScheduled);
+    assert.equal(reloadedScheduled.isScheduled, true);
+    assert.equal("isSubagent" in reloadedScheduled, false);
+
+    const reloadedPlain = await store.getThread(plain.id);
+    assert.ok(reloadedPlain);
+    assert.equal("isSubagent" in reloadedPlain, false);
+    assert.equal("isScheduled" in reloadedPlain, false);
+  } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

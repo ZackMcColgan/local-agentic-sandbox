@@ -39,7 +39,9 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
     fs.writeFileSync(yamlPath, "key: value", "utf8");
 
     try {
-      const resPy = await GET(new NextRequest("http://localhost:3000/api/files?path=test-script.py"));
+      const resPy = await GET(
+        new NextRequest("http://localhost:3000/api/files?path=test-script.py")
+      );
       assert.equal(resPy.status, 200);
       assert.ok(resPy.headers.get("content-type")?.includes("text/plain"));
       const bodyPy = await resPy.text();
@@ -49,7 +51,9 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
       assert.equal(resTs.status, 200);
       assert.ok(resTs.headers.get("content-type")?.includes("text/plain"));
 
-      const resYaml = await GET(new NextRequest("http://localhost:3000/api/files?path=test-config.yaml"));
+      const resYaml = await GET(
+        new NextRequest("http://localhost:3000/api/files?path=test-config.yaml")
+      );
       assert.equal(resYaml.status, 200);
       assert.ok(resYaml.headers.get("content-type")?.includes("text/plain"));
     } finally {
@@ -92,7 +96,11 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
         const req = new NextRequest("http://localhost:3000/api/files?path=viewer.html");
         const res = await GET(req);
         assert.equal(res.status, 200);
-        assert.equal(res.headers.get("content-disposition"), null, "Content-Disposition must be omitted without download=1");
+        assert.equal(
+          res.headers.get("content-disposition"),
+          null,
+          "Content-Disposition must be omitted without download=1"
+        );
       } finally {
         if (fs.existsSync(htmlPath)) fs.unlinkSync(htmlPath);
       }
@@ -103,7 +111,9 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
       fs.writeFileSync(specialPath, "# Résumé\n", "utf8");
 
       try {
-        const req = new NextRequest("http://localhost:3000/api/files?path=report-2026-r%C3%A9sum%C3%A9.md&download=1");
+        const req = new NextRequest(
+          "http://localhost:3000/api/files?path=report-2026-r%C3%A9sum%C3%A9.md&download=1"
+        );
         const res = await GET(req);
         assert.equal(res.status, 200);
         const disposition = res.headers.get("content-disposition");
@@ -119,7 +129,9 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
     });
 
     it("preserves traversal rejection (HTTP 403) with download=1", async () => {
-      const req = new NextRequest("http://localhost:3000/api/files?path=../../etc/shadow&download=1");
+      const req = new NextRequest(
+        "http://localhost:3000/api/files?path=../../etc/shadow&download=1"
+      );
       const res = await GET(req);
       assert.equal(res.status, 403);
     });
@@ -150,7 +162,9 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
         fs.writeFileSync(path.join(filesDir, "game.html"), htmlContent, "utf8");
 
         // 1. GET with download=1
-        const req1 = new NextRequest(`http://localhost:3000/api/files?path=${threadId}/files/game.html&download=1`);
+        const req1 = new NextRequest(
+          `http://localhost:3000/api/files?path=${threadId}/files/game.html&download=1`
+        );
         const res1 = await GET(req1);
         assert.equal(res1.status, 200);
         assert.equal(res1.headers.get("content-type"), "text/html; charset=utf-8");
@@ -162,16 +176,24 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
         assert.equal(body1, htmlContent);
 
         // 2. GET without download=1
-        const req2 = new NextRequest(`http://localhost:3000/api/files?path=${threadId}/files/game.html`);
+        const req2 = new NextRequest(
+          `http://localhost:3000/api/files?path=${threadId}/files/game.html`
+        );
         const res2 = await GET(req2);
         assert.equal(res2.status, 200);
         assert.equal(res2.headers.get("content-type"), "text/html; charset=utf-8");
-        assert.equal(res2.headers.get("content-disposition"), null, "Content-Disposition must be omitted without download=1");
+        assert.equal(
+          res2.headers.get("content-disposition"),
+          null,
+          "Content-Disposition must be omitted without download=1"
+        );
         const body2 = await res2.text();
         assert.equal(body2, htmlContent);
 
         // 3. GET with .agent/threads/ prefix
-        const req3 = new NextRequest(`http://localhost:3000/api/files?path=.agent/threads/${threadId}/files/game.html&download=1`);
+        const req3 = new NextRequest(
+          `http://localhost:3000/api/files?path=.agent/threads/${threadId}/files/game.html&download=1`
+        );
         const res3 = await GET(req3);
         assert.equal(res3.status, 200);
         assert.equal(res3.headers.get("content-type"), "text/html; charset=utf-8");
@@ -194,18 +216,20 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
     it("adds Content-Disposition: attachment; filename=... on MCP-proxy fallback download", async () => {
       const origFetch = global.fetch;
       try {
-        global.fetch = (async (url: any, options: any) => {
+        global.fetch = (async (url: string | URL | Request) => {
           if (String(url).includes("remote-report.md")) {
             const content = Buffer.from("# Remote Report\nAll systems operational.");
             return new Response(content, {
               status: 200,
-              headers: { "Content-Type": "text/markdown; charset=utf-8" }
+              headers: { "Content-Type": "text/markdown; charset=utf-8" },
             });
           }
           return new Response("Not found", { status: 404 });
-        }) as any;
+        }) as typeof fetch;
 
-        const req = new NextRequest("http://localhost:3000/api/files?path=remote-report.md&download=1");
+        const req = new NextRequest(
+          "http://localhost:3000/api/files?path=remote-report.md&download=1"
+        );
         const res = await GET(req);
         assert.equal(res.status, 200);
         const disposition = res.headers.get("content-disposition");

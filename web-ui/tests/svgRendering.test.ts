@@ -2,10 +2,7 @@ import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
-import {
-  checkDrawio,
-  logServiceMode
-} from "./helpers/serviceMocks.js";
+import { checkDrawio, logServiceMode } from "./helpers/serviceMocks.js";
 import {
   isSvgCode,
   isDrawioXml,
@@ -13,7 +10,7 @@ import {
   sanitizeSvg,
   wrapRawSvgInMarkdown,
   isSvgFilePath,
-  resolveSvgUrl
+  resolveSvgUrl,
 } from "../lib/svgUtils.js";
 
 describe("SVG Rendering & Sanitization Suite", () => {
@@ -25,7 +22,13 @@ describe("SVG Rendering & Sanitization Suite", () => {
     assert.equal(isSvgCode("<svg></svg>", "svg"), true);
     assert.equal(isSvgCode("<svg viewBox='0 0 100 100'><circle r='10'/></svg>", "xml"), true);
     assert.equal(isSvgCode("<?xml version='1.0'?><svg viewBox='0 0 100 100'></svg>", "bash"), true);
-    assert.equal(isSvgCode("<mxfile host='app.diagrams.net'><diagram><mxGraphModel></mxGraphModel></diagram></mxfile>", "xml"), true);
+    assert.equal(
+      isSvgCode(
+        "<mxfile host='app.diagrams.net'><diagram><mxGraphModel></mxGraphModel></diagram></mxfile>",
+        "xml"
+      ),
+      true
+    );
     assert.equal(isSvgCode("<mxGraphModel><root><mxCell id='0'/></root></mxGraphModel>", ""), true);
     assert.equal(isSvgCode("function test() { return 42; }", "javascript"), false);
     assert.equal(isSvgCode("echo 'hello'", "bash"), false);
@@ -67,18 +70,56 @@ describe("SVG Rendering & Sanitization Suite", () => {
 </html>`;
 
   it("1. Complete HTML document containing an inline SVG is NOT classified as SVG (isSvgCode is false)", () => {
-    assert.equal(isSvgCode(sampleWeatherHtml), false, "Full HTML document with no language must NOT be classified as SVG");
-    assert.equal(isSvgCode(sampleWeatherHtml, "html"), false, "Full HTML document with lang='html' must NOT be classified as SVG");
-    assert.equal(isSvgCode(sampleWeatherHtml, ""), false, "Full HTML document with lang='' must NOT be classified as SVG");
-    assert.equal(isSvgCode(sampleWeatherHtml, "xml"), false, "Full HTML document with lang='xml' must NOT be classified as SVG");
-    assert.equal(isSvgCode("<html><body><svg><rect/></svg></body></html>", "html"), false, "<html> tag starting doc must not be SVG");
+    assert.equal(
+      isSvgCode(sampleWeatherHtml),
+      false,
+      "Full HTML document with no language must NOT be classified as SVG"
+    );
+    assert.equal(
+      isSvgCode(sampleWeatherHtml, "html"),
+      false,
+      "Full HTML document with lang='html' must NOT be classified as SVG"
+    );
+    assert.equal(
+      isSvgCode(sampleWeatherHtml, ""),
+      false,
+      "Full HTML document with lang='' must NOT be classified as SVG"
+    );
+    assert.equal(
+      isSvgCode(sampleWeatherHtml, "xml"),
+      false,
+      "Full HTML document with lang='xml' must NOT be classified as SVG"
+    );
+    assert.equal(
+      isSvgCode("<html><body><svg><rect/></svg></body></html>", "html"),
+      false,
+      "<html> tag starting doc must not be SVG"
+    );
   });
 
   it("2. Bare SVG, <?xml ...?> prolog SVG, and Drawio <mxfile> documents ARE classified as SVG", () => {
-    assert.equal(isSvgCode("<svg viewBox='0 0 100 100'><circle r='10'/></svg>"), true, "Bare <svg> must be true");
-    assert.equal(isSvgCode("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg viewBox='0 0 100 100'></svg>"), true, "XML prolog followed by <svg> must be true");
-    assert.equal(isSvgCode("<mxfile host='app.diagrams.net'><diagram><mxGraphModel></mxGraphModel></diagram></mxfile>"), true, "Drawio <mxfile> must be true");
-    assert.equal(isSvgCode("<mxGraphModel><root><mxCell id='0'/></root></mxGraphModel>"), true, "Drawio <mxGraphModel> must be true");
+    assert.equal(
+      isSvgCode("<svg viewBox='0 0 100 100'><circle r='10'/></svg>"),
+      true,
+      "Bare <svg> must be true"
+    );
+    assert.equal(
+      isSvgCode('<?xml version="1.0" encoding="UTF-8"?>\n<svg viewBox=\'0 0 100 100\'></svg>'),
+      true,
+      "XML prolog followed by <svg> must be true"
+    );
+    assert.equal(
+      isSvgCode(
+        "<mxfile host='app.diagrams.net'><diagram><mxGraphModel></mxGraphModel></diagram></mxfile>"
+      ),
+      true,
+      "Drawio <mxfile> must be true"
+    );
+    assert.equal(
+      isSvgCode("<mxGraphModel><root><mxCell id='0'/></root></mxGraphModel>"),
+      true,
+      "Drawio <mxGraphModel> must be true"
+    );
   });
 
   it("detects Draw.io XML diagrams with isDrawioXml", () => {
@@ -115,7 +156,10 @@ describe("SVG Rendering & Sanitization Suite", () => {
     assert.ok(convertedSvg.includes("Web Tier"), "Must render Web Tier label");
     assert.ok(convertedSvg.includes("Database Tier"), "Must render Database Tier label");
     assert.ok(convertedSvg.includes("SQL Query"), "Must render edge label");
-    assert.ok(convertedSvg.includes("rect") || convertedSvg.includes("path"), "Must render shape elements");
+    assert.ok(
+      convertedSvg.includes("rect") || convertedSvg.includes("path"),
+      "Must render shape elements"
+    );
   });
 
   it("sanitizeSvg converts Draw.io XML to clean SVG and strips malicious attributes", () => {
@@ -138,7 +182,6 @@ describe("SVG Rendering & Sanitization Suite", () => {
     assert.ok(sanitized.includes("Safe Node"), "Preserves diagram node text");
     assert.equal(sanitized.includes("<mxfile"), false, "Must replace mxfile with svg");
   });
-
 
   it("sanitizes adversarial SVG attacks with DOMPurify: script variants, event handlers, javascript/data URIs, foreignObject, animate onbegin, encoded entities", () => {
     // 1. Script tag variants (inline and external)
@@ -163,7 +206,11 @@ describe("SVG Rendering & Sanitization Suite", () => {
     const urlsSvg = `<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><text>Click</text></a><a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="><text>Data</text></a><image href="javascript:alert(2)"/></svg>`;
     const urlsCleaned = sanitizeSvg(urlsSvg);
     assert.equal(urlsCleaned.includes("javascript:"), false, "Must neutralize javascript: href");
-    assert.equal(urlsCleaned.includes("data:text/html"), false, "Must neutralize data:text/html href");
+    assert.equal(
+      urlsCleaned.includes("data:text/html"),
+      false,
+      "Must neutralize data:text/html href"
+    );
 
     // 4. <foreignObject> embedding HTML/iframe/script
     const foreignObjectSvg = `<svg xmlns="http://www.w3.org/2000/svg"><foreignObject width="100" height="50"><body xmlns="http://www.w3.org/1999/xhtml"><iframe src="http://evil.com"></iframe><script>steal()</script></body></foreignObject><rect width="50" height="50"/></svg>`;
@@ -180,7 +227,11 @@ describe("SVG Rendering & Sanitization Suite", () => {
     // 6. Encoded entity bypasses (e.g. jav&#x09;ascript: and &Tab;)
     const encodedSvg = `<svg xmlns="http://www.w3.org/2000/svg"><a href="jav&#x09;ascript:alert(1)"><circle r="10"/></a></svg>`;
     const encodedCleaned = sanitizeSvg(encodedSvg);
-    assert.equal(encodedCleaned.includes("javascript:"), false, "Must neutralize encoded javascript entity href");
+    assert.equal(
+      encodedCleaned.includes("javascript:"),
+      false,
+      "Must neutralize encoded javascript entity href"
+    );
   });
 
   it("preserves a legitimate 30-cell architecture diagram intact across sanitization", () => {
@@ -207,7 +258,7 @@ describe("SVG Rendering & Sanitization Suite", () => {
       "Browser MCP",
       "Strata inference engine",
       "Host bridge",
-      "Host OS"
+      "Host OS",
     ];
 
     if (drawioContent.includes("builder-tier")) {
@@ -227,7 +278,10 @@ describe("SVG Rendering & Sanitization Suite", () => {
     }
 
     // 4. Verify shape elements survived
-    assert.ok(sanitized.includes("<rect") || sanitized.includes("<path"), "Must preserve vector shapes");
+    assert.ok(
+      sanitized.includes("<rect") || sanitized.includes("<path"),
+      "Must preserve vector shapes"
+    );
     assert.ok(sanitized.includes("<defs>"), "Must preserve defs");
   });
 
@@ -239,10 +293,7 @@ describe("SVG Rendering & Sanitization Suite", () => {
     const drawioContent = fs.readFileSync(archPath, "utf-8");
     const converted = convertDrawioToSvg(drawioContent);
     assert.ok(converted.includes("viewBox="), "Must compute viewBox");
-    assert.ok(
-      converted.includes("Web UI / orchestrator"),
-      "Must contain major pod label"
-    );
+    assert.ok(converted.includes("Web UI / orchestrator"), "Must contain major pod label");
 
     // 2. Encoded entities (&lt;mxfile ... &lt;mxGraphModel)
     const encodedXml = `&lt;mxfile host="app.diagrams.net"&gt;&lt;diagram&gt;&lt;mxGraphModel&gt;&lt;root&gt;&lt;mxCell id="0"/&gt;&lt;mxCell id="1" parent="0"/&gt;&lt;mxCell id="c1" value="Encoded Box" vertex="1" parent="1"&gt;&lt;mxGeometry x="10" y="10" width="100" height="50" as="geometry"/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;&lt;/diagram&gt;&lt;/mxfile&gt;`;
@@ -253,8 +304,8 @@ describe("SVG Rendering & Sanitization Suite", () => {
     // 3. Malformed / empty input: must return empty string, never throw
     assert.equal(convertDrawioToSvg(""), "");
     assert.equal(convertDrawioToSvg("   "), "");
-    assert.equal(convertDrawioToSvg(null as any), "");
-    assert.equal(convertDrawioToSvg(undefined as any), "");
+    assert.equal(convertDrawioToSvg(null as unknown as string), "");
+    assert.equal(convertDrawioToSvg(undefined as unknown as string), "");
     assert.equal(convertDrawioToSvg("<invalid><xml></broken>"), "");
     assert.equal(convertDrawioToSvg("this is plain text"), "");
   });
@@ -287,10 +338,7 @@ Hope this helps!`;
       resolveSvgUrl("docs/architecture.drawio.svg"),
       "/api/files?path=docs%2Farchitecture.drawio.svg"
     );
-    assert.equal(
-      resolveSvgUrl("https://example.com/logo.svg"),
-      "https://example.com/logo.svg"
-    );
+    assert.equal(resolveSvgUrl("https://example.com/logo.svg"), "https://example.com/logo.svg");
     assert.equal(
       resolveSvgUrl("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="),
       "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
@@ -302,7 +350,9 @@ Hope this helps!`;
     const { NextRequest } = await import("next/server");
 
     // 1. Successful SVG fetch
-    const validReq = new NextRequest("http://localhost:3000/api/files?path=docs/architecture.drawio.svg");
+    const validReq = new NextRequest(
+      "http://localhost:3000/api/files?path=docs/architecture.drawio.svg"
+    );
     const res = await GET(validReq);
     assert.equal(res.status, 200);
     assert.ok(res.headers.get("Content-Type")?.includes("image/svg+xml"));
@@ -310,7 +360,9 @@ Hope this helps!`;
     assert.ok(body.includes("<svg"), "Must return SVG markup");
 
     // 2. Successful Draw.io XML fetch
-    const drawioReq = new NextRequest("http://localhost:3000/api/files?path=docs/architecture.drawio");
+    const drawioReq = new NextRequest(
+      "http://localhost:3000/api/files?path=docs/architecture.drawio"
+    );
     const drawioRes = await GET(drawioReq);
     assert.equal(drawioRes.status, 200);
     assert.ok(drawioRes.headers.get("Content-Type")?.includes("xml"));
@@ -318,7 +370,11 @@ Hope this helps!`;
     // 3. Strict content-type enforcement: Non-allowlisted file returns 415 Unsupported Media Type
     const nonSvgReq = new NextRequest("http://localhost:3000/api/files?path=deploy.sh");
     const nonSvgRes = await GET(nonSvgReq);
-    assert.equal(nonSvgRes.status, 415, "Non-allowlisted file must return 415 Unsupported Media Type");
+    assert.equal(
+      nonSvgRes.status,
+      415,
+      "Non-allowlisted file must return 415 Unsupported Media Type"
+    );
 
     // 4. Directory listing forbidden: requesting a directory returns 403 Forbidden
     const dirReq = new NextRequest("http://localhost:3000/api/files?path=docs");
@@ -326,12 +382,16 @@ Hope this helps!`;
     assert.equal(dirRes.status, 403, "Directory path must return 403 Forbidden");
 
     // 5. Path traversal attack rejected with 403 Forbidden
-    const traversalReq = new NextRequest("http://localhost:3000/api/files?path=../../../../etc/passwd");
+    const traversalReq = new NextRequest(
+      "http://localhost:3000/api/files?path=../../../../etc/passwd"
+    );
     const traversalRes = await GET(traversalReq);
     assert.equal(traversalRes.status, 403, "Path traversal must return 403 Forbidden");
 
     // 6. Nonexistent SVG returns 404
-    const notFoundReq = new NextRequest("http://localhost:3000/api/files?path=docs/does-not-exist.svg");
+    const notFoundReq = new NextRequest(
+      "http://localhost:3000/api/files?path=docs/does-not-exist.svg"
+    );
     const notFoundRes = await GET(notFoundReq);
     assert.equal(notFoundRes.status, 404, "Missing file must return 404 Not Found");
   });
@@ -348,13 +408,16 @@ Hope this helps!`;
           tool: "workspace_write_file",
           args: {
             path: "two_tier_architecture.svg",
-            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#10b981"/></svg>'
+            content:
+              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#10b981"/></svg>',
           },
           result: {
-            content: [{ type: "text", text: '{"status":"SUCCESS","path":"two_tier_architecture.svg"}' }]
-          }
-        }
-      ]
+            content: [
+              { type: "text", text: '{"status":"SUCCESS","path":"two_tier_architecture.svg"}' },
+            ],
+          },
+        },
+      ],
     };
 
     const svgs1 = extractSvgsFromMessage(msgWithWrite);
@@ -372,17 +435,20 @@ Hope this helps!`;
           tool: "workspace_read_file",
           args: { path: "docs/existing.svg" },
           result: {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                status: "SUCCESS",
-                path: "docs/existing.svg",
-                content: "1 | <svg viewBox=\"0 0 50 50\">\n2 |   <circle r=\"20\" fill=\"red\"/>\n3 | </svg>"
-              })
-            }]
-          }
-        }
-      ]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  status: "SUCCESS",
+                  path: "docs/existing.svg",
+                  content:
+                    '1 | <svg viewBox="0 0 50 50">\n2 |   <circle r="20" fill="red"/>\n3 | </svg>',
+                }),
+              },
+            ],
+          },
+        },
+      ],
     };
 
     const svgs2 = extractSvgsFromMessage(msgWithRead);
@@ -394,16 +460,17 @@ Hope this helps!`;
     // Case 3: Deduplication if content already has the same SVG code inline
     const msgDuplicate = {
       id: "msg-duplicate",
-      content: 'Here is the diagram: ```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect/></svg>\n```',
+      content:
+        'Here is the diagram: ```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect/></svg>\n```',
       traces: [
         {
           tool: "workspace_write_file",
           args: {
             path: "dup.svg",
-            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect/></svg>'
-          }
-        }
-      ]
+            content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect/></svg>',
+          },
+        },
+      ],
     };
 
     const svgs3 = extractSvgsFromMessage(msgDuplicate);
@@ -418,18 +485,22 @@ Hope this helps!`;
           tool: "workspace_write_file",
           args: {
             path: "spanish-fort-weather.html",
-            content: sampleWeatherHtml
+            content: sampleWeatherHtml,
           },
           result: {
-            content: [{ type: "text", text: '{"status":"SUCCESS","path":"spanish-fort-weather.html"}' }]
-          }
-        }
-      ]
+            content: [
+              { type: "text", text: '{"status":"SUCCESS","path":"spanish-fort-weather.html"}' },
+            ],
+          },
+        },
+      ],
     };
 
     const htmlSvgs = extractSvgsFromMessage(msgWithHtmlDeliverable);
-    assert.equal(htmlSvgs.length, 0, "HTML document deliverable with inline SVG must NOT produce an extracted SVG diagram");
+    assert.equal(
+      htmlSvgs.length,
+      0,
+      "HTML document deliverable with inline SVG must NOT produce an extracted SVG diagram"
+    );
   });
 });
-
-

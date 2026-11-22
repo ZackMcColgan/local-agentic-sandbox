@@ -3,10 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import {
-  BoardOrchestrator,
-  type JobExecutionOutcome,
-} from "../lib/board/boardOrchestrator";
+import { BoardOrchestrator, type JobExecutionOutcome } from "../lib/board/boardOrchestrator";
 import type { DispatcherBoardItem } from "../lib/board/dispatcher";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import {
@@ -310,9 +307,7 @@ test("getMechanicalInput assembles diff, allowlist, commit subjects, and branch 
     prNumber: 180,
     headSha: "abc1234",
   });
-  assert.deepEqual(resultWithAllowlist.allowlist, [
-    "web-ui/lib/board/productionStageDeps.ts",
-  ]);
+  assert.deepEqual(resultWithAllowlist.allowlist, ["web-ui/lib/board/productionStageDeps.ts"]);
 });
 
 test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on timeout or unparseable output", async () => {
@@ -352,6 +347,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
     const deps = createProductionStageDeps({
       executeHostTool: noopBridge,
       threadStore: wrappedStore,
+      dispatchChatTurn: async () => ({ ok: true, status: 200 }),
       reviewerPollIntervalMs: 1,
       reviewerTimeoutMs: 500,
     });
@@ -375,10 +371,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
         t.messages.push({
           id: "msg-a-2",
           role: "assistant",
-          content: [
-            "VERDICT: FAIL",
-            "- Missing error handling on bridge disconnect.",
-          ].join("\n"),
+          content: ["VERDICT: FAIL", "- Missing error handling on bridge disconnect."].join("\n"),
           timestamp: new Date().toISOString(),
         });
         return t;
@@ -389,6 +382,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
     const deps = createProductionStageDeps({
       executeHostTool: noopBridge,
       threadStore: wrappedStore,
+      dispatchChatTurn: async () => ({ ok: true, status: 200 }),
       reviewerPollIntervalMs: 1,
       reviewerTimeoutMs: 500,
     });
@@ -422,6 +416,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
     const deps = createProductionStageDeps({
       executeHostTool: noopBridge,
       threadStore: wrappedStore,
+      dispatchChatTurn: async () => ({ ok: true, status: 200 }),
       reviewerPollIntervalMs: 1,
       reviewerTimeoutMs: 500,
     });
@@ -440,6 +435,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
     const deps = createProductionStageDeps({
       executeHostTool: noopBridge,
       threadStore: store,
+      dispatchChatTurn: async () => ({ ok: true, status: 200 }),
       reviewerPollIntervalMs: 5,
       reviewerTimeoutMs: 20,
     });
@@ -451,6 +447,49 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
     assert.equal(res.verdict, "FAIL");
     assert.ok(res.evidence.some((e) => /timed out/i.test(e)));
   }
+});
+
+test("issueReviewerThread dispatches the reviewer brief for execution and parses verdict from returned content", async () => {
+  const noopBridge: HostBridgeExecutor = async () => ({
+    ok: true,
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+  });
+
+  const { store, threads } = makeStubThreadStore();
+  const dispatched: Array<{ threadId: string; brief: string }> = [];
+
+  const deps = createProductionStageDeps({
+    executeHostTool: noopBridge,
+    threadStore: store,
+    dispatchChatTurn: async ({ threadId, brief }) => {
+      dispatched.push({ threadId, brief });
+      const record = threads.get(threadId);
+      assert.ok(record, "thread must exist before chat dispatch");
+      record.status = "completed";
+      record.messages.push({
+        id: "msg-dispatched-1",
+        role: "assistant",
+        content: ["VERDICT: PASS", "- Dispatched reviewer turn verified the diff."].join("\n"),
+        timestamp: new Date().toISOString(),
+      });
+      return { ok: true, status: 200 };
+    },
+    reviewerPollIntervalMs: 1,
+    reviewerTimeoutMs: 500,
+  });
+
+  const res = await deps.reviewerGate.issueReviewerThread({
+    itemId: "item-exec-1",
+    brief: "Adversarial review brief for PR #42",
+  });
+
+  assert.equal(dispatched.length, 1, "dispatchChatTurn must be invoked once");
+  assert.equal(dispatched[0].threadId, res.threadId);
+  assert.equal(dispatched[0].brief, "Adversarial review brief for PR #42");
+  assert.equal(res.verdict, "PASS");
+  assert.ok(res.evidence.some((e) => e.includes("Dispatched reviewer turn verified the diff.")));
 });
 
 test("shadow guarantee: with stage flags OFF, drain with production deps never calls deploy-cluster or set image and never authorizes a merge", async () => {
@@ -526,7 +565,9 @@ test("shadow guarantee: with stage flags OFF, drain with production deps never c
             {
               status: {
                 phase: "Running",
-                containerStatuses: [{ restartCount: 0, image: "local-agentic-sandbox-web-ui:v-prev" }],
+                containerStatuses: [
+                  { restartCount: 0, image: "local-agentic-sandbox-web-ui:v-prev" },
+                ],
               },
             },
           ],
@@ -559,6 +600,7 @@ test("shadow guarantee: with stage flags OFF, drain with production deps never c
   const stageDeps = createProductionStageDeps({
     executeHostTool: bridge,
     threadStore: autoCompletingStore,
+    dispatchChatTurn: async () => ({ ok: true, status: 200 }),
     reviewerPollIntervalMs: 1,
     reviewerTimeoutMs: 500,
   });

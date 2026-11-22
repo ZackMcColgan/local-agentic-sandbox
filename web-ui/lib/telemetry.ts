@@ -1,4 +1,3 @@
-import { trace, context, SpanStatusCode } from "@opentelemetry/api";
 import crypto from "crypto";
 
 export interface AgentSpan {
@@ -6,12 +5,19 @@ export interface AgentSpan {
   parentSpanId?: string;
   traceId: string;
   sessionId: string;
-  name: "agent.turn" | "router.triage" | "model.reasoning" | "mcp.tool_call" | "sandbox.bash_exec" | "model.synthesis" | string;
+  name:
+    | "agent.turn"
+    | "router.triage"
+    | "model.reasoning"
+    | "mcp.tool_call"
+    | "sandbox.bash_exec"
+    | "model.synthesis"
+    | string;
   startTime: number;
   endTime?: number;
   durationMs?: number;
   status: "ok" | "error";
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
 }
 
 export interface TraceSession {
@@ -61,7 +67,7 @@ export class TelemetryTracer {
         sessionId: this.sessionId,
         traceId: this.traceId,
         spans: [],
-        startTime: Date.now()
+        startTime: Date.now(),
       });
     }
   }
@@ -85,10 +91,10 @@ export class TelemetryTracer {
   public getSpanHierarchy(): Array<{ spanId: string; parentSpanId?: string; name: string }> {
     const session = traceStore.get(this.sessionId);
     if (!session) return [];
-    return session.spans.map(s => ({
+    return session.spans.map((s) => ({
       spanId: s.spanId,
       parentSpanId: s.parentSpanId,
-      name: s.name
+      name: s.name,
     }));
   }
 
@@ -98,10 +104,18 @@ export class TelemetryTracer {
   public startSpan(
     name: AgentSpan["name"],
     parentSpanId?: string,
-    attributes: Record<string, any> = {}
-  ): { spanId: string; end: (status?: "ok" | "error", extraAttrs?: Record<string, any>) => AgentSpan } {
+    attributes: Record<string, unknown> = {}
+  ): {
+    spanId: string;
+    end: (status?: "ok" | "error", extraAttrs?: Record<string, unknown>) => AgentSpan;
+  } {
     const spanId = name === "agent.turn" ? this.rootSpanId : generateHex(8);
-    const effectiveParent = parentSpanId !== undefined ? parentSpanId : (name === "agent.turn" ? undefined : this.rootSpanId);
+    const effectiveParent =
+      parentSpanId !== undefined
+        ? parentSpanId
+        : name === "agent.turn"
+          ? undefined
+          : this.rootSpanId;
     const startTime = Date.now();
 
     const spanRecord: AgentSpan = {
@@ -112,7 +126,7 @@ export class TelemetryTracer {
       name,
       startTime,
       status: "ok",
-      attributes: { ...attributes }
+      attributes: { ...attributes },
     };
 
     const session = traceStore.get(this.sessionId);
@@ -125,7 +139,7 @@ export class TelemetryTracer {
 
     return {
       spanId,
-      end: (status: "ok" | "error" = "ok", extraAttrs: Record<string, any> = {}) => {
+      end: (status: "ok" | "error" = "ok", extraAttrs: Record<string, unknown> = {}) => {
         const endTime = Date.now();
         spanRecord.endTime = endTime;
         spanRecord.durationMs = Math.max(1, endTime - startTime);
@@ -141,7 +155,7 @@ export class TelemetryTracer {
         this.exportSpanToOTLP(spanRecord).catch(() => {});
 
         return spanRecord;
-      }
+      },
     };
   }
 
@@ -159,9 +173,12 @@ export class TelemetryTracer {
           {
             resource: {
               attributes: [
-                { key: "service.name", value: { stringValue: process.env.OTEL_SERVICE_NAME || "local-agentic-sandbox" } },
-                { key: "session.id", value: { stringValue: span.sessionId } }
-              ]
+                {
+                  key: "service.name",
+                  value: { stringValue: process.env.OTEL_SERVICE_NAME || "local-agentic-sandbox" },
+                },
+                { key: "session.id", value: { stringValue: span.sessionId } },
+              ],
             },
             scopeSpans: [
               {
@@ -177,24 +194,25 @@ export class TelemetryTracer {
                     endTimeUnixNano: `${span.endTime || Date.now()}000000`,
                     attributes: Object.entries(span.attributes).map(([key, val]) => ({
                       key,
-                      value: typeof val === "number" ? { intValue: val } : { stringValue: String(val) }
+                      value:
+                        typeof val === "number" ? { intValue: val } : { stringValue: String(val) },
                     })),
                     status: {
-                      code: span.status === "ok" ? 1 : 2
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+                      code: span.status === "ok" ? 1 : 2,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       };
 
       await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(1500)
+        signal: AbortSignal.timeout(1500),
       }).catch(() => {});
     } catch {
       // Non-blocking: Silently handle when local Jaeger is not active

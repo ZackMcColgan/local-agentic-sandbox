@@ -21,8 +21,7 @@ export interface OperatorMemory {
 export const OPERATOR_MEMORY_MAX_CHARS = 2000;
 
 /** Exact injection header used in the chat system message. */
-export const OWNER_MEMORY_HEADER =
-  "OWNER MEMORY (standing facts — trust these over rediscovery):";
+export const OWNER_MEMORY_HEADER = "OWNER MEMORY (standing facts — trust these over rediscovery):";
 
 /**
  * Resolves the location of operator-memory.json.
@@ -56,15 +55,19 @@ export function loadOperatorMemory(customPath?: string): OperatorMemory {
     }
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      console.warn(`[OperatorMemory] Warning: corrupted memory JSON structure at ${filePath}. Starting with empty memory.`);
+      console.warn(
+        `[OperatorMemory] Warning: corrupted memory JSON structure at ${filePath}. Starting with empty memory.`
+      );
       return emptyMemory;
     }
     return {
       text: typeof parsed.text === "string" ? parsed.text : "",
-      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString()
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
     };
-  } catch (err: any) {
-    console.warn(`[OperatorMemory] Warning: corrupted memory JSON at ${filePath} (${err.message}). Starting with empty memory.`);
+  } catch (err: unknown) {
+    console.warn(
+      `[OperatorMemory] Warning: corrupted memory JSON at ${filePath} (${err instanceof Error ? err.message : String(err)}). Starting with empty memory.`
+    );
     return emptyMemory;
   }
 }
@@ -102,17 +105,19 @@ export function saveOperatorMemory(text: string, customPath?: string): OperatorM
     fs.writeFileSync(tempPath, payload, "utf8");
     try {
       fs.renameSync(tempPath, filePath);
-    } catch (renameErr) {
+    } catch {
       fs.copyFileSync(tempPath, filePath);
       fs.unlinkSync(tempPath);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (fs.existsSync(tempPath)) {
       try {
         fs.unlinkSync(tempPath);
       } catch (_) {}
     }
-    throw new Error(`[OperatorMemory] Failed to write memory to ${filePath}: ${err.message}`);
+    throw new Error(
+      `[OperatorMemory] Failed to write memory to ${filePath}: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   return { text, updatedAt };
@@ -144,5 +149,11 @@ export function assembleSystemPrompt(
   effortDirective: string,
   hostDirective: string
 ): string {
-  return systemPrompt + profileContext + formatMemoryForContext(memoryText) + effortDirective + hostDirective;
+  return (
+    systemPrompt +
+    profileContext +
+    formatMemoryForContext(memoryText) +
+    effortDirective +
+    hostDirective
+  );
 }

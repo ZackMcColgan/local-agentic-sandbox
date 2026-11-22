@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-// @ts-ignore - resolved at test time
 import { verifyCompletionClaims, stampCompletion } from "../lib/finishVerification";
 
 describe("Phase 2: finish-verification against ground truth", () => {
@@ -27,7 +26,7 @@ describe("Phase 2: finish-verification against ground truth", () => {
       }
     );
     assert.equal(result.status, "completed-unverified");
-    assert.ok(result.gaps.some((g: any) => g.kind === "pr" && g.claim.includes("9999")));
+    assert.ok(result.gaps.some((g) => g.kind === "pr" && g.claim.includes("9999")));
   });
 
   it("returns completed when commit, PR, and recorded gate all verify", async () => {
@@ -63,6 +62,6 @@ describe("Phase 2: finish-verification against ground truth", () => {
       }
     );
     assert.equal(unverified.status, "completed-unverified");
-    assert.ok(unverified.gaps.some((g: any) => g.kind === "fallback_file"));
+    assert.ok(unverified.gaps.some((g) => g.kind === "fallback_file"));
   });
 });

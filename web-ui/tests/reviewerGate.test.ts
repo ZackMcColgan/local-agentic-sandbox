@@ -10,7 +10,6 @@ import {
   createAgreementLedger,
   isMergeAuthorized,
   type MechanicalCheckInput,
-  type ReviewerVerdict,
 } from "../lib/board/reviewerGate";
 
 const CLEAN_DIFF = [
@@ -40,6 +39,18 @@ describe("reviewerGate — mechanical checks", () => {
     const result = runMechanicalChecks(makeCleanInput());
     assert.equal(result.verdict, "PASS");
     assert.equal(result.failures.length, 0);
+    assert.equal(result.allowlistStatus, "enforced");
+  });
+
+  it("records allowlist as not-declared/skipped (not per-file violations) when item has no declared allowlist", () => {
+    const result = runMechanicalChecks(makeCleanInput({ allowlist: [] }));
+    assert.equal(result.verdict, "PASS");
+    assert.equal(result.failures.length, 0);
+    assert.equal(result.allowlistStatus, "not-declared");
+    assert.ok(
+      result.notes.some((n) => /not[- ]declared|skipped/i.test(n) && /allowlist/i.test(n)),
+      "expected not-declared/skipped allowlist note in evidence"
+    );
   });
 
   it("FAILs an allowlist violation with the offending file named", () => {
@@ -57,8 +68,8 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.verdict, "FAIL");
     assert.ok(
       result.failures.some(
-        (f) => f.check === "allowlist" && f.evidence.includes("web-ui/lib/board/boardStore.ts"),
-      ),
+        (f) => f.check === "allowlist" && f.evidence.includes("web-ui/lib/board/boardStore.ts")
+      )
     );
   });
 
@@ -78,17 +89,13 @@ describe("reviewerGate — mechanical checks", () => {
   });
 
   it("FAILs when a banned string appears in a commit subject", () => {
-    const result = runMechanicalChecks(
-      makeCleanInput({ commitSubjects: ["Fix bug with codex"] }),
-    );
+    const result = runMechanicalChecks(makeCleanInput({ commitSubjects: ["Fix bug with codex"] }));
     assert.equal(result.verdict, "FAIL");
     assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes("codex")));
   });
 
   it("FAILs when a banned string appears in the branch name", () => {
-    const result = runMechanicalChecks(
-      makeCleanInput({ branchName: "feature/gemini-reviewer" }),
-    );
+    const result = runMechanicalChecks(makeCleanInput({ branchName: "feature/gemini-reviewer" }));
     assert.equal(result.verdict, "FAIL");
     assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes("gemini")));
   });
@@ -111,16 +118,14 @@ describe("reviewerGate — mechanical checks", () => {
 
     it(`FAILs when ${term} appears in a commit subject`, () => {
       const result = runMechanicalChecks(
-        makeCleanInput({ commitSubjects: [`Fix issue in ${term} pass`] }),
+        makeCleanInput({ commitSubjects: [`Fix issue in ${term} pass`] })
       );
       assert.equal(result.verdict, "FAIL");
       assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
     });
 
     it(`FAILs when ${term} appears in the branch name`, () => {
-      const result = runMechanicalChecks(
-        makeCleanInput({ branchName: `feature/${term}-fix` }),
-      );
+      const result = runMechanicalChecks(makeCleanInput({ branchName: `feature/${term}-fix` }));
       assert.equal(result.verdict, "FAIL");
       assert.ok(result.failures.some((f) => f.check === "hygiene" && f.evidence.includes(term)));
     });
@@ -142,8 +147,8 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.verdict, "FAIL");
     assert.ok(
       result.failures.some(
-        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts"),
-      ),
+        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts")
+      )
     );
   });
 
@@ -163,8 +168,8 @@ describe("reviewerGate — mechanical checks", () => {
     assert.equal(result.verdict, "FAIL");
     assert.ok(
       result.failures.some(
-        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts"),
-      ),
+        (f) => f.check === "no-test-weakened" && f.evidence.includes("reviewerGate.test.ts")
+      )
     );
   });
 });
@@ -213,6 +218,58 @@ describe("reviewerGate — verdict combination & shadow mode", () => {
     assert.equal(result.mergeAuthorized, false);
   });
 
+  it("computes mergeAuthorized via isMergeAuthorized from real inputs and stays false in shadow mode", async () => {
+    const enabledPass = await evaluateReviewerGate({
+      itemId: "item-25",
+      brief: "Implement reviewer gate",
+      mechanicalInput: makeCleanInput(),
+      stage3Enabled: true,
+      ciAllGreen: true,
+      finishVerificationClean: true,
+      issueReviewerThread: async () => ({
+        threadId: "rev-thread-3",
+        verdict: "PASS",
+        evidence: ["All checks clean"],
+      }),
+    });
+    assert.equal(enabledPass.verdict, "PASS");
+    assert.equal(enabledPass.shadowMode, false);
+    assert.equal(enabledPass.mergeAuthorized, true);
+
+    const enabledMissingCi = await evaluateReviewerGate({
+      itemId: "item-26",
+      brief: "Implement reviewer gate",
+      mechanicalInput: makeCleanInput(),
+      stage3Enabled: true,
+      ciAllGreen: false,
+      finishVerificationClean: true,
+      issueReviewerThread: async () => ({
+        threadId: "rev-thread-4",
+        verdict: "PASS",
+        evidence: ["All checks clean"],
+      }),
+    });
+    assert.equal(enabledMissingCi.verdict, "PASS");
+    assert.equal(enabledMissingCi.mergeAuthorized, false);
+
+    const shadowPass = await evaluateReviewerGate({
+      itemId: "item-27",
+      brief: "Implement reviewer gate",
+      mechanicalInput: makeCleanInput(),
+      stage3Enabled: false,
+      ciAllGreen: true,
+      finishVerificationClean: true,
+      issueReviewerThread: async () => ({
+        threadId: "rev-thread-5",
+        verdict: "PASS",
+        evidence: ["All checks clean"],
+      }),
+    });
+    assert.equal(shadowPass.verdict, "PASS");
+    assert.equal(shadowPass.shadowMode, true);
+    assert.equal(shadowPass.mergeAuthorized, false);
+  });
+
   it("never treats a reviewer verdict as merge authorization while Stage 3 is OFF", () => {
     const authorized = isMergeAuthorized({
       stage3Enabled: false,
@@ -231,7 +288,7 @@ describe("reviewerGate — verdict combination & shadow mode", () => {
         reviewerGateVerdict: "PASS",
         finishVerificationClean: true,
       }),
-      true,
+      true
     );
     assert.equal(
       isMergeAuthorized({
@@ -240,7 +297,7 @@ describe("reviewerGate — verdict combination & shadow mode", () => {
         reviewerGateVerdict: "FAIL",
         finishVerificationClean: true,
       }),
-      false,
+      false
     );
   });
 

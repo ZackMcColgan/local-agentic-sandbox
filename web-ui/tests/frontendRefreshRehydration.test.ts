@@ -13,11 +13,12 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -39,29 +40,29 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
   });
 
   it("renders empty state threads list and unified input field when no run is active", async () => {
-    globalThis.fetch = async (url: any) => {
+    globalThis.fetch = async (url: RequestInfo | URL) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/threads")) {
         return {
           ok: true,
-          json: async () => ({ threads: [] })
-        } as any;
+          json: async () => ({ threads: [] }),
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/tasks?active=true")) {
         return {
           ok: true,
-          json: async () => ({ activeTask: null, tasks: [] })
-        } as any;
+          json: async () => ({ activeTask: null, tasks: [] }),
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/sandbox-status")) {
         return {
           ok: true,
           json: async () => ({
-            services: { ollama: { status: "READY" }, mcp_server: { status: "READY" } }
-          })
-        } as any;
+            services: { ollama: { status: "READY" }, mcp_server: { status: "READY" } },
+          }),
+        } as unknown as Response;
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, json: async () => ({}) } as unknown as Response;
     };
 
     root = createRoot(container);
@@ -77,7 +78,10 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
     const html = container.innerHTML;
     assert.ok(html.includes("Message..."), "Must render M3 unified input field in empty state");
     assert.ok(html.includes("Sessions"), "Must render Sessions header in empty state");
-    assert.ok(!html.includes("Milestone checklist"), "Empty state must not show active run checklist");
+    assert.ok(
+      !html.includes("Milestone checklist"),
+      "Empty state must not show active run checklist"
+    );
   });
 
   it("renders active run, unmounts (refresh), and verifies worker tiles, milestones, and journal tail restore", async () => {
@@ -99,7 +103,7 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
           criticRounds: 1,
           testsPassed: 4,
           testsFailed: 0,
-          acceptanceCriteria: [{ id: "AC1", assertion: "Discovered 5 microservices" }]
+          acceptanceCriteria: [{ id: "AC1", assertion: "Discovered 5 microservices" }],
         },
         {
           id: "M2",
@@ -108,8 +112,8 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
           status: "in_progress",
           builderIterations: 1,
           criticRounds: 0,
-          acceptanceCriteria: [{ id: "AC2", assertion: "Valid draw.io XML with 30 mxCells" }]
-        }
+          acceptanceCriteria: [{ id: "AC2", assertion: "Valid draw.io XML with 30 mxCells" }],
+        },
       ],
       checkpoints: [],
       ambiguityFlags: [],
@@ -117,19 +121,19 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
         {
           timestamp: new Date().toISOString(),
           role: "planner",
-          message: "Decomposed goal into 2 milestones. SPEC.md generated."
+          message: "Decomposed goal into 2 milestones. SPEC.md generated.",
         },
         {
           timestamp: new Date().toISOString(),
           role: "builder",
-          message: "Builder synthesized milestone M2 diff. Beginning critic validation."
-        }
+          message: "Builder synthesized milestone M2 diff. Beginning critic validation.",
+        },
       ],
       startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
-    globalThis.fetch = async (url: any) => {
+    globalThis.fetch = async (url: RequestInfo | URL) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/threads")) {
         return {
@@ -149,16 +153,16 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
                   {
                     id: "msg-user-1",
                     role: "user",
-                    content: "Build a draw.io architecture diagram"
+                    content: "Build a draw.io architecture diagram",
                   },
                   {
                     id: "msg-assistant-1",
                     role: "assistant",
                     content: "Running task",
-                    taskId: mockActiveTask.taskId
-                  }
-                ]
-              }
+                    taskId: mockActiveTask.taskId,
+                  },
+                ],
+              },
             ],
             thread: {
               id: "thread-live-rehydration-101",
@@ -173,19 +177,19 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
                 {
                   id: "msg-user-1",
                   role: "user",
-                  content: "Build a draw.io architecture diagram"
+                  content: "Build a draw.io architecture diagram",
                 },
                 {
                   id: "msg-assistant-1",
                   role: "assistant",
                   content: "Running task",
-                  taskId: mockActiveTask.taskId
-                }
-              ]
+                  taskId: mockActiveTask.taskId,
+                },
+              ],
             },
-            task: mockActiveTask
-          })
-        } as any;
+            task: mockActiveTask,
+          }),
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/tasks?active=true") || urlStr.includes("/api/tasks?taskId=")) {
         return {
@@ -193,19 +197,19 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
           json: async () => ({
             activeTask: mockActiveTask,
             task: mockActiveTask,
-            tasks: [mockActiveTask]
-          })
-        } as any;
+            tasks: [mockActiveTask],
+          }),
+        } as unknown as Response;
       }
       if (urlStr.includes("/api/sandbox-status")) {
         return {
           ok: true,
           json: async () => ({
-            services: { ollama: { status: "READY" }, mcp_server: { status: "READY" } }
-          })
-        } as any;
+            services: { ollama: { status: "READY" }, mcp_server: { status: "READY" } },
+          }),
+        } as unknown as Response;
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, json: async () => ({}) } as unknown as Response;
     };
 
     // 1. Initial Render (First Page Load)
@@ -219,9 +223,18 @@ describe("Fix 5 — Frontend Render-on-Refresh Dashboard Rehydration Suite", () 
 
     const initialHtml = container.innerHTML;
     assert.ok(initialHtml.includes("Live run"), "Live run block header rendered on initial load");
-    assert.ok(initialHtml.includes("Superset Architecture Diagram"), "Current milestone rendered on initial load");
-    assert.ok(initialHtml.includes("Topology Catalog"), "Completed milestone rendered on initial load");
-    assert.ok(initialHtml.includes("Builder synthesized milestone M2 diff"), "Journal message present on initial load");
+    assert.ok(
+      initialHtml.includes("Superset Architecture Diagram"),
+      "Current milestone rendered on initial load"
+    );
+    assert.ok(
+      initialHtml.includes("Topology Catalog"),
+      "Completed milestone rendered on initial load"
+    );
+    assert.ok(
+      initialHtml.includes("Builder synthesized milestone M2 diff"),
+      "Journal message present on initial load"
+    );
     assert.ok(initialHtml.includes("Stop run"), "Stop run button rendered on initial load");
 
     // 2. Simulate Browser Refresh (Unmount & Fresh Mount)

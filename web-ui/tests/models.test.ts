@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_PRIMARY_MODEL, DEFAULT_SUBAGENT_MODEL, PRESET_MODEL_PROFILES, isReasoningEffortSupported } from "../config/models.js";
+import {
+  DEFAULT_PRIMARY_MODEL,
+  DEFAULT_SUBAGENT_MODEL,
+  PRESET_MODEL_PROFILES,
+  isReasoningEffortSupported,
+} from "../config/models.js";
 
 describe("Web UI Model Configuration Suite", () => {
   it("defaults to qwen3.8-flash-next-gyro-gyro-s for orchestrator to fit within 16GB VRAM limit", () => {

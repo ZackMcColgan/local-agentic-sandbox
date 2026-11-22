@@ -148,7 +148,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { RunLedger } from "../lib/ledger/runLedger";
-import { formatOvernightMorningReportMarkdown, OvernightMorningReport } from "../lib/subagents/morningReport";
+import {
+  formatOvernightMorningReportMarkdown,
+  OvernightMorningReport,
+} from "../lib/subagents/morningReport";
 import { formatScorecardMd } from "../../eval/run.mjs";
 
 test("RunLedger persists and retrieves slotMetrics", () => {

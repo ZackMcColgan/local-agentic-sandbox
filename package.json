@@ -10,6 +10,10 @@
     "host-bridge"
   ],
   "scripts": {
+    "prepare": "husky",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "npm run test --workspaces",
     "test:gate": "node scripts/test-gate.js",
     "test:coverage": "npm run test:coverage --workspaces",
@@ -35,11 +39,32 @@
     "test:lifecycle": "npm --prefix web-ui run test:lifecycle",
     "test:all": "node scripts/test-all.js"
   },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs}": [
+      "eslint --fix --max-warnings 0",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css}": [
+      "prettier --write"
+    ]
+  },
   "overrides": {
     "ip-address": "^10.7.4",
     "picomatch": "^4.0.7",
     "postcss": "^8.5.30",
     "postcss-selector-parser": "^6.1.5",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.29",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.10.1",
+    "typescript-eslint": "^8.73.0"
   }
 }

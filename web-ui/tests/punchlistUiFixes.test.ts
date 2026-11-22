@@ -7,7 +7,7 @@ function findRepoRoot(): string {
   const candidates = [
     process.cwd(),
     path.resolve(process.cwd(), ".."),
-    path.resolve(process.cwd(), "../..")
+    path.resolve(process.cwd(), "../.."),
   ];
   for (const dir of candidates) {
     if (fs.existsSync(path.join(dir, "package.json")) && fs.existsSync(path.join(dir, "web-ui"))) {
@@ -78,20 +78,38 @@ describe("Flash 3.8 Frontend Shakeout — Fix 2: UI-P1-4 & UI-P2-1 Ultrawide 840
     const lrbContent = fs.readFileSync(liveRunFile, "utf8");
 
     assert.doesNotMatch(csContent, /#5b32e6/i, "ChatStream.tsx must not contain #5b32e6");
-    assert.doesNotMatch(csContent, /bg-purple-/i, "ChatStream.tsx must not contain bg-purple- classes");
-    assert.doesNotMatch(csContent, /text-indigo-/i, "ChatStream.tsx must not contain text-indigo- classes");
-    assert.doesNotMatch(csContent, /bg-indigo-/i, "ChatStream.tsx must not contain bg-indigo- classes");
+    assert.doesNotMatch(
+      csContent,
+      /bg-purple-/i,
+      "ChatStream.tsx must not contain bg-purple- classes"
+    );
+    assert.doesNotMatch(
+      csContent,
+      /text-indigo-/i,
+      "ChatStream.tsx must not contain text-indigo- classes"
+    );
+    assert.doesNotMatch(
+      csContent,
+      /bg-indigo-/i,
+      "ChatStream.tsx must not contain bg-indigo- classes"
+    );
 
     assert.doesNotMatch(lrbContent, /#5b32e6/i, "LiveRunBlock.tsx must not contain #5b32e6");
     assert.doesNotMatch(lrbContent, /#3b0799/i, "LiveRunBlock.tsx must not contain #3b0799");
-    assert.doesNotMatch(lrbContent, /text-indigo-/i, "LiveRunBlock.tsx must not contain text-indigo- classes");
+    assert.doesNotMatch(
+      lrbContent,
+      /text-indigo-/i,
+      "LiveRunBlock.tsx must not contain text-indigo- classes"
+    );
   });
 });
 
 describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-Over Drawers & Z-Index Stacking", () => {
   it("app-main remains visible on mobile without selectedThreadId hidden deadlock", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.resolve(findRepoRoot(), "web-ui/components/ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
     assert.doesNotMatch(
       content,
@@ -107,7 +125,9 @@ describe("Flash 3.8 Frontend Shakeout — Fix 3: UI-P0-1 & UI-P0-2 Mobile Slide-
 
   it("app-sidebar is hidden on mobile and app-inspector opens full-screen on mobile", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.resolve(findRepoRoot(), "web-ui/components/ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
     // app-sidebar must be hidden on mobile (< md:)
     assert.match(
@@ -130,19 +150,49 @@ describe("Flash 3.8 Frontend Shakeout — Fix 4: UI-P0-4 & UI-P2-2 Fake Telemetr
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
     const content = fs.readFileSync(pageFile, "utf8");
 
-    assert.doesNotMatch(content, /6 passed in 0\.21s/, "page.tsx must not contain fake '6 passed in 0.21s'");
-    assert.doesNotMatch(content, /Zero gate failures detected/, "page.tsx must not contain fake gate failure string");
-    assert.doesNotMatch(content, /workspace\/csv_parser\.py/, "page.tsx must not contain fake planned deliverables");
-    assert.doesNotMatch(content, /diff --git a\/workspace\/output\.ts/, "page.tsx must not contain fake output.ts diff");
+    assert.doesNotMatch(
+      content,
+      /6 passed in 0\.21s/,
+      "page.tsx must not contain fake '6 passed in 0.21s'"
+    );
+    assert.doesNotMatch(
+      content,
+      /Zero gate failures detected/,
+      "page.tsx must not contain fake gate failure string"
+    );
+    assert.doesNotMatch(
+      content,
+      /workspace\/csv_parser\.py/,
+      "page.tsx must not contain fake planned deliverables"
+    );
+    assert.doesNotMatch(
+      content,
+      /diff --git a\/workspace\/output\.ts/,
+      "page.tsx must not contain fake output.ts diff"
+    );
   });
 
   it("page.tsx renders honest empty states for diff, output, and files tabs", () => {
     const pageFile = path.resolve(findRepoRoot(), "web-ui/app/page.tsx");
-    const content = fs.readFileSync(pageFile, "utf8");
+    const viewShellFile = path.resolve(findRepoRoot(), "web-ui/components/ViewShell.tsx");
+    const content =
+      fs.readFileSync(pageFile, "utf8") + "\n" + fs.readFileSync(viewShellFile, "utf8");
 
-    assert.match(content, /No test output recorded yet/, "page.tsx must display honest empty state when no output");
-    assert.match(content, /No file diffs recorded for this run/, "page.tsx must display honest empty state when no diff");
-    assert.match(content, /No workspace files modified yet/, "page.tsx must display honest empty state when no files");
+    assert.match(
+      content,
+      /No test output recorded yet/,
+      "page.tsx must display honest empty state when no output"
+    );
+    assert.match(
+      content,
+      /No file diffs recorded for this run/,
+      "page.tsx must display honest empty state when no diff"
+    );
+    assert.match(
+      content,
+      /No workspace files modified yet/,
+      "page.tsx must display honest empty state when no files"
+    );
   });
 
   it("DiffViewer defaults to open (isOpen = true)", () => {
@@ -155,7 +205,11 @@ describe("Flash 3.8 Frontend Shakeout — Fix 4: UI-P0-4 & UI-P2-2 Fake Telemetr
     // (ProjectsView, workspace inspector) still initialize open, which is
     // the behavior this punchlist assertion protects.
     assert.match(content, /defaultOpen = true/, "DiffViewer defaultOpen prop must default to true");
-    assert.match(content, /useState\(defaultOpen\)/, "DiffViewer must initialize isOpen from defaultOpen (true by default)");
+    assert.match(
+      content,
+      /useState\(defaultOpen\)/,
+      "DiffViewer must initialize isOpen from defaultOpen (true by default)"
+    );
   });
 });
 
@@ -164,10 +218,26 @@ describe("Flash 3.8 Frontend Shakeout — Fix 5: UI-P1-1 Honest BuildsView Gate 
     const buildsFile = path.resolve(findRepoRoot(), "web-ui/components/BuildsView.tsx");
     const content = fs.readFileSync(buildsFile, "utf8");
 
-    assert.doesNotMatch(content, /feat\/task-autonomy-a1/, "BuildsView must not contain hardcoded task-autonomy-a1 branch");
-    assert.doesNotMatch(content, /test:gate Green/, "BuildsView must not contain hardcoded 'test:gate Green' badge");
-    assert.doesNotMatch(content, /test:gate Passed/, "BuildsView must not contain hardcoded 'test:gate Passed' tile");
-    assert.doesNotMatch(content, /HTTP 200 Verified/, "BuildsView must not contain hardcoded 'HTTP 200 Verified' tile");
+    assert.doesNotMatch(
+      content,
+      /feat\/task-autonomy-a1/,
+      "BuildsView must not contain hardcoded task-autonomy-a1 branch"
+    );
+    assert.doesNotMatch(
+      content,
+      /test:gate Green/,
+      "BuildsView must not contain hardcoded 'test:gate Green' badge"
+    );
+    assert.doesNotMatch(
+      content,
+      /test:gate Passed/,
+      "BuildsView must not contain hardcoded 'test:gate Passed' tile"
+    );
+    assert.doesNotMatch(
+      content,
+      /HTTP 200 Verified/,
+      "BuildsView must not contain hardcoded 'HTTP 200 Verified' tile"
+    );
   });
 });
 
@@ -246,5 +316,3 @@ describe("Flash 3.8 Frontend Shakeout — Fix 9: UI-P2-3 Redundant Hamburger Cle
     );
   });
 });
-
-

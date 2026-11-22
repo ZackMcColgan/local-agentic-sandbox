@@ -9,14 +9,10 @@ import {
   Search,
   MoreHorizontal,
   Trash2,
-  Clock,
-  CheckCircle2,
-  StopCircle,
-  AlertCircle,
   X,
   FileText,
   Settings,
-  List
+  List,
 } from "lucide-react";
 import { Thread } from "@/lib/threads/threadStore";
 import { deriveThreadDisplayTitle } from "../lib/chatUtils";
@@ -45,9 +41,8 @@ export function ThreadsSidebar({
   onDeleteThread,
   onNavigate,
   onOpenDrawer,
-  onCollapse,
   hideDock = false,
-  isLoadingThreads = false
+  isLoadingThreads = false,
 }: ThreadsSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [serverSearchResults, setServerSearchResults] = useState<Thread[] | null>(null);
@@ -178,16 +173,17 @@ export function ThreadsSidebar({
     }
   };
 
-  const filteredThreads = searchQuery.trim() && serverSearchResults !== null
-    ? serverSearchResults
-    : threads.filter((t) => {
-        if (!searchQuery.trim()) return true;
-        const q = searchQuery.toLowerCase();
-        return (
-          t.title.toLowerCase().includes(q) ||
-          (t.messages && t.messages.some((m) => m.content.toLowerCase().includes(q)))
-        );
-      });
+  const filteredThreads =
+    searchQuery.trim() && serverSearchResults !== null
+      ? serverSearchResults
+      : threads.filter((t) => {
+          if (!searchQuery.trim()) return true;
+          const q = searchQuery.toLowerCase();
+          return (
+            t.title.toLowerCase().includes(q) ||
+            (t.messages && t.messages.some((m) => m.content.toLowerCase().includes(q)))
+          );
+        });
 
   const formatThreadTimestamp = (dateStr: string) => {
     try {
@@ -306,11 +302,18 @@ export function ThreadsSidebar({
       </div>
 
       {/* Elevated Cards Session List matching Mockup media_1791044464191.webp */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-[11px]" role="list" aria-label="Sessions list">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-[11px]"
+        role="list"
+        aria-label="Sessions list"
+      >
         {isLoadingThreads && filteredThreads.length === 0 ? (
           <div className="space-y-3" aria-label="Loading sessions">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-16 rounded-xl bg-slate-100 dark:bg-zinc-900 animate-pulse border border-slate-200 dark:border-zinc-800" />
+              <div
+                key={i}
+                className="h-16 rounded-xl bg-slate-100 dark:bg-zinc-900 animate-pulse border border-slate-200 dark:border-zinc-800"
+              />
             ))}
           </div>
         ) : filteredThreads.length === 0 ? (
@@ -345,18 +348,39 @@ export function ThreadsSidebar({
             const isRunning = statusLabel === "Running" || statusLabel === "Active";
             const statusChip = (() => {
               if (isRunning)
-                return { label: "● RUNNING", classes: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300" };
+                return {
+                  label: "● RUNNING",
+                  classes: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300",
+                };
               if (statusLabel === "Completed")
-                return { label: "✓ DONE", classes: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" };
+                return {
+                  label: "✓ DONE",
+                  classes: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                };
               if (statusLabel === "Failed")
-                return { label: "✕ FAILED", classes: "bg-rose-500/10 text-rose-700 dark:text-rose-300" };
+                return {
+                  label: "✕ FAILED",
+                  classes: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+                };
               if (statusLabel === "Stopped")
-                return { label: "■ STOPPED", classes: "bg-stone-500/15 text-stone-700 dark:text-stone-300" };
+                return {
+                  label: "■ STOPPED",
+                  classes: "bg-stone-500/15 text-stone-700 dark:text-stone-300",
+                };
               if (statusLabel === "Parked")
-                return { label: "⏸ PARKED", classes: "bg-amber-500/15 text-amber-800 dark:text-amber-300" };
+                return {
+                  label: "⏸ PARKED",
+                  classes: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+                };
               if (statusLabel === "Needs Input")
-                return { label: "NEEDS INPUT", classes: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300" };
-              return { label: "NEW", classes: "bg-stone-500/10 text-stone-600 dark:text-stone-400" };
+                return {
+                  label: "NEEDS INPUT",
+                  classes: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
+                };
+              return {
+                label: "NEW",
+                classes: "bg-stone-500/10 text-stone-600 dark:text-stone-400",
+              };
             })();
 
             return (
@@ -394,8 +418,8 @@ export function ThreadsSidebar({
                   isRunning
                     ? "bg-white dark:bg-[#15151b] border border-cyan-500/40 shadow-[inset_3px_0_0_#22d3ee]"
                     : isSelected
-                    ? "bg-white dark:bg-[#15151b] ring-2 ring-emerald-500 shadow-md border border-transparent"
-                    : "bg-white dark:bg-[#15151b] hover:shadow-md shadow-xs border border-stone-200/90 dark:border-white/[0.09]"
+                      ? "bg-white dark:bg-[#15151b] ring-2 ring-emerald-500 shadow-md border border-transparent"
+                      : "bg-white dark:bg-[#15151b] hover:shadow-md shadow-xs border border-stone-200/90 dark:border-white/[0.09]"
                 }`}
               >
                 <div className="min-w-0">
@@ -409,9 +433,9 @@ export function ThreadsSidebar({
                     >
                       {deriveThreadDisplayTitle(thread.title)}
                     </h2>
-                    {(thread as any).matchSnippet && (
+                    {(thread as { matchSnippet?: string }).matchSnippet && (
                       <p className="mt-0.5 text-[11px] leading-snug truncate text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded">
-                        {(thread as any).matchSnippet}
+                        {(thread as { matchSnippet?: string }).matchSnippet}
                       </p>
                     )}
 
@@ -445,7 +469,9 @@ export function ThreadsSidebar({
                   {/* Subtext matching Mockup: "• 12 Oct • 2:34 PM • 3 participants • Active" */}
                   <div
                     className={`mt-2 font-mono text-[12.3px] flex items-center flex-wrap gap-x-1.5 gap-y-1 ${
-                      isRunning ? "text-slate-600 dark:text-[#34d399]" : "text-slate-500 dark:text-zinc-400"
+                      isRunning
+                        ? "text-slate-600 dark:text-[#34d399]"
+                        : "text-slate-500 dark:text-zinc-400"
                     }`}
                   >
                     <span>{timeFormatted || "Today"}</span>
@@ -465,18 +491,22 @@ export function ThreadsSidebar({
                             ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
                             : "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-300"
                         }`}
-                        title={livenessBadge === "alive" ? "Turn active — activity within the last 30s" : "Turn stalled — no activity past the stale window"}
+                        title={
+                          livenessBadge === "alive"
+                            ? "Turn active — activity within the last 30s"
+                            : "Turn stalled — no activity past the stale window"
+                        }
                       >
                         {livenessBadge === "alive" ? "Alive" : "Stalled"}
                       </span>
                     )}
                     {livenessBadge ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`${progressChars} chars · ${(thread as any).totalTraces ?? progressTraces} total traces`}
+                        {`${progressChars} chars · ${(thread as { totalTraces?: number }).totalTraces ?? progressTraces} total traces`}
                       </span>
-                    ) : ((thread as any).totalTraces ?? progressTraces) > 0 ? (
+                    ) : ((thread as { totalTraces?: number }).totalTraces ?? progressTraces) > 0 ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`· ${(thread as any).totalTraces ?? progressTraces} total traces`}
+                        {`· ${(thread as { totalTraces?: number }).totalTraces ?? progressTraces} total traces`}
                       </span>
                     ) : null}
                   </div>
@@ -521,7 +551,9 @@ export function ThreadsSidebar({
           <button
             type="button"
             onClick={() => (onNavigate ? onNavigate("sessions") : undefined)}
-            aria-current={activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined}
+            aria-current={
+              activeNavView === "sessions" || activeNavView === "thread" ? "page" : undefined
+            }
             className={`flex flex-col items-center gap-1 py-1.5 px-2.5 rounded-xl text-[11px] font-semibold transition-colors ${
               activeNavView === "sessions" || activeNavView === "thread"
                 ? "text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 font-semibold"

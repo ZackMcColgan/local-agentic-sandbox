@@ -1,7 +1,22 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerBrowserTools, htmlToMarkdown, evaluateContentQuality } from "../src/tools/browser.js";
+import {
+  registerBrowserTools,
+  htmlToMarkdown,
+  evaluateContentQuality,
+} from "../src/tools/browser.js";
+
+type RegisteredTool = {
+  handler: (
+    args: Record<string, unknown>
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
+};
+
+function getRegisteredTools(server: McpServer): Record<string, RegisteredTool> {
+  return (server as unknown as { _registeredTools: Record<string, RegisteredTool> })
+    ._registeredTools;
+}
 
 describe("Browser MCP Toolchain Suite", () => {
   let mcp: McpServer;
@@ -9,15 +24,14 @@ describe("Browser MCP Toolchain Suite", () => {
   beforeEach(() => {
     mcp = new McpServer({
       name: "test-browser-mcp",
-      version: "1.0.0"
+      version: "1.0.0",
     });
   });
 
   describe("Tool Registration", () => {
     it("registers search_web and fetch_webpage_markdown tools", () => {
       registerBrowserTools(mcp);
-      // @ts-ignore
-      const tools = mcp._registeredTools;
+      const tools = getRegisteredTools(mcp);
       assert.ok(tools["search_web"], "search_web should be registered");
       assert.ok(tools["fetch_webpage_markdown"], "fetch_webpage_markdown should be registered");
     });
@@ -27,8 +41,7 @@ describe("Browser MCP Toolchain Suite", () => {
       try {
         process.env.SEARCH_FORCE_EMPTY_RESULTS = "1";
         registerBrowserTools(mcp);
-        // @ts-ignore
-        const handler = mcp._registeredTools["search_web"].handler;
+        const handler = getRegisteredTools(mcp)["search_web"].handler;
         const res = await handler({ query: "weather in Spanish Fort AL", limit: 5 });
         assert.ok(res.content && res.content[0], "Response content should be present");
         const parsed = JSON.parse(res.content[0].text);
@@ -46,15 +59,14 @@ describe("Browser MCP Toolchain Suite", () => {
   describe("SSRF Security Boundary", () => {
     it("blocks SSRF attempts to localhost and loopback IPs", async () => {
       registerBrowserTools(mcp);
-      // @ts-ignore
-      const toolHandler = mcp._registeredTools["fetch_webpage_markdown"].handler;
+      const toolHandler = getRegisteredTools(mcp)["fetch_webpage_markdown"].handler;
 
       const testUrls = [
         "http://localhost:3000/secret",
         "http://127.0.0.1:8080/admin",
         "http://169.254.169.254/latest/meta-data/",
         "http://10.0.0.1/router",
-        "http://192.168.1.1/gateway"
+        "http://192.168.1.1/gateway",
       ];
 
       for (const url of testUrls) {
@@ -121,13 +133,17 @@ describe("Browser MCP Toolchain Suite", () => {
   describe("Content Quality Evaluator", () => {
     it("distinguishes substantive informative text from empty SPA navigation shells", () => {
       const spaShell = "Home About Contact Settings Login Sign In Menu Search Copyright 2026";
-      const richArticle = "The current weather condition is partly sunny with a high of 85°F and a low of 68°F. Winds are calm at 5 mph from the south. Tomorrow will feature scattered rain showers with a 40% precipitation probability. The barometer stands at 30.12 in.";
+      const richArticle =
+        "The current weather condition is partly sunny with a high of 85°F and a low of 68°F. Winds are calm at 5 mph from the south. Tomorrow will feature scattered rain showers with a 40% precipitation probability. The barometer stands at 30.12 in.";
 
       const spaScore = evaluateContentQuality(spaShell);
       const articleScore = evaluateContentQuality(richArticle);
 
       assert.strictEqual(spaScore, 0, "Short boilerplate text should yield 0 score");
-      assert.ok(articleScore >= 100, `Informative text with sentences and numbers should score high (got ${articleScore})`);
+      assert.ok(
+        articleScore >= 100,
+        `Informative text with sentences and numbers should score high (got ${articleScore})`
+      );
     });
   });
 });

@@ -23,7 +23,10 @@ export async function gradePrCoding(output, passBar, repoRoot) {
   try {
     const code = extractCode(output);
     fs.writeFileSync(path.join(tmpDir, "retryAfter.mjs"), code, "utf8");
-    const hiddenTestSrc = path.join(repoRoot, "eval/tasks/pr-coding/hidden-tests/retryAfter.test.mjs");
+    const hiddenTestSrc = path.join(
+      repoRoot,
+      "eval/tasks/pr-coding/hidden-tests/retryAfter.test.mjs"
+    );
     const hiddenTestDst = path.join(tmpDir, "retryAfter.test.mjs");
     fs.copyFileSync(hiddenTestSrc, hiddenTestDst);
 

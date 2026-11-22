@@ -37,6 +37,7 @@ export interface BuildImportResult {
   built: boolean;
   imported: boolean;
   imagePresentInNode: boolean;
+  builtTag?: string;
   detail: string;
 }
 
@@ -55,7 +56,7 @@ export interface SelfDeployVerifiedDeps {
   readCurrentState: () => Promise<CurrentStateSnapshot>;
   bankRollbackTarget: (tag: string) => Promise<BankRollbackResult>;
   buildAndImport: (targetTag: string, dryRun: boolean) => Promise<BuildImportResult>;
-  setImage: (tag: string) => Promise<{ ok: boolean }>;
+  setImage: (tag: string) => Promise<{ ok: boolean; detail?: string }>;
   verifyDeployment: (expectedTag: string) => Promise<VerifyDeploymentResult>;
 }
 
@@ -119,13 +120,38 @@ export async function runSelfDeployVerified(
     };
   }
 
+  const deployTag = s2.builtTag ?? input.targetTag;
+
   // S3: Set image
-  await deps.setImage(input.targetTag);
+  const s3 = await deps.setImage(deployTag);
+  if (!s3.ok) {
+    return {
+      mode: "execute",
+      status: "failed",
+      rollbackTarget: s1.tag,
+      needsAttention: true,
+      reason: "S3 set-image failed",
+      evidence: `S3 failed: ${s3.detail ?? "setImage returned ok=false"}`,
+    };
+  }
 
   // S4: Verify rollout, pod Running 0 restarts, gateway 200, thread list loads
-  const s4 = await deps.verifyDeployment(input.targetTag);
+  const s4 = await deps.verifyDeployment(deployTag);
   if (!s4.ok) {
-    await deps.setImage(s1.tag);
+    const rollbackSet = await deps.setImage(s1.tag);
+    if (!rollbackSet.ok) {
+      const failedStep = s4.failedStep ?? "verify_deployment";
+      const observed = s4.observed ?? `gateway=${s4.gatewayStatus}`;
+      return {
+        mode: "execute",
+        status: "rolled_back_suspended",
+        rollbackTarget: s1.tag,
+        rollbackVerified: false,
+        needsAttention: true,
+        reason: "S4 verification failed; rollback set-image also failed.",
+        evidence: `S4 failed at ${failedStep}: ${observed}; rollback setImage failed: ${rollbackSet.detail ?? "setImage returned ok=false"}`,
+      };
+    }
     const rollbackVerify = await deps.verifyDeployment(s1.tag);
     const failedStep = s4.failedStep ?? "verify_deployment";
     const observed = s4.observed ?? `gateway=${s4.gatewayStatus}`;
@@ -144,10 +170,10 @@ export async function runSelfDeployVerified(
     mode: "execute",
     status: "deployed",
     rollbackTarget: s1.tag,
-    deployTag: input.targetTag,
+    deployTag,
     prodEqualsDevelop: true,
     needsAttention: false,
-    evidence: `Deployed ${input.targetTag} (develop ${input.developSha}); gateway ${s4.gatewayStatus}`,
+    evidence: `Deployed ${deployTag} (develop ${input.developSha}); gateway ${s4.gatewayStatus}`,
   };
 }
 

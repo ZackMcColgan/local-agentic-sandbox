@@ -11,7 +11,10 @@ export async function POST(
     const scheduleId = resolvedParams?.id;
 
     if (!scheduleId || typeof scheduleId !== "string") {
-      return NextResponse.json({ error: "Missing required schedule ID parameter" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required schedule ID parameter" },
+        { status: 400 }
+      );
     }
 
     const workspaceDir = process.env.WORKSPACE_DIR;
@@ -29,7 +32,10 @@ export async function POST(
     });
 
     return NextResponse.json({ runId, status: "active" }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

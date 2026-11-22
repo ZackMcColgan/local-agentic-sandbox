@@ -25,13 +25,24 @@ function initTempGitRepo(dir: string): void {
   fs.writeFileSync(path.join(dir, "retryAfter.mjs"), "export const retryAfter = 1000;\n", "utf8");
   fs.writeFileSync(
     path.join(dir, "package.json"),
-    JSON.stringify({ name: "temp-repo", version: "1.0.0", scripts: { "test:gate": "node -e \"process.exit(0)\"" } }, null, 2),
+    JSON.stringify(
+      {
+        name: "temp-repo",
+        version: "1.0.0",
+        scripts: { "test:gate": 'node -e "process.exit(0)"' },
+      },
+      null,
+      2
+    ),
     "utf8"
   );
   execFileSync("git", ["add", "."], { cwd: dir, stdio: "pipe" });
   execFileSync("git", ["commit", "-m", "initial commit"], { cwd: dir, stdio: "pipe" });
   // Add an unreachable origin remote to simulate zero port-443 egress in web-ui pod
-  execFileSync("git", ["remote", "add", "origin", "https://127.0.0.1:1/unreachable.git"], { cwd: dir, stdio: "pipe" });
+  execFileSync("git", ["remote", "add", "origin", "https://127.0.0.1:1/unreachable.git"], {
+    cwd: dir,
+    stdio: "pipe",
+  });
 }
 
 describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => {
@@ -54,7 +65,11 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       });
       initTempGitRepo(dirtyRepo);
       // Make shared /workspace durably dirty like prod (M retryAfter.mjs + untracked file)
-      fs.writeFileSync(path.join(dirtyRepo, "retryAfter.mjs"), "export const retryAfter = 9999;\n// dirty\n", "utf8");
+      fs.writeFileSync(
+        path.join(dirtyRepo, "retryAfter.mjs"),
+        "export const retryAfter = 9999;\n// dirty\n",
+        "utf8"
+      );
       fs.writeFileSync(path.join(dirtyRepo, "stray-untracked.txt"), "leftover\n", "utf8");
 
       process.env.WORKSPACE_DIR = dirtyRepo;
@@ -73,7 +88,10 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
           response: text,
           done: true,
         });
-        return new Response(body + "\n", { status: 200, headers: { "Content-Type": "application/x-ndjson" } });
+        return new Response(body + "\n", {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson" },
+        });
       }) as typeof fetch;
 
       const req = new Request("http://localhost:3000/api/threads", {
@@ -111,14 +129,20 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       );
 
       // Verify shared dirtyRepo remained untouched on develop with its dirty retryAfter.mjs
-      const mainBranch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: dirtyRepo, encoding: "utf8" }).trim();
+      const mainBranch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd: dirtyRepo,
+        encoding: "utf8",
+      }).trim();
       assert.equal(mainBranch, "develop");
       assert.ok(fs.readFileSync(path.join(dirtyRepo, "retryAfter.mjs"), "utf8").includes("9999"));
 
       // Verify isolated worktree was created and holds diag-hello.js
       const worktreeDir = path.join(dirtyRepo, ".worktrees", taskId);
       assert.ok(fs.existsSync(worktreeDir), `Expected isolated worktree at ${worktreeDir}`);
-      assert.ok(fs.existsSync(path.join(worktreeDir, "diag-hello.js")), "Deliverable must exist in isolated worktree");
+      assert.ok(
+        fs.existsSync(path.join(worktreeDir, "diag-hello.js")),
+        "Deliverable must exist in isolated worktree"
+      );
     } finally {
       WorkerGitOps.prototype.runGateTest = origRunGateTest;
       globalThis.fetch = origFetch;
@@ -163,7 +187,10 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
           response: '```javascript\nconsole.log("resumed");\n```\n',
           done: true,
         });
-        return new Response(body + "\n", { status: 200, headers: { "Content-Type": "application/x-ndjson" } });
+        return new Response(body + "\n", {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson" },
+        });
       }) as typeof fetch;
 
       const store = new ThreadStore(threadsDir);
@@ -246,76 +273,72 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
 
   it("3. generatePlanSpec rejects invalid/empty planner output cleanly at planning stage", async () => {
     // Case A: empty milestones
-    await assert.rejects(
-      async () => {
-        await generatePlanSpec({
-          taskId: "plan-empty",
-          goal: "Build a utility",
-          scope: "SCRIPT",
-          generate: async () => ({ text: JSON.stringify({ milestones: [] }), model: DEFAULT_PRIMARY_MODEL }),
-        });
-      },
-      /milestone/i
-    );
+    await assert.rejects(async () => {
+      await generatePlanSpec({
+        taskId: "plan-empty",
+        goal: "Build a utility",
+        scope: "SCRIPT",
+        generate: async () => ({
+          text: JSON.stringify({ milestones: [] }),
+          model: DEFAULT_PRIMARY_MODEL,
+        }),
+      });
+    }, /milestone/i);
 
     // Case B: invalid relative plannedFiles (path traversal / absolute path)
-    await assert.rejects(
-      async () => {
-        await generatePlanSpec({
-          taskId: "plan-bad-files",
-          goal: "Build a utility",
-          scope: "SCRIPT",
-          generate: async () => ({
-            text: JSON.stringify({
-              milestones: [
-                {
-                  id: "M1",
-                  title: "Bad paths",
-                  description: "Bad",
-                  plannedFiles: ["../outside.ts"],
-                  acceptanceCriteria: [{ id: "AC-1", assertion: "ok", command: "node -e 'process.exit(0)'" }],
-                },
-              ],
-            }),
-            model: DEFAULT_PRIMARY_MODEL,
+    await assert.rejects(async () => {
+      await generatePlanSpec({
+        taskId: "plan-bad-files",
+        goal: "Build a utility",
+        scope: "SCRIPT",
+        generate: async () => ({
+          text: JSON.stringify({
+            milestones: [
+              {
+                id: "M1",
+                title: "Bad paths",
+                description: "Bad",
+                plannedFiles: ["../outside.ts"],
+                acceptanceCriteria: [
+                  { id: "AC-1", assertion: "ok", command: "node -e 'process.exit(0)'" },
+                ],
+              },
+            ],
           }),
-        });
-      },
-      /plannedFiles|relative|path/i
-    );
+          model: DEFAULT_PRIMARY_MODEL,
+        }),
+      });
+    }, /plannedFiles|relative|path/i);
 
     // Case C: missing executable acceptanceCriteria
-    await assert.rejects(
-      async () => {
-        await generatePlanSpec({
-          taskId: "plan-no-ac",
-          goal: "Build a utility",
-          scope: "SCRIPT",
-          generate: async () => ({
-            text: JSON.stringify({
-              milestones: [
-                {
-                  id: "M1",
-                  title: "No AC",
-                  description: "No AC",
-                  plannedFiles: ["src/app.ts"],
-                  acceptanceCriteria: [],
-                },
-              ],
-            }),
-            model: DEFAULT_PRIMARY_MODEL,
+    await assert.rejects(async () => {
+      await generatePlanSpec({
+        taskId: "plan-no-ac",
+        goal: "Build a utility",
+        scope: "SCRIPT",
+        generate: async () => ({
+          text: JSON.stringify({
+            milestones: [
+              {
+                id: "M1",
+                title: "No AC",
+                description: "No AC",
+                plannedFiles: ["src/app.ts"],
+                acceptanceCriteria: [],
+              },
+            ],
           }),
-        });
-      },
-      /acceptanceCriteria/i
-    );
+          model: DEFAULT_PRIMARY_MODEL,
+        }),
+      });
+    }, /acceptanceCriteria/i);
   });
 
   it("4. chunkBudget: { maxRounds: 2 } pauses with chunk-complete, banks commit + runlog + .handoff.json, and auto-resumes via /api/threads/[id]", async () => {
     const repoDir = makeTempDir("item2-chunk-repo-");
     const ckptDir = makeTempDir("item2-chunk-ckpt-");
     const origFetch = globalThis.fetch;
-    const resumeCalls: Array<{ url: string; body: any }> = [];
+    const resumeCalls: Array<{ url: string; body?: { action?: string } }> = [];
 
     try {
       initTempGitRepo(repoDir);
@@ -342,16 +365,47 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
         updatedAt: new Date().toISOString(),
         currentMilestoneIndex: 0,
         milestones: [
-          { id: "M1", title: "Step 1", description: "s1", status: "pending", builderIterations: 0, criticRounds: 0, plannedFiles: ["f1.txt"], acceptanceCriteria: [] },
-          { id: "M2", title: "Step 2", description: "s2", status: "pending", builderIterations: 0, criticRounds: 0, plannedFiles: ["f2.txt"], acceptanceCriteria: [] },
-          { id: "M3", title: "Step 3", description: "s3", status: "pending", builderIterations: 0, criticRounds: 0, plannedFiles: ["f3.txt"], acceptanceCriteria: [] },
+          {
+            id: "M1",
+            title: "Step 1",
+            description: "s1",
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0,
+            plannedFiles: ["f1.txt"],
+            acceptanceCriteria: [],
+          },
+          {
+            id: "M2",
+            title: "Step 2",
+            description: "s2",
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0,
+            plannedFiles: ["f2.txt"],
+            acceptanceCriteria: [],
+          },
+          {
+            id: "M3",
+            title: "Step 3",
+            description: "s3",
+            status: "pending",
+            builderIterations: 0,
+            criticRounds: 0,
+            plannedFiles: ["f3.txt"],
+            acceptanceCriteria: [],
+          },
         ],
         checkpoints: [],
         ambiguityFlags: [],
         journal: [],
       };
-      (task as any).threadId = threadId;
-      (task as any).chunkBudget = { maxRounds: 2 };
+      const extTask = task as TaskManifest & {
+        threadId?: string;
+        chunkBudget?: { maxRounds: number };
+      };
+      extTask.threadId = threadId;
+      extTask.chunkBudget = { maxRounds: 2 };
 
       const result = await supervisor.executeTaskWithRecovery(task, {
         repoRoot: repoDir,
@@ -366,8 +420,16 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
         },
       });
 
-      assert.equal(result.status, "paused", `Expected task to pause at chunk boundary, got ${result.status}`);
-      assert.equal(result.currentMilestoneIndex, 2, "Should have completed 2 milestones before chunk pause");
+      assert.equal(
+        result.status,
+        "paused",
+        `Expected task to pause at chunk boundary, got ${result.status}`
+      );
+      assert.equal(
+        result.currentMilestoneIndex,
+        2,
+        "Should have completed 2 milestones before chunk pause"
+      );
 
       // Check .handoff.json
       const handoffPath = path.join(ckptDir, `${taskId}.handoff.json`);
@@ -380,12 +442,20 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       assert.ok(fs.existsSync(runlogPath), "Expected runlog to be written");
 
       // Check git commit was banked in repoDir
-      const logOut = execFileSync("git", ["log", "-n", "1", "--pretty=%s"], { cwd: repoDir, encoding: "utf8" }).trim();
-      assert.ok(logOut.length > 0 && !logOut.includes("initial commit"), `Expected banked chunk commit, got: ${logOut}`);
+      const logOut = execFileSync("git", ["log", "-n", "1", "--pretty=%s"], {
+        cwd: repoDir,
+        encoding: "utf8",
+      }).trim();
+      assert.ok(
+        logOut.length > 0 && !logOut.includes("initial commit"),
+        `Expected banked chunk commit, got: ${logOut}`
+      );
 
       // Check auto-resume targeted /api/threads/[id] with action: "resume"
       assert.ok(
-        resumeCalls.some((c) => c.url.includes(`/api/threads/${threadId}`) && c.body?.action === "resume"),
+        resumeCalls.some(
+          (c) => c.url.includes(`/api/threads/${threadId}`) && c.body?.action === "resume"
+        ),
         `Expected auto-resume POST to /api/threads/${threadId}, got: ${JSON.stringify(resumeCalls)}`
       );
     } finally {
@@ -397,11 +467,12 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
 
   it("5. LlamaCppProvider.generate() forwards reasoning_effort to the engine call", async () => {
     const provider = new LlamaCppProvider("strata");
-    let capturedBody: any = null;
+    const capturedBodies: Array<{ reasoning_effort?: string }> = [];
 
     const mockFetch: typeof fetch = async (_url, init) => {
-      capturedBody = JSON.parse(String(init?.body || "{}"));
-      const sse = 'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+      capturedBodies.push(JSON.parse(String(init?.body || "{}")));
+      const sse =
+        'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
       return new Response(sse, {
         status: 200,
         headers: { "Content-Type": "text/event-stream" },
@@ -418,6 +489,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       { fetchImpl: mockFetch }
     );
 
+    const capturedBody = capturedBodies[0];
     assert.equal(res.text, "hello");
     assert.ok(capturedBody, "Expected fetchImpl to receive request body");
     assert.equal(

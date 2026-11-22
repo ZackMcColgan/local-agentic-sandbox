@@ -25,10 +25,7 @@ import {
   type MechanicalCheckInput,
   type ReviewerGateResult,
 } from "./reviewerGate";
-import {
-  AgreementLedgerStore,
-  type PersistentAgreementLedger,
-} from "./agreementLedger";
+import { AgreementLedgerStore, type PersistentAgreementLedger } from "./agreementLedger";
 import {
   isSelfDeployVerifiedEnabled,
   runSelfDeployVerified,
@@ -40,6 +37,31 @@ import {
 export const MAX_DRAIN_ITEMS = 5;
 export const MAX_DRAIN_DURATION_MS = 10 * 60 * 1000;
 export const MAX_TRIAGE_ATTEMPTS = 2;
+export const ORPHANED_WORKING_ITEM_REASON =
+  "Job thread ended without an outcome (possible restart)";
+
+export type WorkingItemLiveness =
+  | { status: "live"; reason?: string }
+  | { status: "orphaned"; reason: string }
+  | { status: "unknown"; reason?: string };
+
+export function extractThreadIdFromLink(threadLink?: string): string | null {
+  if (typeof threadLink !== "string") return null;
+  const trimmed = threadLink.trim();
+  if (!trimmed) return null;
+  const queryMatch = /[?&]thread=([^&#]+)/.exec(trimmed);
+  if (queryMatch) {
+    try {
+      return decodeURIComponent(queryMatch[1]);
+    } catch {
+      return queryMatch[1];
+    }
+  }
+  if (!trimmed.includes("/") && !trimmed.includes("?")) {
+    return trimmed;
+  }
+  return null;
+}
 
 export interface OrchestratorIssue {
   code: string;
@@ -140,6 +162,9 @@ export interface BoardOrchestratorDeps {
   getControlState?: () => BoardControlRecord;
   getLiveJobState?: () => LiveJobState;
   getOwnerState?: () => OwnerTurnState;
+  checkWorkingItemLiveness?: (
+    item: DispatcherBoardItem
+  ) => Promise<WorkingItemLiveness> | WorkingItemLiveness;
   getSlotMetrics?: () => SlotUtilizationMetrics;
   operatorMemory?: string;
   hostCheckoutPath?: string;
@@ -270,7 +295,9 @@ export class BoardOrchestrator {
       if (!this.dryRunItems) {
         const source = this.deps.items
           ? this.deps.items
-          : (this.deps.boardStore ?? new BoardStore(this.deps.boardDir)).list() as DispatcherBoardItem[];
+          : ((
+              this.deps.boardStore ?? new BoardStore(this.deps.boardDir)
+            ).list() as DispatcherBoardItem[]);
         this.dryRunItems = source.map((item) => ({ ...item }));
       }
       return this.dryRunItems;
@@ -318,10 +345,7 @@ export class BoardOrchestrator {
     if (typeof this.deps.stageFlags?.flowMonitor === "boolean") {
       return this.deps.stageFlags.flowMonitor;
     }
-    return (
-      isFlowMonitorStage2Enabled(undefined) ||
-      process.env.BOARD_STAGE_FLOW_MONITOR === "true"
-    );
+    return isFlowMonitorStage2Enabled(undefined) || process.env.BOARD_STAGE_FLOW_MONITOR === "true";
   }
 
   private resolveReviewerGateEnabled(): boolean {
@@ -353,8 +377,7 @@ export class BoardOrchestrator {
         stage2Enabled,
         pollChecks: this.deps.flowMonitor.pollChecks,
         issueThread:
-          this.deps.flowMonitor.issueThread ??
-          (async () => ({ threadId: "shadow-noop" })),
+          this.deps.flowMonitor.issueThread ?? (async () => ({ threadId: "shadow-noop" })),
         log: this.log,
       });
     }
@@ -367,6 +390,7 @@ export class BoardOrchestrator {
         brief: item.brief,
         mechanicalInput,
         stage3Enabled,
+        ciAllGreen: result.flowMonitor?.verdict.status === "green",
         issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
         log: this.log,
       });
@@ -392,7 +416,8 @@ export class BoardOrchestrator {
     const deployInput: DeployInput = this.deps.selfDeploy?.getDeployInput
       ? this.deps.selfDeploy.getDeployInput(item, merge)
       : {
-          targetTag: merge.targetTag ?? `local-agentic-sandbox:${merge.mergeSha.slice(0, 7)}`,
+          targetTag:
+            merge.targetTag ?? `local-agentic-sandbox-web-ui:${merge.mergeSha.slice(0, 7)}`,
           developSha: merge.mergeSha,
         };
 
@@ -441,10 +466,8 @@ export class BoardOrchestrator {
 
     const getControl =
       this.deps.getControlState ?? (() => readBoardControlState(this.deps.boardDir));
-    const getLiveJob =
-      this.deps.getLiveJobState ?? (() => ({ isRunning: false }));
-    const getOwner =
-      this.deps.getOwnerState ?? (() => ({ isMidTurn: false }));
+    const getLiveJob = this.deps.getLiveJobState ?? (() => ({ isRunning: false }));
+    const getOwner = this.deps.getOwnerState ?? (() => ({ isMidTurn: false }));
     const getSlotMetrics =
       this.deps.getSlotMetrics ?? (() => getSharedSlotScheduler().getMetrics());
 
@@ -479,9 +502,52 @@ export class BoardOrchestrator {
       }
 
       const items = this.getItems();
-      if (items.some((item) => item.status === "working")) {
-        stopReason = "job-already-running";
-        break;
+      const workingItems = items.filter((item) => item.status === "working");
+      if (workingItems.length > 0) {
+        if (!this.deps.checkWorkingItemLiveness) {
+          stopReason = "job-already-running";
+          break;
+        }
+        let hasLiveWorkingItem = false;
+        for (const workingItem of workingItems) {
+          let liveness: WorkingItemLiveness;
+          try {
+            liveness = await this.deps.checkWorkingItemLiveness(workingItem);
+          } catch (err) {
+            this.log(
+              `[orchestrator] liveness check failed for ${workingItem.id}; treating as live: ${
+                err instanceof Error ? err.message : String(err)
+              }`
+            );
+            hasLiveWorkingItem = true;
+            break;
+          }
+          if (liveness.status === "orphaned") {
+            const reason = liveness.reason || ORPHANED_WORKING_ITEM_REASON;
+            this.log(
+              `[orchestrator] recovering orphaned working item ${workingItem.id} (${workingItem.key}): ${reason}`
+            );
+            this.updateItem(workingItem, {
+              status: "needs-attention",
+              needsAttention: true,
+              parkedReason: reason,
+            });
+            surfacedIssues.push({
+              itemId: workingItem.id,
+              key: workingItem.key,
+              code: "orphaned-working-item",
+              message: reason,
+            });
+            failedCount += 1;
+          } else {
+            hasLiveWorkingItem = true;
+            break;
+          }
+        }
+        if (hasLiveWorkingItem) {
+          stopReason = "job-already-running";
+          break;
+        }
       }
 
       const head = selectHeadEligibleItem(items);
@@ -523,7 +589,7 @@ export class BoardOrchestrator {
             status: "needs-attention",
             needsAttention: true,
             parkedReason: finalIssue.message,
-            threadLink: result.threadId ? `/threads/${result.threadId}` : undefined,
+            threadLink: result.threadId ? `/?thread=${result.threadId}` : undefined,
           });
           surfacedIssues.push({
             itemId: head.id,
@@ -540,10 +606,7 @@ export class BoardOrchestrator {
             outcome: "failed",
             threadId: result.threadId,
             reason: finalIssue.message,
-            triage:
-              triage.action === "fixed"
-                ? { ...triage, action: "surfaced" }
-                : triage,
+            triage: triage.action === "fixed" ? { ...triage, action: "surfaced" } : triage,
             durationMs: Math.max(0, this.now() - itemStartMs),
           });
           continue;
@@ -573,27 +636,45 @@ export class BoardOrchestrator {
           };
         }
 
-        this.updateItem(head, {
-          status: "done",
-          threadLink: `/threads/${result.threadId}`,
-        });
-        completedCount += 1;
-        itemsProcessed += 1;
-        outcomes.push({
-          itemId: head.id,
-          key: head.key,
-          title: head.title,
-          outcome: "completed",
-          threadId: result.threadId,
-          reason: result.summary,
-          ...(shadowStages ? { shadowStages } : {}),
-          durationMs: Math.max(0, this.now() - itemStartMs),
-        });
+        if (shadowStages?.selfDeploy?.needsAttention) {
+          this.updateItem(head, {
+            status: "needs-attention",
+            threadLink: `/?thread=${result.threadId}`,
+          });
+          itemsProcessed += 1;
+          outcomes.push({
+            itemId: head.id,
+            key: head.key,
+            title: head.title,
+            outcome: "failed",
+            threadId: result.threadId,
+            reason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
+            shadowStages,
+            durationMs: Math.max(0, this.now() - itemStartMs),
+          });
+        } else {
+          this.updateItem(head, {
+            status: "done",
+            threadLink: `/?thread=${result.threadId}`,
+          });
+          completedCount += 1;
+          itemsProcessed += 1;
+          outcomes.push({
+            itemId: head.id,
+            key: head.key,
+            title: head.title,
+            outcome: "completed",
+            threadId: result.threadId,
+            reason: result.summary,
+            ...(shadowStages ? { shadowStages } : {}),
+            durationMs: Math.max(0, this.now() - itemStartMs),
+          });
+        }
       } else if (result.status === "chunk-complete") {
         this.updateItem(head, {
           status: "queued",
           handoff: result.handoff,
-          threadLink: `/threads/${result.threadId}`,
+          threadLink: `/?thread=${result.threadId}`,
         });
         requeuedCount += 1;
         itemsProcessed += 1;
@@ -609,7 +690,7 @@ export class BoardOrchestrator {
       } else if (result.status === "in-progress") {
         this.updateItem(head, {
           status: "working",
-          threadLink: `/threads/${result.threadId}`,
+          threadLink: `/?thread=${result.threadId}`,
         });
         inProgressCount += 1;
         itemsProcessed += 1;
@@ -666,14 +747,14 @@ export interface ExtractedJobMetadata {
 export function extractJobOutcomeMetadata(
   ...texts: Array<string | undefined>
 ): ExtractedJobMetadata {
-  const combined = texts.filter((t): t is string => typeof t === "string" && t.length > 0).join("\n");
+  const combined = texts
+    .filter((t): t is string => typeof t === "string" && t.length > 0)
+    .join("\n");
   if (!combined) return {};
 
   const result: ExtractedJobMetadata = {};
 
-  const prMatch =
-    /\/pull\/(\d+)\b/i.exec(combined) ??
-    /\bPR\s*#(\d+)\b/i.exec(combined);
+  const prMatch = /\/pull\/(\d+)\b/i.exec(combined) ?? /\bPR\s*#(\d+)\b/i.exec(combined);
   if (prMatch) {
     const parsed = Number.parseInt(prMatch[1], 10);
     if (Number.isInteger(parsed) && parsed > 0) {
@@ -702,8 +783,6 @@ export function extractJobOutcomeMetadata(
   return result;
 }
 
-export async function runBoardDrain(
-  deps: BoardOrchestratorDeps
-): Promise<DrainReport> {
+export async function runBoardDrain(deps: BoardOrchestratorDeps): Promise<DrainReport> {
   return new BoardOrchestrator(deps).drain();
 }

@@ -4,7 +4,7 @@ import {
   getProjectDiffSummary,
   acceptProjectFile,
   revertProjectFile,
-  finalizeProjectReview
+  finalizeProjectReview,
 } from "@/lib/projects/projectGit";
 
 interface RouteParams {
@@ -45,8 +45,11 @@ export async function GET(req: Request, { params }: RouteParams) {
 
     const summary = getProjectDiffSummary(project, taskId, baseSha);
     return NextResponse.json(summary);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -105,7 +108,10 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

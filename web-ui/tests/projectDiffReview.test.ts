@@ -7,21 +7,17 @@ import { execFileSync } from "node:child_process";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import {
-  registerProject,
-  createProjectTask,
-  getProject,
-  getFileReviews,
-  setFileReviewStatus
-} from "../lib/projects/projectStore";
+import { registerProject, createProjectTask, getFileReviews } from "../lib/projects/projectStore";
 import {
   runGit,
   getProjectDiffSummary,
   acceptProjectFile,
   revertProjectFile,
-  finalizeProjectReview
 } from "../lib/projects/projectGit";
-import { GET as getProjectDiff, POST as postProjectDiff } from "../app/api/projects/[id]/diff/route";
+import {
+  GET as getProjectDiff,
+  POST as postProjectDiff,
+} from "../app/api/projects/[id]/diff/route";
 import { ProjectsView } from "../components/ProjectsView";
 import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
@@ -50,19 +46,27 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
 
     // Base files
     fs.mkdirSync(path.join(testRepoDir, "src"), { recursive: true });
-    fs.writeFileSync(path.join(testRepoDir, "src", "existing1.ts"), "const a = 1;\nexport default a;\n", "utf8");
-    fs.writeFileSync(path.join(testRepoDir, "src", "existing2.ts"), "const b = 2;\nexport default b;\n", "utf8");
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "existing1.ts"),
+      "const a = 1;\nexport default a;\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "existing2.ts"),
+      "const b = 2;\nexport default b;\n",
+      "utf8"
+    );
     fs.writeFileSync(path.join(testRepoDir, "README.md"), "# Base README\n", "utf8");
 
     execFileSync("git", ["add", "."], { cwd: testRepoDir });
     execFileSync("git", ["commit", "-m", "Initial base commit"], { cwd: testRepoDir });
 
     // Happy DOM
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -96,7 +100,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     const project = registerProject({
       name: "Diff Summary Project",
       rootPath: testRepoDir,
-      baseBranch: "develop"
+      baseBranch: "develop",
     });
 
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -108,14 +112,22 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       projectId: project.project_id,
       prompt: "Make 3 file changes",
       baseSha,
-      branch
+      branch,
     });
 
     // Make 3 distinct changes:
     // 1. Modify src/existing1.ts
-    fs.writeFileSync(path.join(testRepoDir, "src", "existing1.ts"), "const a = 999;\nexport default a;\n", "utf8");
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "existing1.ts"),
+      "const a = 999;\nexport default a;\n",
+      "utf8"
+    );
     // 2. Add src/newfile.ts
-    fs.writeFileSync(path.join(testRepoDir, "src", "newfile.ts"), "export const newlyCreated = true;\n", "utf8");
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "newfile.ts"),
+      "export const newlyCreated = true;\n",
+      "utf8"
+    );
     // 3. Delete README.md
     fs.rmSync(path.join(testRepoDir, "README.md"));
 
@@ -143,7 +155,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
   it("Item 2: acceptProjectFile preserves content and marks status accepted", () => {
     const project = registerProject({
       name: "Accept Test Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -153,10 +165,14 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       projectId: project.project_id,
       prompt: "Accept file test",
       baseSha,
-      branch
+      branch,
     });
 
-    fs.writeFileSync(path.join(testRepoDir, "src", "existing1.ts"), "const a = 'accepted_val';\n", "utf8");
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "existing1.ts"),
+      "const a = 'accepted_val';\n",
+      "utf8"
+    );
     runGit(project, ["add", "src/existing1.ts"]);
     runGit(project, ["commit", "-m", "feat: modify existing1"]);
 
@@ -175,11 +191,10 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
   it("Item 3: revertProjectFile restores modified file byte-for-byte from baseSha with revert commit, leaves other files untouched", () => {
     const project = registerProject({
       name: "Revert Modified Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     const originalContent1 = fs.readFileSync(path.join(testRepoDir, "src", "existing1.ts"), "utf8");
-    const originalContent2 = fs.readFileSync(path.join(testRepoDir, "src", "existing2.ts"), "utf8");
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
 
     const branch = "feat/task-revert-mod";
@@ -188,12 +203,20 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       projectId: project.project_id,
       prompt: "Revert test",
       baseSha,
-      branch
+      branch,
     });
 
     // Modify both files
-    fs.writeFileSync(path.join(testRepoDir, "src", "existing1.ts"), "const corrupted1 = true;\n", "utf8");
-    fs.writeFileSync(path.join(testRepoDir, "src", "existing2.ts"), "const corrupted2 = true;\n", "utf8");
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "existing1.ts"),
+      "const corrupted1 = true;\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(testRepoDir, "src", "existing2.ts"),
+      "const corrupted2 = true;\n",
+      "utf8"
+    );
     runGit(project, ["add", "."]);
     runGit(project, ["commit", "-m", "feat: modified both files"]);
 
@@ -206,7 +229,10 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     assert.equal(restoredContent1, originalContent1, "Restored byte-for-byte from baseSha");
 
     // Check existing2 is UNTOUCHED (still modified)
-    const untouchedContent2 = fs.readFileSync(path.join(testRepoDir, "src", "existing2.ts"), "utf8");
+    const untouchedContent2 = fs.readFileSync(
+      path.join(testRepoDir, "src", "existing2.ts"),
+      "utf8"
+    );
     assert.equal(untouchedContent2, "const corrupted2 = true;\n", "Other files remain untouched");
 
     // Verify git log has the revert commit
@@ -217,7 +243,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
   it("Item 4: revertProjectFile of new file removes it cleanly", () => {
     const project = registerProject({
       name: "Revert New File Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -227,7 +253,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       projectId: project.project_id,
       prompt: "Revert new file",
       baseSha,
-      branch
+      branch,
     });
 
     // Add brand new file
@@ -249,7 +275,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
   it("Item 5: Malicious filename handled safely via execFile array with zero shell execution", () => {
     const project = registerProject({
       name: "Malicious Filename Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -259,7 +285,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       projectId: project.project_id,
       prompt: "Malicious file test",
       baseSha,
-      branch
+      branch,
     });
 
     // Malicious shell injection tokens in filename (e.g. spaces, semicolons, dollar signs)
@@ -278,7 +304,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
   it("Item 6: API route & UI Diff tab renders diffs with accept and revert buttons", async () => {
     const project = registerProject({
       name: "UI Diff Project",
-      rootPath: testRepoDir
+      rootPath: testRepoDir,
     });
 
     const baseSha = runGit(project, ["rev-parse", "HEAD"]);
@@ -288,7 +314,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       projectId: project.project_id,
       prompt: "UI diff test",
       baseSha,
-      branch
+      branch,
     });
 
     fs.writeFileSync(path.join(testRepoDir, "src", "existing1.ts"), "const uiDiff = 42;\n", "utf8");
@@ -296,8 +322,12 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
     runGit(project, ["commit", "-m", "feat: ui diff"]);
 
     // GET /api/projects/[id]/diff
-    const getReq = new Request(`http://localhost:3000/api/projects/${project.project_id}/diff?taskId=${task.task_id}`);
-    const getRes = await getProjectDiff(getReq, { params: Promise.resolve({ id: project.project_id }) });
+    const getReq = new Request(
+      `http://localhost:3000/api/projects/${project.project_id}/diff?taskId=${task.task_id}`
+    );
+    const getRes = await getProjectDiff(getReq, {
+      params: Promise.resolve({ id: project.project_id }),
+    });
     assert.equal(getRes.status, 200);
     const getData = await getRes.json();
     assert.ok(Array.isArray(getData.files));
@@ -310,10 +340,12 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
       body: JSON.stringify({
         action: "accept",
         taskId: task.task_id,
-        filePath: "src/existing1.ts"
-      })
+        filePath: "src/existing1.ts",
+      }),
     });
-    const postRes = await postProjectDiff(postReq, { params: Promise.resolve({ id: project.project_id }) });
+    const postRes = await postProjectDiff(postReq, {
+      params: Promise.resolve({ id: project.project_id }),
+    });
     assert.equal(postRes.status, 200);
 
     // Render ProjectsView in Tab 3 ("diffs")
@@ -326,7 +358,7 @@ describe("PHASE 3: Per-File Diff Engine & Accept/Revert Review", () => {
           onOpenDrawer: () => {},
           diffs: getData.files,
           onAcceptFile: async () => {},
-          onRevertFile: async () => {}
+          onRevertFile: async () => {},
         })
       );
     });

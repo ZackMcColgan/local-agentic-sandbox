@@ -10,18 +10,33 @@ import { mergeStreamedTokens } from "../lib/chatStatus";
 describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () => {
   describe("Token preservation contract: mergeStreamedTokens", () => {
     it("keeps accumulated streamed tokens when the done event carries no content", () => {
-      assert.equal(mergeStreamedTokens("Round 1 streamed preamble", undefined), "Round 1 streamed preamble");
-      assert.equal(mergeStreamedTokens("Round 1 streamed preamble", ""), "Round 1 streamed preamble");
-      assert.equal(mergeStreamedTokens("   \n\t  ", "Final synthesis only") , "Final synthesis only");
+      assert.equal(
+        mergeStreamedTokens("Round 1 streamed preamble", undefined),
+        "Round 1 streamed preamble"
+      );
+      assert.equal(
+        mergeStreamedTokens("Round 1 streamed preamble", ""),
+        "Round 1 streamed preamble"
+      );
+      assert.equal(
+        mergeStreamedTokens("   \n\t  ", "Final synthesis only"),
+        "Final synthesis only"
+      );
     });
 
     it("keeps the done content unchanged when nothing was streamed", () => {
       assert.equal(mergeStreamedTokens("", "Final synthesis content"), "Final synthesis content");
-      assert.equal(mergeStreamedTokens(undefined as any, "Final synthesis content"), "Final synthesis content");
+      assert.equal(
+        mergeStreamedTokens(undefined as unknown as string, "Final synthesis content"),
+        "Final synthesis content"
+      );
     });
 
     it("does not duplicate when streamed tokens equal the done content", () => {
-      assert.equal(mergeStreamedTokens("Exact same output", "Exact same output"), "Exact same output");
+      assert.equal(
+        mergeStreamedTokens("Exact same output", "Exact same output"),
+        "Exact same output"
+      );
     });
 
     it("keeps whichever side already contains the other (superset wins)", () => {
@@ -44,7 +59,8 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
     it("keeps streamed tokens and appends honest pause/incomplete banners", () => {
       const streamed = "Ran tool file_read. Found 3 errors.";
       const paused = "⚠️ [Turn paused: Tool execution limit reached (30 rounds).]";
-      const incomplete = "⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]";
+      const incomplete =
+        "⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.]";
       assert.equal(mergeStreamedTokens(streamed, paused), `${streamed}\n\n${paused}`);
       assert.equal(mergeStreamedTokens(streamed, incomplete), `${streamed}\n\n${incomplete}`);
     });
@@ -52,7 +68,10 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
     it("deduplicates overlapping token boundaries cleanly", () => {
       const acc = "The agent verified that the database connection pool is healthy";
       const evt = "healthy and all migration queries executed successfully.";
-      assert.equal(mergeStreamedTokens(acc, evt), "The agent verified that the database connection pool is healthy and all migration queries executed successfully.");
+      assert.equal(
+        mergeStreamedTokens(acc, evt),
+        "The agent verified that the database connection pool is healthy and all migration queries executed successfully."
+      );
     });
 
     it("joins distinct round outputs without losing tokens", () => {
@@ -70,7 +89,10 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
     let originalLlmUrl: string | undefined;
 
     beforeEach(() => {
-      tmpThreadsDir = path.join(os.tmpdir(), `chat5-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+      tmpThreadsDir = path.join(
+        os.tmpdir(),
+        `chat5-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      );
       fs.mkdirSync(tmpThreadsDir, { recursive: true });
       originalThreadsDir = process.env.THREADS_DIR;
       originalLlmUrl = process.env.LLM_BASE_URL;
@@ -81,7 +103,9 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
     afterEach(() => {
       process.env.THREADS_DIR = originalThreadsDir;
       process.env.LLM_BASE_URL = originalLlmUrl;
-      try { fs.rmSync(tmpThreadsDir, { recursive: true, force: true }); } catch {}
+      try {
+        fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
+      } catch {}
     });
 
     async function drain(res: Response) {
@@ -106,19 +130,24 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
           userMessageId: "chat5-user-1",
           assistantMessageId: "chat5-asst-1",
           messages: [{ role: "user", content: "Probe under real thread id", id: "chat5-user-1" }],
-          model: "swift-15-27b-mtp"
-        })
+          model: "swift-15-27b-mtp",
+        }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       await drain(res);
 
       const thread = await store.getThread(threadId);
       assert.ok(thread, "thread must exist under the requested id");
       assert.equal(thread.id, threadId);
-      assert.ok(thread.messages.some((m) => m.id === "chat5-user-1" && m.role === "user"),
-        "user message must be persisted under the real thread id");
+      assert.ok(
+        thread.messages.some((m) => m.id === "chat5-user-1" && m.role === "user"),
+        "user message must be persisted under the real thread id"
+      );
       const asst = thread.messages.find((m) => m.id === "chat5-asst-1");
-      assert.ok(asst, "assistant message must be persisted under the real thread id even on failure");
+      assert.ok(
+        asst,
+        "assistant message must be persisted under the real thread id even on failure"
+      );
       assert.equal(asst.role, "assistant");
       assert.ok(asst.status === "error" || asst.status === "incomplete");
     });
@@ -132,11 +161,13 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
           threadId: null,
           userMessageId: "chat5-orphan-user",
           assistantMessageId: "chat5-orphan-asst",
-          messages: [{ role: "user", content: "Orphan turn with null threadId", id: "chat5-orphan-user" }],
-          model: "swift-15-27b-mtp"
-        })
+          messages: [
+            { role: "user", content: "Orphan turn with null threadId", id: "chat5-orphan-user" },
+          ],
+          model: "swift-15-27b-mtp",
+        }),
       });
-      const res = await POST(req as any);
+      const res = await POST(req as unknown as Parameters<typeof POST>[0]);
       await drain(res);
 
       const files = fs.readdirSync(tmpThreadsDir);
@@ -154,7 +185,11 @@ describe("CHAT-5: Stream Token Preservation & Thread Identity (behavioral)", () 
         const t = store.createThread({ title: "perm probe" });
         const fileMode = fs.statSync(store.getFilePath(t.id)).mode & 0o777;
         assert.equal(fileMode & 0o007, 0, "thread file must have no world permissions");
-        assert.equal(fs.statSync(tmpDir).mode & 0o007, 0, "threads dir must have no world permissions");
+        assert.equal(
+          fs.statSync(tmpDir).mode & 0o007,
+          0,
+          "threads dir must have no world permissions"
+        );
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }

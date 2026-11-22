@@ -1,16 +1,15 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
-import { Milestone, EvidenceItem } from "../lib/subagents/types.js";
+import { Milestone } from "../lib/subagents/types.js";
 import {
   checkOllama,
   enableOllamaMock,
   disableOllamaMock,
-  logServiceMode
+  logServiceMode,
 } from "./helpers/serviceMocks.js";
 
 describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
-
   let useRealOllama = false;
 
   before(async () => {
@@ -33,8 +32,8 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
       acceptanceCriteria: [
         { id: "AC-1", assertion: "must have egress-mesh" },
         { id: "AC-2", assertion: "must have #ffffff" },
-        { id: "AC-3", assertion: "must have 30 cells" }
-      ]
+        { id: "AC-3", assertion: "must have 30 cells" },
+      ],
     };
 
     const diff = `--- a/arch.drawio\n+++ b/arch.drawio\n@@ -1,3 +1,6 @@\n+ network: egress-mesh\n+ background: #ffffff\n+ 30 mxCells rendered`;
@@ -54,18 +53,22 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
       status: "in_progress",
       builderIterations: 1,
       criticRounds: 0,
-      acceptanceCriteria: []
+      acceptanceCriteria: [],
     };
 
     const critic = createCriticWorker();
     const review = await critic.evaluateMilestoneDiff(milestone, {
       diff: "+ comment line only without criteria",
-      forceEmptyEvidence: true
-    } as any);
+      forceEmptyEvidence: true,
+    } as unknown as Parameters<typeof critic.evaluateMilestoneDiff>[1]);
 
     assert.equal(review.approved, false, "Empty evidence MUST fail-closed");
     assert.equal(review.abstained, true, "Empty evidence treated as abstain");
-    assert.ok(review.feedback.some((f) => f.includes("Evidence linking check failed") || f.includes("fail-closed")));
+    assert.ok(
+      review.feedback.some(
+        (f) => f.includes("Evidence linking check failed") || f.includes("fail-closed")
+      )
+    );
   });
 
   it("Evidence excerpts are truncated to 500 chars max", async () => {
@@ -77,9 +80,7 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
       status: "in_progress",
       builderIterations: 1,
       criticRounds: 0,
-      acceptanceCriteria: [
-        { id: "AC-LONG", assertion: "must have egress-mesh" }
-      ]
+      acceptanceCriteria: [{ id: "AC-LONG", assertion: "must have egress-mesh" }],
     };
 
     const diff = `+ network: egress-mesh ${longString}`;
@@ -88,7 +89,10 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
 
     assert.ok(review.evidence);
     for (const ev of review.evidence) {
-      assert.ok(ev.excerpt.length <= 500, `Evidence excerpt length (${ev.excerpt.length}) must be <= 500`);
+      assert.ok(
+        ev.excerpt.length <= 500,
+        `Evidence excerpt length (${ev.excerpt.length}) must be <= 500`
+      );
     }
   });
 
@@ -100,9 +104,7 @@ describe("Phase 2 — Item 5: Evidence Linking Suite", () => {
       status: "in_progress",
       builderIterations: 1,
       criticRounds: 0,
-      acceptanceCriteria: [
-        { id: "AC-V1", assertion: "egress-mesh network" }
-      ]
+      acceptanceCriteria: [{ id: "AC-V1", assertion: "egress-mesh network" }],
     };
 
     const diff = "+ egress-mesh network confirmed";

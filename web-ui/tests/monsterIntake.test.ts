@@ -236,7 +236,11 @@ test("3. Preview performs ZERO writes to the board store (byte-identical before/
   assert.equal(capturedReq?.options?.num_predict, 4096);
 
   const afterBytes = fs.readFileSync(boardJsonPath);
-  assert.equal(Buffer.compare(beforeBytes, afterBytes), 0, "board.json must be byte-identical after preview");
+  assert.equal(
+    Buffer.compare(beforeBytes, afterBytes),
+    0,
+    "board.json must be byte-identical after preview"
+  );
 });
 
 test("4. Confirm files exactly N items atomically with author Owner, source assistant, status queued, and linked dependencies", async () => {
@@ -282,11 +286,13 @@ test("4. Confirm files exactly N items atomically with author Owner, source assi
   assert.equal(res.items[0].source, "assistant");
   assert.equal(res.items[0].status, "queued");
   assert.deepEqual(res.items[0].dependencies, [existing.id]);
+  assert.deepEqual(res.items[0].allowlist, ["web-ui/lib/board/monsterIntake.ts"]);
 
   assert.equal(res.items[1].author, "Owner");
   assert.equal(res.items[1].source, "assistant");
   assert.equal(res.items[1].status, "queued");
   assert.deepEqual(res.items[1].dependencies, [res.items[0].id]);
+  assert.deepEqual(res.items[1].allowlist, ["web-ui/components/BoardAddSheet.tsx"]);
 
   assert.equal(res.control?.state, "running");
   assert.equal(controlStore.getState().state, "running");
@@ -320,7 +326,11 @@ test("4. Confirm files exactly N items atomically with author Owner, source assi
       ),
     IntakeValidationError
   );
-  assert.equal(store.list().length, countBefore, "Zero items must be filed when any item fails validation");
+  assert.equal(
+    store.list().length,
+    countBefore,
+    "Zero items must be filed when any item fails validation"
+  );
 });
 
 test("5. Exactly ONE model call per intake: malformed model response produces clean error, NO second call, NO board writes", async () => {
@@ -361,7 +371,9 @@ test("6. 1,500-word multi-item prompt fixture decomposes without truncation brea
     "from a mobile device and get a strictly validated, dependency-ordered stack of queued board items in a single " +
     "bounded orchestrator model call. Each item must include a clear title, actionable brief, explicit file allowlist, " +
     "and verifiable acceptance criteria without mutating the board store until the owner taps confirm. ";
-  const monsterPrompt = Array.from({ length: 28 }, (_, i) => `Section ${i + 1}: ${paragraph}`).join("\n");
+  const monsterPrompt = Array.from({ length: 28 }, (_, i) => `Section ${i + 1}: ${paragraph}`).join(
+    "\n"
+  );
   const wordCount = monsterPrompt.trim().split(/\s+/).length;
   assert.ok(wordCount >= 1500, `Expected >= 1500 words, got ${wordCount}`);
 

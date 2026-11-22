@@ -4,11 +4,5 @@
   "identifiersRetained": 5,
   "totalIdentifiers": 5,
   "referenceRetentionRatio": 0.545,
-  "identifiers": [
-    "ID_ALPHA_719",
-    "ID_BRAVO_402",
-    "ID_CHARLIE_885",
-    "ID_DELTA_163",
-    "ID_ECHO_941"
-  ]
+  "identifiers": ["ID_ALPHA_719", "ID_BRAVO_402", "ID_CHARLIE_885", "ID_DELTA_163", "ID_ECHO_941"]
 }

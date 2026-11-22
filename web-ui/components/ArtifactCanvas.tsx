@@ -38,9 +38,7 @@ const VIEW_LABELS: Record<CanvasView, string> = {
 };
 
 /** Build canvas diff files from the chat cards' per-file diff records. */
-export function buildDiffFiles(
-  diffs: Array<{ path: string; diff: string }>
-): CanvasDiffFile[] {
+export function buildDiffFiles(diffs: Array<{ path: string; diff: string }>): CanvasDiffFile[] {
   const files: CanvasDiffFile[] = [];
   for (const item of diffs) {
     if (!item.diff) continue;
@@ -58,8 +56,7 @@ export function buildDiffFiles(
   }
 
   const normalizePath = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const isUnified = (f: CanvasDiffFile) =>
-    f.removedLines > 0 || /^@@\s+-\d+/m.test(f.diff);
+  const isUnified = (f: CanvasDiffFile) => f.removedLines > 0 || /^@@\s+-\d+/m.test(f.diff);
 
   const byPath = new Map<string, CanvasDiffFile>();
   for (const f of files) {
@@ -165,13 +162,7 @@ export function CanvasDiffCard({
  * workspace URL (no inline code). Renders nothing when the canvas is
  * disabled or no provider is mounted — the card's own links stay as-is.
  */
-export function CanvasFileOpenButton({
-  name,
-  url,
-}: {
-  name: string;
-  url: string;
-}) {
+export function CanvasFileOpenButton({ name, url }: { name: string; url: string }) {
   const canvas = useCanvas();
   if (!canvas?.enabled) return null;
   const artifact: CanvasArtifact = {
@@ -204,21 +195,28 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
         let signClass = "text-slate-400 dark:text-zinc-400";
         let sign = " ";
         if (row.kind === "add") {
-          rowClass = "bg-emerald-500/10 dark:bg-[rgba(16,185,129,0.13)] text-emerald-900 dark:text-zinc-100";
+          rowClass =
+            "bg-emerald-500/10 dark:bg-[rgba(16,185,129,0.13)] text-emerald-900 dark:text-zinc-100";
           signClass = "text-emerald-600 dark:text-[#34d399]";
           sign = "+";
         } else if (row.kind === "del") {
-          rowClass = "bg-rose-500/10 dark:bg-[rgba(248,113,113,0.12)] text-rose-900 dark:text-zinc-100";
+          rowClass =
+            "bg-rose-500/10 dark:bg-[rgba(248,113,113,0.12)] text-rose-900 dark:text-zinc-100";
           signClass = "text-rose-600 dark:text-[#f87171]";
           sign = "−";
         } else if (row.kind === "hunk") {
-          rowClass = "bg-sky-500/10 dark:bg-[rgba(56,189,248,0.07)] text-sky-700 dark:text-[#7dd3fc] font-semibold";
+          rowClass =
+            "bg-sky-500/10 dark:bg-[rgba(56,189,248,0.07)] text-sky-700 dark:text-[#7dd3fc] font-semibold";
         } else if (row.kind === "meta") {
           rowClass = "text-slate-400 dark:text-zinc-400";
         }
         const lineNo = row.kind === "del" ? row.oldLine : row.newLine;
         return (
-          <div key={idx} data-testid="canvas-diff-row" className={`flex whitespace-pre ${rowClass}`}>
+          <div
+            key={idx}
+            data-testid="canvas-diff-row"
+            className={`flex whitespace-pre ${rowClass}`}
+          >
             <span className="w-[34px] shrink-0 text-right pr-2 select-none text-slate-400 dark:text-zinc-400">
               {lineNo ?? ""}
             </span>
@@ -231,11 +229,7 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
   );
 }
 
-function CanvasDiffView({
-  artifact,
-}: {
-  artifact: Extract<CanvasArtifact, { kind: "diff" }>;
-}) {
+function CanvasDiffView({ artifact }: { artifact: Extract<CanvasArtifact, { kind: "diff" }> }) {
   const [selected, setSelected] = useState(0);
   useEffect(() => {
     setSelected(0);
@@ -325,7 +319,8 @@ function CanvasDiffView({
       </div>
 
       <div className="lg:hidden px-3 py-2 text-[11.5px] leading-relaxed text-slate-500 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800 shrink-0">
-        Code lines never wrap — swipe sideways inside the diff. Every hunk is here; nothing is cut to fit the phone.
+        Code lines never wrap — swipe sideways inside the diff. Every hunk is here; nothing is cut
+        to fit the phone.
       </div>
     </div>
   );
@@ -342,7 +337,9 @@ function CanvasFileView({
   refreshKey: number;
   device: "full" | "phone";
 }) {
-  const isSvg = isSvgCode(artifact.code, artifact.language) || (artifact.filename || "").toLowerCase().endsWith(".svg");
+  const isSvg =
+    isSvgCode(artifact.code, artifact.language) ||
+    (artifact.filename || "").toLowerCase().endsWith(".svg");
 
   if (view === "code") {
     if (!artifact.code) {
@@ -371,7 +368,9 @@ function CanvasFileView({
 
   // Preview — the existing sandboxed rendering paths, unchanged.
   const frame = (
-    <div className={`h-full ${device === "phone" ? "lg:w-[390px] lg:mx-auto lg:border-x lg:border-slate-200 lg:dark:border-zinc-800" : "w-full"}`}>
+    <div
+      className={`h-full ${device === "phone" ? "lg:w-[390px] lg:mx-auto lg:border-x lg:border-slate-200 lg:dark:border-zinc-800" : "w-full"}`}
+    >
       {isSvg && artifact.code ? (
         <SvgViewer
           key={refreshKey}
@@ -429,10 +428,7 @@ export function ArtifactCanvasPane() {
     : resolvedViews[0];
   const title = artifact.kind === "file" ? displayBasename(artifact.filename) : artifact.title;
 
-  const copyableText =
-    artifact.kind === "diff"
-      ? combinedDiff(artifact)
-      : artifact.code;
+  const copyableText = artifact.kind === "diff" ? combinedDiff(artifact) : artifact.code;
 
   const handleCopy = async () => {
     if (!copyableText) return;

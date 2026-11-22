@@ -2,11 +2,38 @@ name: CI Pipeline & Security Boundary Verification
 
 on:
   push:
-    branches: [ "main","develop"] 
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ "main","develop" ]
+    branches: ["main", "develop"]
 
 jobs:
+  lint-and-format:
+    name: Lint & Format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Dependencies
+        run: |
+          npm ci --workspaces || npm install
+
+      - name: Check Formatting
+        run: |
+          npx prettier --check .
+
+      - name: Run ESLint
+        run: |
+          npx eslint . --max-warnings 0
+
   typecheck:
     name: Typecheck (full error report)
     runs-on: ubuntu-24.04
@@ -189,7 +216,6 @@ jobs:
           image: local-agentic-sandbox/mcp-server:test
           only-severities: critical,high
         continue-on-error: true
-
 
   ui-e2e-playwright:
     name: Playwright UI (Shard ${{ matrix.shard }}/3)

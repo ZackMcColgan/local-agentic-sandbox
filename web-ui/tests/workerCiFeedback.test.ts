@@ -14,24 +14,22 @@ describe("Sprint 12 Phase 9 — Worker CI Feedback Loop (workerCiFeedback.test.t
         if (pollCount === 1) {
           return {
             state: "running",
-            actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1001"
+            actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1001",
           };
         }
         return {
           state: "passed",
-          actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1001"
+          actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1001",
         };
       },
-      pollIntervalMs: 5
+      pollIntervalMs: 5,
     });
 
     const outcome = await loop.evaluateAndHealCi({
       taskId: "task-ci-pass",
       branchName: "feature/weather-ui",
-      milestones: [
-        { id: "M1", title: "Implement UI", status: "completed" }
-      ],
-      fixExecutor: async () => ({ fixed: true, commitSha: "sha-fix" })
+      milestones: [{ id: "M1", title: "Implement UI", status: "completed" }],
+      fixExecutor: async () => ({ fixed: true, commitSha: "sha-fix" }),
     });
 
     assert.equal(outcome.finalStatus, "completed");
@@ -41,10 +39,8 @@ describe("Sprint 12 Phase 9 — Worker CI Feedback Loop (workerCiFeedback.test.t
   });
 
   it("extracts failing test from CI logs and creates 'Fix CI failure in <test>' milestone", async () => {
-    const {
-      WorkerCiFeedbackLoop,
-      extractFailingTestFromCiLog
-    } = await import("../lib/ci/workerCiFeedback.js");
+    const { WorkerCiFeedbackLoop, extractFailingTestFromCiLog } =
+      await import("../lib/ci/workerCiFeedback.js");
 
     const sampleLog = `
       TAP version 13
@@ -62,15 +58,15 @@ describe("Sprint 12 Phase 9 — Worker CI Feedback Loop (workerCiFeedback.test.t
           return {
             state: "failed",
             actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1002",
-            logExcerpt: sampleLog
+            logExcerpt: sampleLog,
           };
         }
         return {
           state: "passed",
-          actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1003"
+          actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1003",
         };
       },
-      pollIntervalMs: 5
+      pollIntervalMs: 5,
     });
 
     const milestones = [{ id: "M1", title: "Initial build", status: "completed" as const }];
@@ -81,7 +77,7 @@ describe("Sprint 12 Phase 9 — Worker CI Feedback Loop (workerCiFeedback.test.t
       fixExecutor: async (milestoneTitle) => {
         assert.equal(milestoneTitle, "Fix CI failure in tests/weatherApi.test.ts");
         return { fixed: true, commitSha: "sha-fixed-1" };
-      }
+      },
     });
 
     assert.equal(outcome.finalStatus, "completed");
@@ -99,17 +95,17 @@ describe("Sprint 12 Phase 9 — Worker CI Feedback Loop (workerCiFeedback.test.t
       checkRunsFetcher: async () => ({
         state: "failed",
         actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/1004",
-        logExcerpt: "FAIL tests/brokenModule.test.ts: AssertionError"
+        logExcerpt: "FAIL tests/brokenModule.test.ts: AssertionError",
       }),
       pollIntervalMs: 5,
-      maxFixAttempts: 3
+      maxFixAttempts: 3,
     });
 
     const outcome = await loop.evaluateAndHealCi({
       taskId: "task-ci-park",
       branchName: "feature/broken",
       milestones: [{ id: "M1", title: "Build module", status: "completed" }],
-      fixExecutor: async () => ({ fixed: true, commitSha: "sha-try" })
+      fixExecutor: async () => ({ fixed: true, commitSha: "sha-try" }),
     });
 
     assert.equal(outcome.finalStatus, "parked");
@@ -142,13 +138,15 @@ describe("Sprint 12 Phase 9 — Worker CI Feedback Loop (workerCiFeedback.test.t
             state: "failed",
             actionsUrl: "https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/999",
             failingStep: "tests/brokenModule.test.ts",
-            summary: "Fix CI failure in tests/brokenModule.test.ts"
-          }
-        }
+            summary: "Fix CI failure in tests/brokenModule.test.ts",
+          },
+        },
       })
     );
 
-    assert.ok(html.includes("https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/999"));
+    assert.ok(
+      html.includes("https://github.com/ZackMcColgan/local-agentic-sandbox/actions/runs/999")
+    );
     assert.ok(html.includes("tests/brokenModule.test.ts"));
   });
 });

@@ -8,7 +8,7 @@ export const REVIEWER_GATE_STAGE3_DEFAULT = false;
  */
 export function isReviewerGateStage3Enabled(
   override?: boolean,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): boolean {
   if (typeof override === "boolean") {
     return override;
@@ -32,6 +32,8 @@ export interface MechanicalCheckResult {
   verdict: GateVerdict;
   changedFiles: string[];
   failures: MechanicalFailure[];
+  allowlistStatus: "enforced" | "not-declared";
+  notes: string[];
 }
 
 const BANNED_HYGIENE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
@@ -113,11 +115,20 @@ export function runMechanicalChecks(input: MechanicalCheckInput): MechanicalChec
   const failures: MechanicalFailure[] = [];
   const parsedFiles = parseUnifiedDiff(input.diff);
   const changedFiles = parsedFiles.map((f) => f.path);
-  const allowSet = new Set(input.allowlist.map((p) => p.replace(/\\/g, "/")));
+  const normalizedAllowlist = (input.allowlist ?? [])
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .map((p) => p.trim().replace(/\\/g, "/"));
+  const allowlistStatus: "enforced" | "not-declared" =
+    normalizedAllowlist.length > 0 ? "enforced" : "not-declared";
+  const notes: string[] = [];
+  if (allowlistStatus === "not-declared") {
+    notes.push("Allowlist check skipped: no allowlist declared on item.");
+  }
+  const allowSet = new Set(normalizedAllowlist);
 
   for (const file of parsedFiles) {
     const normalizedPath = file.path.replace(/\\/g, "/");
-    if (!allowSet.has(normalizedPath)) {
+    if (allowlistStatus === "enforced" && !allowSet.has(normalizedPath)) {
       failures.push({
         check: "allowlist",
         evidence: `File outside allowlist: ${normalizedPath}`,
@@ -179,6 +190,8 @@ export function runMechanicalChecks(input: MechanicalCheckInput): MechanicalChec
     verdict: failures.length === 0 ? "PASS" : "FAIL",
     changedFiles,
     failures,
+    allowlistStatus,
+    notes,
   };
 }
 
@@ -193,10 +206,9 @@ export interface EvaluateReviewerGateOptions {
   brief: string;
   mechanicalInput: MechanicalCheckInput;
   stage3Enabled?: boolean;
-  issueReviewerThread: (params: {
-    itemId: string;
-    brief: string;
-  }) => Promise<ReviewerVerdict>;
+  ciAllGreen?: boolean;
+  finishVerificationClean?: boolean;
+  issueReviewerThread: (params: { itemId: string; brief: string }) => Promise<ReviewerVerdict>;
   log?: (message: string) => void;
 }
 
@@ -234,7 +246,7 @@ export function composeReviewerPrompt(brief: string, diff: string): string {
  * (PASS only when BOTH pass), and enforces shadow mode while Stage 3 is OFF.
  */
 export async function evaluateReviewerGate(
-  options: EvaluateReviewerGateOptions,
+  options: EvaluateReviewerGateOptions
 ): Promise<ReviewerGateResult> {
   const mechanical = runMechanicalChecks(options.mechanicalInput);
   const prompt = composeReviewerPrompt(options.brief, options.mechanicalInput.diff);
@@ -248,8 +260,15 @@ export async function evaluateReviewerGate(
   const stage3Enabled = isReviewerGateStage3Enabled(options.stage3Enabled);
   const shadowMode = !stage3Enabled;
 
+  const mergeAuthorized = isMergeAuthorized({
+    stage3Enabled,
+    ciAllGreen: options.ciAllGreen ?? false,
+    reviewerGateVerdict: verdict,
+    finishVerificationClean: options.finishVerificationClean ?? false,
+  });
+
   options.log?.(
-    `[reviewer-gate] item=${options.itemId} verdict=${verdict} mechanical=${mechanical.verdict} reviewer=${reviewer.verdict} shadow=${shadowMode}`,
+    `[reviewer-gate] item=${options.itemId} verdict=${verdict} mechanical=${mechanical.verdict} reviewer=${reviewer.verdict} shadow=${shadowMode}`
   );
 
   return {
@@ -257,7 +276,7 @@ export async function evaluateReviewerGate(
     mechanical,
     reviewer,
     shadowMode,
-    mergeAuthorized: false,
+    mergeAuthorized,
   };
 }
 
@@ -275,11 +294,7 @@ export function isMergeAuthorized(input: MergeAuthorizationInput): boolean {
   if (!isReviewerGateStage3Enabled(input.stage3Enabled)) {
     return false;
   }
-  return (
-    input.ciAllGreen &&
-    input.reviewerGateVerdict === "PASS" &&
-    input.finishVerificationClean
-  );
+  return input.ciAllGreen && input.reviewerGateVerdict === "PASS" && input.finishVerificationClean;
 }
 
 export interface AuditComparison {
@@ -324,15 +339,14 @@ export function createAgreementLedger(): AgreementLedger {
  */
 export function recordAuditComparison(
   ledger: AgreementLedger,
-  comparison: AuditComparison,
+  comparison: AuditComparison
 ): AgreementLedger {
   const totalPrs = ledger.totalPrs + 1;
   const agreed = comparison.driverVerdict === comparison.reviewerVerdict;
   const agreements = ledger.agreements + (agreed ? 1 : 0);
   const agreementRate = agreements / totalPrs;
 
-  const isEscape =
-    comparison.driverVerdict === "FAIL" && comparison.reviewerVerdict === "PASS";
+  const isEscape = comparison.driverVerdict === "FAIL" && comparison.reviewerVerdict === "PASS";
   const escapeRecord: EscapeRecord | null = isEscape
     ? {
         prNumber: comparison.prNumber,
@@ -346,8 +360,7 @@ export function recordAuditComparison(
     ? [...ledger.reviewerTestCases, escapeRecord]
     : ledger.reviewerTestCases;
 
-  const stage3Eligible =
-    totalPrs >= 10 && agreementRate >= 0.95 && escapes.length === 0;
+  const stage3Eligible = totalPrs >= 10 && agreementRate >= 0.95 && escapes.length === 0;
 
   return {
     totalPrs,

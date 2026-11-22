@@ -52,7 +52,7 @@ export function loadPendingQueue(skillsDir?: string): SkillGateStore {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
-  } catch (err) {
+  } catch {
     return { version: 1, candidates: {}, updatedAt: new Date().toISOString() };
   }
 }
@@ -90,7 +90,7 @@ export function recordObservedPattern(
       firstObserved: now,
       lastObserved: now,
       solutionSummary: details.solutionSummary,
-      status: "pending"
+      status: "pending",
     };
   } else {
     candidate.occurrences += 1;
@@ -102,12 +102,13 @@ export function recordObservedPattern(
   store.updatedAt = now;
   savePendingQueue(store, options.skillsDir);
 
-  const isPendingApproval = candidate.occurrences >= minOccurrences && candidate.status === "pending";
+  const isPendingApproval =
+    candidate.occurrences >= minOccurrences && candidate.status === "pending";
 
   return {
     candidate,
     isPendingApproval,
-    promoted: false // NEVER auto-promotes
+    promoted: false, // NEVER auto-promotes
   };
 }
 
@@ -160,7 +161,7 @@ ${candidate.solutionSummary}
 
   return {
     promoted: true,
-    skillPath
+    skillPath,
   };
 }
 

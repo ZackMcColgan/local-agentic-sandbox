@@ -31,11 +31,14 @@ export function discoverRepoState(repoRoot: string): RepoSnapshot {
         if (content.includes("name: mcp-runner")) discoveredServices.push("mcp-runner");
         if (content.includes("name: browser-mcp")) discoveredServices.push("browser-mcp");
         if (content.includes("name: otel-collector")) discoveredServices.push("otel-collector");
-        if (content.includes("name: llm-service") || content.includes("name: ollama-service")) discoveredServices.push("llm-service");
+        if (content.includes("name: llm-service") || content.includes("name: ollama-service"))
+          discoveredServices.push("llm-service");
         if (content.includes("name: qdrant")) discoveredServices.push("qdrant");
-        if (content.includes("name: builder-tier") || f.includes("builder")) discoveredServices.push("builder-tier");
+        if (content.includes("name: builder-tier") || f.includes("builder"))
+          discoveredServices.push("builder-tier");
 
-        if (content.includes("pvc-workspace") || content.includes("workspace-volume")) discoveredVolumes.push("workspace-pvc");
+        if (content.includes("pvc-workspace") || content.includes("workspace-volume"))
+          discoveredVolumes.push("workspace-pvc");
         if (content.includes("build-cache-pvc")) discoveredVolumes.push("build-cache-pvc");
         if (content.includes("qdrant-storage")) discoveredVolumes.push("qdrant-storage");
       }
@@ -65,7 +68,7 @@ export function discoverRepoState(repoRoot: string): RepoSnapshot {
     hasDockerCompose,
     discoveredServices: Array.from(new Set(discoveredServices)),
     discoveredVolumes: Array.from(new Set(discoveredVolumes)),
-    discoveredNetworks: Array.from(new Set(discoveredNetworks))
+    discoveredNetworks: Array.from(new Set(discoveredNetworks)),
   };
 }
 
@@ -216,7 +219,7 @@ export function generateArchitectureDiagram(repoRoot: string): {
     components: [
       ...snapshot.discoveredServices,
       ...snapshot.discoveredVolumes,
-      ...snapshot.discoveredNetworks
-    ]
+      ...snapshot.discoveredNetworks,
+    ],
   };
 }

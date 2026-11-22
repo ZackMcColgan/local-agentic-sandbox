@@ -60,7 +60,10 @@ export function isHostCheckoutAllowed(rootPath: string): boolean {
   }
 }
 
-export function confineExplorerPath(rootPath: string, relPath: string): { resolved: string; normalizedRel: string } {
+export function confineExplorerPath(
+  rootPath: string,
+  relPath: string
+): { resolved: string; normalizedRel: string } {
   const trimmed = (relPath ?? "").trim();
   if (path.isAbsolute(trimmed) || /^[a-zA-Z]:[\\/]/.test(trimmed)) {
     throw new ExplorerAccessError("Access forbidden: absolute paths are not allowed", 403);
@@ -149,7 +152,13 @@ export function listExplorerTree(
     throw new ExplorerAccessError("Path is not a directory", 400);
   }
 
-  return buildTreeNode(rootPath, resolved, normalizedRel, 0, options?.maxDepth ?? DEFAULT_MAX_DEPTH);
+  return buildTreeNode(
+    rootPath,
+    resolved,
+    normalizedRel,
+    0,
+    options?.maxDepth ?? DEFAULT_MAX_DEPTH
+  );
 }
 
 export function readExplorerFile(

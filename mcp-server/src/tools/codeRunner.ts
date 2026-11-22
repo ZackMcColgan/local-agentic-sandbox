@@ -12,8 +12,11 @@ export function registerCodeRunner(mcp: McpServer) {
     "Execute Python code and assertions inside an isolated, unprivileged Linux container sandbox with zero network egress (cap_drop: ALL, read-only rootfs, tmpfs buffer).",
     {
       code: z.string().describe("The Python script to execute"),
-      test_code: z.string().optional().describe("Optional pytest or unit test assertions to run alongside the code")
-    } as any,
+      test_code: z
+        .string()
+        .optional()
+        .describe("Optional pytest or unit test assertions to run alongside the code"),
+    },
     async ({ code, test_code }: { code: string; test_code?: string }) => {
       const runId = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const scriptPath = `/tmp/script_${runId}.py`;
@@ -25,47 +28,60 @@ export function registerCodeRunner(mcp: McpServer) {
 
         const { stdout, stderr } = await execFileAsync("python3", [scriptPath], {
           timeout: 5000,
-          maxBuffer: 1024 * 1024
+          maxBuffer: 1024 * 1024,
         });
 
         const executionDurationMs = Math.round(performance.now() - startTime);
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              stdout: stdout.trim(),
-              stderr: stderr.trim(),
-              duration_ms: executionDurationMs,
-              security_boundary: {
-                network_egress: "BLOCKED",
-                dropped_caps: "ALL",
-                uid: 10001,
-                gid: 10001,
-                rootfs: "READ_ONLY",
-                tmpfs_buffer: "/tmp (rw,noexec,nosuid,size=64m)"
-              }
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  stdout: stdout.trim(),
+                  stderr: stderr.trim(),
+                  duration_ms: executionDurationMs,
+                  security_boundary: {
+                    network_egress: "BLOCKED",
+                    dropped_caps: "ALL",
+                    uid: 10001,
+                    gid: 10001,
+                    rootfs: "READ_ONLY",
+                    tmpfs_buffer: "/tmp (rw,noexec,nosuid,size=64m)",
+                  },
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e = err as { message?: string; stderr?: string; stdout?: string };
         const executionDurationMs = Math.round(performance.now() - startTime);
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "EXECUTION_ERROR",
-              error: err.message,
-              stderr: err.stderr ? err.stderr.trim() : "",
-              stdout: err.stdout ? err.stdout.trim() : "",
-              duration_ms: executionDurationMs,
-              security_boundary: {
-                network_egress: "BLOCKED",
-                isolation: "ENFORCED"
-              }
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "EXECUTION_ERROR",
+                  error: e.message ?? String(err),
+                  stderr: e.stderr ? e.stderr.trim() : "",
+                  stdout: e.stdout ? e.stdout.trim() : "",
+                  duration_ms: executionDurationMs,
+                  security_boundary: {
+                    network_egress: "BLOCKED",
+                    isolation: "ENFORCED",
+                  },
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       } finally {
         await fs.unlink(scriptPath).catch(() => {});

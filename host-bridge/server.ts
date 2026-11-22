@@ -13,7 +13,7 @@ import {
   resolveDefaultGitOpsLogPath,
   type BridgeGitConfig,
   type GitCapability,
-  type MergeGrant
+  type MergeGrant,
 } from "./gitOps";
 
 export interface HostServerOptions {
@@ -44,12 +44,19 @@ export function createHostServer(options: HostServerOptions = {}) {
   const host = options.host || "127.0.0.1";
 
   // Resolve secret from options or environment
-  let sharedSecret = options.sharedSecret !== undefined ? options.sharedSecret : process.env.HOST_RUNNER_SHARED_SECRET;
+  const sharedSecret =
+    options.sharedSecret !== undefined
+      ? options.sharedSecret
+      : process.env.HOST_RUNNER_SHARED_SECRET;
   if (!sharedSecret) {
-    throw new Error("HOST_RUNNER_SHARED_SECRET environment variable is missing or empty. Server failing closed.");
+    throw new Error(
+      "HOST_RUNNER_SHARED_SECRET environment variable is missing or empty. Server failing closed."
+    );
   }
   if (sharedSecret.length < 32) {
-    throw new Error("HOST_RUNNER_SHARED_SECRET must be at least 32 characters. Server failing closed.");
+    throw new Error(
+      "HOST_RUNNER_SHARED_SECRET must be at least 32 characters. Server failing closed."
+    );
   }
 
   // Dual-layer approval consumption tracking: approvalId -> timestamp
@@ -68,7 +75,7 @@ export function createHostServer(options: HostServerOptions = {}) {
   const manifest = getBridgeManifest(__dirname);
 
   // Resolve Git config
-  let fileConfig: any = {};
+  let fileConfig: Partial<BridgeGitConfig> = {};
   const configPath = path.join(__dirname, "config.json");
   if (fs.existsSync(configPath)) {
     try {
@@ -80,13 +87,14 @@ export function createHostServer(options: HostServerOptions = {}) {
     allowUnattendedGit:
       options.allowUnattendedGit !== undefined
         ? options.allowUnattendedGit
-        : (process.env.HOST_RUNNER_ALLOW_UNATTENDED_GIT === "true" || fileConfig.allowUnattendedGit === true),
-    gitRepoAllowlist:
-      options.gitRepoAllowlist ||
+        : process.env.HOST_RUNNER_ALLOW_UNATTENDED_GIT === "true" ||
+          fileConfig.allowUnattendedGit === true,
+    gitRepoAllowlist: options.gitRepoAllowlist ||
       fileConfig.gitRepoAllowlist || {
-        "local-agentic-sandbox": path.resolve(__dirname, "..")
+        "local-agentic-sandbox": path.resolve(__dirname, ".."),
       },
-    gitOpsLogPath: options.gitOpsLogPath || fileConfig.gitOpsLogPath || resolveDefaultGitOpsLogPath()
+    gitOpsLogPath:
+      options.gitOpsLogPath || fileConfig.gitOpsLogPath || resolveDefaultGitOpsLogPath(),
   };
 
   // Async host jobs: daemon-owned execution independent of HTTP request lifetime.
@@ -107,11 +115,13 @@ export function createHostServer(options: HostServerOptions = {}) {
       "host-runner-service",
       "host.docker.internal",
       "127.0.0.1",
-      "localhost"
+      "localhost",
     ];
     // Loopback-only hosts with any bound port (supports ephemeral port 0 for tests).
     const loopbackAnyPort =
-      /^(host-runner-service|host\.docker\.internal|127\.0\.0\.1|localhost)(:\d+)?$/.test(hostHeader);
+      /^(host-runner-service|host\.docker\.internal|127\.0\.0\.1|localhost)(:\d+)?$/.test(
+        hostHeader
+      );
     if (!allowedHosts.includes(hostHeader) && !loopbackAnyPort) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Bad Request: Invalid Host header" }));
@@ -158,7 +168,7 @@ export function createHostServer(options: HostServerOptions = {}) {
           protocolVersion: manifest.protocolVersion,
           bridgeSourceSha256: manifest.bridgeSourceSha256,
           pid: process.pid,
-          allowUnattendedGit: gitConfig.allowUnattendedGit
+          allowUnattendedGit: gitConfig.allowUnattendedGit,
         })
       );
       return;
@@ -176,13 +186,20 @@ export function createHostServer(options: HostServerOptions = {}) {
       }
 
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
-      let logs: any[] = [];
+      let logs: unknown[] = [];
       if (gitConfig.gitOpsLogPath && fs.existsSync(gitConfig.gitOpsLogPath)) {
         try {
-          const lines = fs.readFileSync(gitConfig.gitOpsLogPath, "utf8").split(/\r?\n/).filter(Boolean);
+          const lines = fs
+            .readFileSync(gitConfig.gitOpsLogPath, "utf8")
+            .split(/\r?\n/)
+            .filter(Boolean);
           const slice = lines.slice(-limit);
           logs = slice.map((l) => {
-            try { return JSON.parse(l); } catch { return { raw: l }; }
+            try {
+              return JSON.parse(l);
+            } catch {
+              return { raw: l };
+            }
           });
         } catch {}
       }
@@ -221,7 +238,12 @@ export function createHostServer(options: HostServerOptions = {}) {
       });
 
       req.on("end", async () => {
-        let body: any;
+        let body: {
+          tool?: string;
+          args?: Record<string, unknown>;
+          capability?: GitCapability;
+          mergeGrant?: MergeGrant;
+        };
         try {
           const rawText = Buffer.concat(chunks).toString("utf8");
           body = JSON.parse(rawText);
@@ -231,7 +253,7 @@ export function createHostServer(options: HostServerOptions = {}) {
           return;
         }
 
-        const tool = body.tool;
+        const tool = String(body.tool ?? "");
         const toolArgs = body.args || {};
 
         // Dual-layer approval gate: verify destructive actions
@@ -244,8 +266,9 @@ export function createHostServer(options: HostServerOptions = {}) {
             res.writeHead(403, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
-                error: "Destructive host action requires explicit approval header (X-Host-Approval-Id)",
-                reason: classification.reason
+                error:
+                  "Destructive host action requires explicit approval header (X-Host-Approval-Id)",
+                reason: classification.reason,
               })
             );
             return;
@@ -257,7 +280,7 @@ export function createHostServer(options: HostServerOptions = {}) {
             res.end(
               JSON.stringify({
                 error: `Approval ID already consumed: ${approvalId}`,
-                approvalId
+                approvalId,
               })
             );
             return;
@@ -280,10 +303,11 @@ export function createHostServer(options: HostServerOptions = {}) {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify(result));
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (!res.writableEnded) {
+            const message = err instanceof Error ? err.message : undefined;
             res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: err.message || "Internal server error" }));
+            res.end(JSON.stringify({ error: message || "Internal server error" }));
           }
         }
       });
@@ -318,7 +342,12 @@ export function createHostServer(options: HostServerOptions = {}) {
       });
 
       req.on("end", async () => {
-        let body: any;
+        let body: {
+          tool?: string;
+          args?: Record<string, unknown>;
+          capability?: GitCapability;
+          mergeGrant?: MergeGrant;
+        };
         try {
           const rawText = Buffer.concat(chunks).toString("utf8");
           body = JSON.parse(rawText);
@@ -328,7 +357,7 @@ export function createHostServer(options: HostServerOptions = {}) {
           return;
         }
 
-        const tool = body.tool;
+        const tool = String(body.tool ?? "");
         const toolArgs = body.args || {};
 
         // Destructive classification + approvals UNCHANGED, applied at START
@@ -342,8 +371,9 @@ export function createHostServer(options: HostServerOptions = {}) {
             res.writeHead(403, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
-                error: "Destructive host action requires explicit approval header (X-Host-Approval-Id)",
-                reason: classification.reason
+                error:
+                  "Destructive host action requires explicit approval header (X-Host-Approval-Id)",
+                reason: classification.reason,
               })
             );
             return;
@@ -355,7 +385,7 @@ export function createHostServer(options: HostServerOptions = {}) {
             res.end(
               JSON.stringify({
                 error: `Approval ID already consumed: ${approvalId}`,
-                approvalId
+                approvalId,
               })
             );
             return;
@@ -372,12 +402,10 @@ export function createHostServer(options: HostServerOptions = {}) {
         const jobResponse: http.ServerResponse = {
           writeHead: () => jobResponse,
           end: () => jobResponse,
-          writableEnded: true
+          writableEnded: true,
         } as unknown as http.ServerResponse;
-        runAsyncJob(
-          jobStore,
-          rec,
-          (t, a) => handleToolExecution(t, a, jobResponse, body.capability, gitConfig, body.mergeGrant)
+        runAsyncJob(jobStore, rec, (t, a) =>
+          handleToolExecution(t, a, jobResponse, body.capability, gitConfig, body.mergeGrant)
         ).catch(() => {});
 
         res.writeHead(202, { "Content-Type": "application/json" });
@@ -407,18 +435,20 @@ export function createHostServer(options: HostServerOptions = {}) {
       }
 
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        jobId: rec.id,
-        tool: rec.tool,
-        status: rec.status,
-        createdAt: rec.createdAt,
-        startedAt: rec.startedAt,
-        finishedAt: rec.finishedAt,
-        exitCode: rec.exitCode,
-        timedOut: rec.timedOut,
-        error: rec.error,
-        timeoutMs: rec.timeoutMs
-      }));
+      res.end(
+        JSON.stringify({
+          jobId: rec.id,
+          tool: rec.tool,
+          status: rec.status,
+          createdAt: rec.createdAt,
+          startedAt: rec.startedAt,
+          finishedAt: rec.finishedAt,
+          exitCode: rec.exitCode,
+          timedOut: rec.timedOut,
+          error: rec.error,
+          timeoutMs: rec.timeoutMs,
+        })
+      );
       return;
     }
 
@@ -448,14 +478,16 @@ export function createHostServer(options: HostServerOptions = {}) {
       const slice = jobStore.readSpool(jobId, stream, offset, limit);
 
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        jobId,
-        stream,
-        chunk: slice.chunk,
-        nextOffset: slice.nextOffset,
-        totalLength: slice.totalLength,
-        status: rec.status
-      }));
+      res.end(
+        JSON.stringify({
+          jobId,
+          stream,
+          chunk: slice.chunk,
+          nextOffset: slice.nextOffset,
+          totalLength: slice.totalLength,
+          status: rec.status,
+        })
+      );
       return;
     }
 
@@ -478,18 +510,26 @@ export function createHostServer(options: HostServerOptions = {}) {
       new Promise<void>((resolve) => {
         jobStore.interruptActive();
         server.close(() => resolve());
-      })
+      }),
   };
+}
+
+export interface HostToolResult {
+  success?: boolean;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  [key: string]: unknown;
 }
 
 export async function handleToolExecution(
   tool: string,
-  args: any,
+  args: Record<string, unknown>,
   res: http.ServerResponse,
   capability?: GitCapability,
   gitConfig?: BridgeGitConfig,
   mergeGrant?: MergeGrant
-): Promise<any> {
+): Promise<HostToolResult | undefined> {
   if (tool.startsWith("host_git_")) {
     return await executeGitVerb(tool, args, capability, gitConfig, mergeGrant);
   }
@@ -517,7 +557,7 @@ export async function handleToolExecution(
       const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
         cwd: effectiveCwd,
         windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe"],
       });
 
       let stdout = "";
@@ -583,7 +623,7 @@ export async function handleToolExecution(
             timeoutSeconds,
             output: clampedOutput,
             truncated,
-            originalLength
+            originalLength,
           });
         } else {
           resolve({
@@ -591,7 +631,7 @@ export async function handleToolExecution(
             exitCode: code ?? (code === null ? -1 : 0),
             output: clampedOutput,
             truncated,
-            originalLength
+            originalLength,
           });
         }
       });
@@ -603,7 +643,7 @@ export async function handleToolExecution(
           error: err.message,
           output: "",
           truncated: false,
-          originalLength: 0
+          originalLength: 0,
         });
       });
     });
@@ -620,20 +660,50 @@ export async function handleToolExecution(
     const stats = fs.statSync(resolvedPath);
     if (stats.size > MAX_FILE_READ_BYTES) {
       res.writeHead(413, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: `File exceeds 2MB limit: ${rawPath} (${stats.size} bytes)` }));
+      res.end(
+        JSON.stringify({ error: `File exceeds 2MB limit: ${rawPath} (${stats.size} bytes)` })
+      );
       return undefined;
     }
 
     const content = fs.readFileSync(resolvedPath, "utf8");
     const allLines = content.split(/\r?\n/);
 
-    const start_line = typeof args?.start_line === "number" ? args.start_line : (args?.start_line !== undefined && args?.start_line !== null ? parseInt(String(args.start_line), 10) : undefined);
-    const end_line = typeof args?.end_line === "number" ? args.end_line : (args?.end_line !== undefined && args?.end_line !== null ? parseInt(String(args.end_line), 10) : undefined);
-    const offset = typeof args?.offset === "number" ? args.offset : (args?.offset !== undefined && args?.offset !== null ? parseInt(String(args.offset), 10) : undefined);
-    const limit = typeof args?.limit === "number" ? args.limit : (args?.limit !== undefined && args?.limit !== null ? parseInt(String(args.limit), 10) : undefined);
+    const start_line =
+      typeof args?.start_line === "number"
+        ? args.start_line
+        : args?.start_line !== undefined && args?.start_line !== null
+          ? parseInt(String(args.start_line), 10)
+          : undefined;
+    const end_line =
+      typeof args?.end_line === "number"
+        ? args.end_line
+        : args?.end_line !== undefined && args?.end_line !== null
+          ? parseInt(String(args.end_line), 10)
+          : undefined;
+    const offset =
+      typeof args?.offset === "number"
+        ? args.offset
+        : args?.offset !== undefined && args?.offset !== null
+          ? parseInt(String(args.offset), 10)
+          : undefined;
+    const limit =
+      typeof args?.limit === "number"
+        ? args.limit
+        : args?.limit !== undefined && args?.limit !== null
+          ? parseInt(String(args.limit), 10)
+          : undefined;
 
-    const start = start_line ? Math.max(1, start_line) : (offset !== undefined ? Math.max(1, offset === 0 ? 1 : offset) : 1);
-    const end = end_line ? Math.min(allLines.length, end_line) : (limit !== undefined ? Math.min(allLines.length, start + limit - 1) : allLines.length);
+    const start = start_line
+      ? Math.max(1, start_line)
+      : offset !== undefined
+        ? Math.max(1, offset === 0 ? 1 : offset)
+        : 1;
+    const end = end_line
+      ? Math.min(allLines.length, end_line)
+      : limit !== undefined
+        ? Math.min(allLines.length, start + limit - 1)
+        : allLines.length;
 
     const slice = allLines.slice(start - 1, end);
     const formatted = slice.map((line, idx) => `${start + idx} | ${line}`).join("\n");
@@ -646,7 +716,7 @@ export async function handleToolExecution(
       has_more: end < allLines.length,
       next_start_line: end < allLines.length ? end + 1 : null,
       truncated: false,
-      content: formatted
+      content: formatted,
     };
   }
 
@@ -691,7 +761,7 @@ export async function handleToolExecution(
       preImageExists,
       preImageContent,
       preImageTruncated,
-      preImageSha256
+      preImageSha256,
     };
   }
 
@@ -721,7 +791,11 @@ export async function handleToolExecution(
 
     const applied = applyReplaceString(fullText, oldString, newString, replaceAll);
     if (!applied.success || typeof applied.content !== "string") {
-      return { success: false, error: applied.error || "replace failed", occurrences: applied.occurrences };
+      return {
+        success: false,
+        error: applied.error || "replace failed",
+        occurrences: applied.occurrences,
+      };
     }
 
     fs.writeFileSync(resolvedPath, applied.content, "utf8");
@@ -733,7 +807,7 @@ export async function handleToolExecution(
       preImageExists: true,
       preImageContent,
       preImageTruncated,
-      preImageSha256
+      preImageSha256,
     };
   }
 
@@ -760,7 +834,7 @@ export async function handleToolExecution(
         name: entry.name,
         length: size,
         lastWriteTime,
-        isDirectory: entry.isDirectory()
+        isDirectory: entry.isDirectory(),
       };
     });
 
@@ -768,7 +842,7 @@ export async function handleToolExecution(
       success: true,
       items,
       truncated,
-      originalCount
+      originalCount,
     };
   }
 
@@ -793,7 +867,7 @@ export async function handleToolExecution(
 
     return {
       success: true,
-      path: rawPath
+      path: rawPath,
     };
   }
 

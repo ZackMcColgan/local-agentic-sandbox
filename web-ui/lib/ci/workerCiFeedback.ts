@@ -18,7 +18,10 @@ export interface EvaluateCiInput {
     status: "pending" | "in_progress" | "completed" | "failed" | "rejected";
     commitSha?: string;
   }>;
-  fixExecutor: (milestoneTitle: string, attempt: number) => Promise<{ fixed: boolean; commitSha?: string }>;
+  fixExecutor: (
+    milestoneTitle: string,
+    attempt: number
+  ) => Promise<{ fixed: boolean; commitSha?: string }>;
 }
 
 export interface EvaluateCiOutcome {
@@ -58,7 +61,11 @@ export function extractFailingTestFromCiLog(log: string): string {
  * Formats a failing acceptance test command, exit code, and last 4,000 chars of stdout/stderr
  * for injection into Builder self-healing retry prompts.
  */
-export function formatTestFailureForBuilder(command: string, exitCode: number, output: string): string {
+export function formatTestFailureForBuilder(
+  command: string,
+  exitCode: number,
+  output: string
+): string {
   const truncated = output.length > 4000 ? output.slice(-4000) : output;
   return `Acceptance test command failed (exit code ${exitCode}):\n$ ${command}\n\nOutput:\n${truncated.trim()}`;
 }
@@ -98,7 +105,7 @@ export class WorkerCiFeedbackLoop {
           finalStatus: "completed",
           fixAttempts,
           milestones,
-          actionsUrl: check.actionsUrl
+          actionsUrl: check.actionsUrl,
         };
       }
 
@@ -111,20 +118,21 @@ export class WorkerCiFeedbackLoop {
           fixAttempts,
           milestones,
           parkedReason: `CI checks failed after ${this.maxFixAttempts} fix attempts in branch ${input.branchName}`,
-          actionsUrl: check.actionsUrl
+          actionsUrl: check.actionsUrl,
         };
       }
 
       // Trigger a fix milestone
       fixAttempts++;
-      const failingTarget = check.failingStep || extractFailingTestFromCiLog(check.logExcerpt || "");
+      const failingTarget =
+        check.failingStep || extractFailingTestFromCiLog(check.logExcerpt || "");
       const fixMilestoneTitle = `Fix CI failure in ${failingTarget}`;
       const fixMilestoneId = `M-CI-FIX-${fixAttempts}`;
 
       const fixMilestone: EvaluateCiInput["milestones"][number] = {
         id: fixMilestoneId,
         title: fixMilestoneTitle,
-        status: "in_progress"
+        status: "in_progress",
       };
       milestones.push(fixMilestone);
 
@@ -142,7 +150,7 @@ export class WorkerCiFeedbackLoop {
       fixAttempts,
       milestones,
       parkedReason: `CI checks failed after ${this.maxFixAttempts} fix attempts`,
-      actionsUrl: ""
+      actionsUrl: "",
     };
   }
 }

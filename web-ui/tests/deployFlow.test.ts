@@ -4,10 +4,8 @@ import http from "node:http";
 
 describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", () => {
   it("Build task produces a clickable link in the thread that returns HTTP 200 and creates ephemeral namespace build-<shortid>", async () => {
-    const {
-      DeployPipeline,
-      resetAllocatedNodePortsForTesting
-    } = await import("../lib/deploy/deployPipeline.js");
+    const { DeployPipeline, resetAllocatedNodePortsForTesting } =
+      await import("../lib/deploy/deployPipeline.js");
 
     resetAllocatedNodePortsForTesting();
 
@@ -27,20 +25,30 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
           executedCommands.push(cmd);
           return { exitCode: 0, stdout: "ok", stderr: "" };
         },
-        healthProbeUrlOverride: `http://127.0.0.1:${address.port}/`
+        healthProbeUrlOverride: `http://127.0.0.1:${address.port}/`,
       });
 
       const result = await pipeline.deployBuildTask({
         runId: "run-9f8e7d6c-1234",
         threadId: "thread-deploy-1",
         workspaceDir: "/tmp/workspace-app",
-        appName: "weather-dashboard"
+        appName: "weather-dashboard",
       });
 
       assert.equal(result.status, "succeeded");
-      assert.equal(result.namespace, "build-9f8e7d6c", "Must create ephemeral namespace build-<shortid>");
-      assert.ok(result.nodePort >= 30100 && result.nodePort <= 32767, "Must allocate valid NodePort");
-      assert.ok(result.deployedUrl.includes(String(result.nodePort)), "Deployed URL must include allocated port");
+      assert.equal(
+        result.namespace,
+        "build-9f8e7d6c",
+        "Must create ephemeral namespace build-<shortid>"
+      );
+      assert.ok(
+        result.nodePort >= 30100 && result.nodePort <= 32767,
+        "Must allocate valid NodePort"
+      );
+      assert.ok(
+        result.deployedUrl.includes(String(result.nodePort)),
+        "Deployed URL must include allocated port"
+      );
       assert.equal(result.healthStatus, 200, "Health probe must return HTTP 200");
       assert.ok(
         result.threadMessageMarkdown.includes(`[${result.deployedUrl}](${result.deployedUrl})`),
@@ -57,7 +65,7 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
           "apply_manifests",
           "rollout_wait",
           "health_check",
-          "report_link"
+          "report_link",
         ]
       );
       assert.ok(result.stages.every((s) => s.status === "completed"));
@@ -67,16 +75,14 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
   });
 
   it("Multiple concurrent builds allocate distinct NodePorts and never collide", async () => {
-    const {
-      DeployPipeline,
-      resetAllocatedNodePortsForTesting
-    } = await import("../lib/deploy/deployPipeline.js");
+    const { DeployPipeline, resetAllocatedNodePortsForTesting } =
+      await import("../lib/deploy/deployPipeline.js");
 
     resetAllocatedNodePortsForTesting();
 
     const pipeline = new DeployPipeline({
       commandRunner: async () => ({ exitCode: 0, stdout: "ok", stderr: "" }),
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
     const [res1, res2, res3] = await Promise.all([
@@ -84,33 +90,35 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
         runId: "run-aaaa1111",
         threadId: "thread-1",
         workspaceDir: "/tmp/w1",
-        appName: "app-1"
+        appName: "app-1",
       }),
       pipeline.deployBuildTask({
         runId: "run-bbbb2222",
         threadId: "thread-2",
         workspaceDir: "/tmp/w2",
-        appName: "app-2"
+        appName: "app-2",
       }),
       pipeline.deployBuildTask({
         runId: "run-cccc3333",
         threadId: "thread-3",
         workspaceDir: "/tmp/w3",
-        appName: "app-3"
-      })
+        appName: "app-3",
+      }),
     ]);
 
     const ports = new Set([res1.nodePort, res2.nodePort, res3.nodePort]);
-    assert.equal(ports.size, 3, "All 3 concurrent builds must receive unique NodePorts without collision");
+    assert.equal(
+      ports.size,
+      3,
+      "All 3 concurrent builds must receive unique NodePorts without collision"
+    );
     assert.notEqual(res1.namespace, res2.namespace);
     assert.notEqual(res2.namespace, res3.namespace);
   });
 
   it("Failed rollouts report the error in the thread (no silent hangs)", async () => {
-    const {
-      DeployPipeline,
-      resetAllocatedNodePortsForTesting
-    } = await import("../lib/deploy/deployPipeline.js");
+    const { DeployPipeline, resetAllocatedNodePortsForTesting } =
+      await import("../lib/deploy/deployPipeline.js");
 
     resetAllocatedNodePortsForTesting();
 
@@ -120,19 +128,20 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
           return {
             exitCode: 1,
             stdout: "",
-            stderr: "error: deployment \"app-crash\" exceeded its progress deadline (CrashLoopBackOff)"
+            stderr:
+              'error: deployment "app-crash" exceeded its progress deadline (CrashLoopBackOff)',
           };
         }
         return { exitCode: 0, stdout: "ok", stderr: "" };
       },
-      healthChecker: async () => ({ status: 503, ok: false })
+      healthChecker: async () => ({ status: 503, ok: false }),
     });
 
     const result = await pipeline.deployBuildTask({
       runId: "run-fail9999",
       threadId: "thread-fail",
       workspaceDir: "/tmp/w-fail",
-      appName: "app-crash"
+      appName: "app-crash",
     });
 
     assert.equal(result.status, "failed", "Failed rollout must mark deploy result as failed");
@@ -147,10 +156,8 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
   });
 
   it("Fix 2.4 & 2.8: command sequence imports image to containerd and cleans up ephemeral namespace on completion", async () => {
-    const {
-      DeployPipeline,
-      resetAllocatedNodePortsForTesting
-    } = await import("../lib/deploy/deployPipeline.js");
+    const { DeployPipeline, resetAllocatedNodePortsForTesting } =
+      await import("../lib/deploy/deployPipeline.js");
 
     resetAllocatedNodePortsForTesting();
 
@@ -160,33 +167,35 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
         executedCommands.push(cmd);
         return { exitCode: 0, stdout: "ok", stderr: "" };
       },
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
     const result = await pipeline.deployBuildTask({
       runId: "run-import-clean-1234",
       threadId: "thread-import",
       workspaceDir: "/tmp/w-import",
-      appName: "app-import"
+      appName: "app-import",
     });
 
     assert.equal(result.status, "succeeded");
 
     const buildIdx = executedCommands.findIndex((cmd) => cmd.includes("docker build"));
-    const importIdx = executedCommands.findIndex((cmd) => cmd.includes("images import") || cmd.includes("ctr"));
+    const importIdx = executedCommands.findIndex(
+      (cmd) => cmd.includes("images import") || cmd.includes("ctr")
+    );
     assert.ok(buildIdx !== -1, "docker build must be executed");
     assert.ok(importIdx !== -1, "ctr images import command must be executed");
     assert.ok(importIdx > buildIdx, "ctr images import must run after docker build");
 
-    const deleteNsCmd = executedCommands.find((cmd) => cmd.includes(`kubectl delete namespace ${result.namespace}`));
+    const deleteNsCmd = executedCommands.find((cmd) =>
+      cmd.includes(`kubectl delete namespace ${result.namespace}`)
+    );
     assert.ok(deleteNsCmd, "Ephemeral namespace must be cleaned up");
   });
 
   it("Fix 2.7: queries live cluster NodePorts to prevent port collisions on pod restart", async () => {
-    const {
-      DeployPipeline,
-      resetAllocatedNodePortsForTesting
-    } = await import("../lib/deploy/deployPipeline.js");
+    const { DeployPipeline, resetAllocatedNodePortsForTesting } =
+      await import("../lib/deploy/deployPipeline.js");
 
     resetAllocatedNodePortsForTesting();
 
@@ -197,17 +206,21 @@ describe("Sprint 12 Phase 5 — Build Task Deploy Flow (deployFlow.test.ts)", ()
         }
         return { exitCode: 0, stdout: "ok", stderr: "" };
       },
-      healthChecker: async () => ({ status: 200, ok: true })
+      healthChecker: async () => ({ status: 200, ok: true }),
     });
 
     const result = await pipeline.deployBuildTask({
       runId: "run-port-sync-1111",
       threadId: "thread-port-sync",
       workspaceDir: "/tmp/w-port",
-      appName: "app-port"
+      appName: "app-port",
     });
 
     assert.equal(result.status, "succeeded");
-    assert.notEqual(result.nodePort, 30100, "Must not allocate 30100 when already in use by cluster");
+    assert.notEqual(
+      result.nodePort,
+      30100,
+      "Must not allocate 30100 when already in use by cluster"
+    );
   });
 });

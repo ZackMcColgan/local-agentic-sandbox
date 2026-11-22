@@ -7,7 +7,7 @@ import { runJobMode } from "../../eval/run.mjs";
 
 describe("eval/run.mjs — job mode", () => {
   it("submits to /api/threads with launchTask, goal, and chunkBudget, then polls to completed", async () => {
-    const calls: Array<{ url: string; method: string; body?: any }> = [];
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
     let pollCount = 0;
 
     const mockFetch = async (url: string, init?: RequestInit) => {
@@ -16,10 +16,10 @@ describe("eval/run.mjs — job mode", () => {
       calls.push({ url, method, body });
 
       if (url.endsWith("/api/threads") && method === "POST") {
-        return new Response(
-          JSON.stringify({ thread: { id: "thread-123", status: "active" } }),
-          { status: 201, headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ thread: { id: "thread-123", status: "active" } }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       if (url.endsWith("/api/threads/thread-123") && method === "GET") {

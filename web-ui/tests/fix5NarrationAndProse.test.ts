@@ -9,7 +9,7 @@ import { ThreadStore } from "../lib/threads/threadStore";
 import { POST } from "../app/api/chat/route";
 
 function startMockOllamaServer(
-  handler: (callIndex: number, body: any, res: http.ServerResponse) => void
+  handler: (callIndex: number, body: Record<string, unknown>, res: http.ServerResponse) => void
 ): Promise<{ server: http.Server; url: string }> {
   let callIndex = 0;
   const server = http.createServer((req, res) => {
@@ -22,15 +22,18 @@ function startMockOllamaServer(
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const idx = callIndex++;
-      let body: any = {};
-      try { body = JSON.parse(raw); } catch {}
+      let body: Record<string, unknown> = {};
+      try {
+        body = JSON.parse(raw);
+      } catch {}
       handler(idx, body, res);
     });
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as any;
-      resolve({ server, url: `http://127.0.0.1:${addr.port}` });
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      resolve({ server, url: `http://127.0.0.1:${port}` });
     });
   });
 }
@@ -44,7 +47,10 @@ describe("FIX-5: UI-010 joinNarrationChunks wiring + B-1 multi-round prose prese
   let mockServer: http.Server | null = null;
 
   beforeEach(() => {
-    tmpThreadsDir = path.join(os.tmpdir(), `fix5-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    tmpThreadsDir = path.join(
+      os.tmpdir(),
+      `fix5-threads-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    );
     fs.mkdirSync(tmpThreadsDir, { recursive: true });
     originalThreadsDir = process.env.THREADS_DIR;
     originalLlmUrl = process.env.LLM_BASE_URL;
@@ -74,20 +80,24 @@ describe("FIX-5: UI-010 joinNarrationChunks wiring + B-1 multi-round prose prese
     const { server, url } = await startMockOllamaServer((callIndex, _body, res) => {
       res.writeHead(200, { "Content-Type": "application/x-ndjson" });
       if (callIndex === 0) {
-        res.write(JSON.stringify({
-          model: "qwen2.5-coder:32b",
-          message: { role: "assistant", content: "First chunk" },
-          done: true,
-          done_reason: "length",
-          finish_reason: "length",
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            model: "qwen2.5-coder:32b",
+            message: { role: "assistant", content: "First chunk" },
+            done: true,
+            done_reason: "length",
+            finish_reason: "length",
+          }) + "\n"
+        );
       } else {
-        res.write(JSON.stringify({
-          model: "qwen2.5-coder:32b",
-          message: { role: "assistant", content: "second chunk" },
-          done: true,
-          done_reason: "stop",
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            model: "qwen2.5-coder:32b",
+            message: { role: "assistant", content: "second chunk" },
+            done: true,
+            done_reason: "stop",
+          }) + "\n"
+        );
       }
       res.end();
     });
@@ -126,34 +136,44 @@ describe("FIX-5: UI-010 joinNarrationChunks wiring + B-1 multi-round prose prese
     const { server, url } = await startMockOllamaServer((callIndex, _body, res) => {
       res.writeHead(200, { "Content-Type": "application/x-ndjson" });
       if (callIndex === 0) {
-        res.write(JSON.stringify({
-          model: "qwen2.5-coder:32b",
-          message: {
-            role: "assistant",
-            content: "Round 1 prose before tool.",
-            tool_calls: [{ id: "tc_1", function: { name: "search_web", arguments: { query: "test 1" } } }],
-          },
-          done: true,
-          done_reason: "stop",
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            model: "qwen2.5-coder:32b",
+            message: {
+              role: "assistant",
+              content: "Round 1 prose before tool.",
+              tool_calls: [
+                { id: "tc_1", function: { name: "search_web", arguments: { query: "test 1" } } },
+              ],
+            },
+            done: true,
+            done_reason: "stop",
+          }) + "\n"
+        );
       } else if (callIndex === 1) {
-        res.write(JSON.stringify({
-          model: "qwen2.5-coder:32b",
-          message: {
-            role: "assistant",
-            content: "",
-            tool_calls: [{ id: "tc_2", function: { name: "search_web", arguments: { query: "test 2" } } }],
-          },
-          done: true,
-          done_reason: "stop",
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            model: "qwen2.5-coder:32b",
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                { id: "tc_2", function: { name: "search_web", arguments: { query: "test 2" } } },
+              ],
+            },
+            done: true,
+            done_reason: "stop",
+          }) + "\n"
+        );
       } else {
-        res.write(JSON.stringify({
-          model: "qwen2.5-coder:32b",
-          message: { role: "assistant", content: "Round 3 final answer." },
-          done: true,
-          done_reason: "stop",
-        }) + "\n");
+        res.write(
+          JSON.stringify({
+            model: "qwen2.5-coder:32b",
+            message: { role: "assistant", content: "Round 3 final answer." },
+            done: true,
+            done_reason: "stop",
+          }) + "\n"
+        );
       }
       res.end();
     });

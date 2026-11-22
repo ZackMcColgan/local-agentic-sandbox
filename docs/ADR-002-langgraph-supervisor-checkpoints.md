@@ -9,14 +9,16 @@
 
 ## 1. Context & Problem Statement
 
-In Mode A (Overnight Builder), the agent operates autonomously over multi-hour runs without real-time human intervention ("The operator hands it one sentence at night: 'build X'"). 
+In Mode A (Overnight Builder), the agent operates autonomously over multi-hour runs without real-time human intervention ("The operator hands it one sentence at night: 'build X'").
 
 Traditional autonomous agent loops suffer from catastrophic failure modes:
+
 1. **Unrecoverable Process Termination**: If a worker or supervisor container crashes mid-run (e.g. OOM, uncaught runtime exception, Kubernetes rescheduling at 2 AM), an uncheckpointed loop restarts from step zero, losing hours of build computation and thrashing git history.
 2. **Infinite Stall / Retry Loops**: When an agent hits ambiguous requirements or subtle compiler errors, it risks burning GPU cycles and context windows indefinitely without forward progress.
 3. **Loss of Auditability**: Hand-rolled loops often fail to provide durable state transitions, making morning review and granular rollbacks arduous.
 
 We required an industry-standard orchestration substrate that provides:
+
 - Per-step and per-milestone state persistence (checkpointing with resumption).
 - Deterministic state graph transitions between specialized agents (Planner -> Explorer -> Builder -> Critic -> Recorder).
 - Seamless crash recovery and stall detection.
@@ -26,12 +28,14 @@ We required an industry-standard orchestration substrate that provides:
 
 ## 2. Decision & Architecture: LangGraph
 
-We evaluated `@langchain/langgraph` alongside a hand-rolled finite state machine (FSM). 
+We evaluated `@langchain/langgraph` alongside a hand-rolled finite state machine (FSM).
 
 ### Decision
+
 We adopted **LangGraph** (`@langchain/langgraph` + `@langchain/core`) as the primary supervisory and execution substrate for the autonomous multi-agent pipeline.
 
 ### Architectural Blueprint
+
 ```
                  ┌────────────────────────────────────────────────────────┐
                  │                LANGGRAPH STATE GRAPH                   │
@@ -71,6 +75,7 @@ We adopted **LangGraph** (`@langchain/langgraph` + `@langchain/core`) as the pri
 ```
 
 ### Key Mechanisms:
+
 1. **State Annotation (`OvernightStateAnnotation`)**:
    - Manages immutable state reductions across turns: `taskId`, `goal`, `status`, `milestones`, `checkpoints`, `ambiguityFlags`, `journal`, `currentDiff`, `currentGitSha`, `nodeHistory`.
 2. **Wired Node Implementations**:
@@ -96,6 +101,7 @@ We adopted **LangGraph** (`@langchain/langgraph` + `@langchain/core`) as the pri
 ## 3. Consequences & Verification
 
 ### Positive:
+
 - **Resilience**: Verified by automated test suites ([web-ui/tests/supervisor.test.ts](../web-ui/tests/supervisor.test.ts)):
   - Worker crash mid-milestone $\rightarrow$ supervisor reloads checkpoint and resumes.
   - Supervisor process kill $\rightarrow$ new supervisor instance resumes from step 2 without losing milestone 1.
@@ -103,5 +109,6 @@ We adopted **LangGraph** (`@langchain/langgraph` + `@langchain/core`) as the pri
 - **Portability**: Standardizes state graph topology using LangGraph primitives recognized in enterprise AI engineering.
 
 ### Negative / Trade-Offs:
+
 - Requires bundling `@langchain/langgraph` and `@langchain/core` dependencies (~1.5 MB).
 - Additional serialization overhead per milestone (negligible in multi-minute overnight runs).

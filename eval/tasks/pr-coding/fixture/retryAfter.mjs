@@ -6,5 +6,7 @@
  */
 export function parseRetryAfter(headerValue, nowMs = Date.now()) {
   // TODO: implement
+  void headerValue;
+  void nowMs;
   return null;
 }

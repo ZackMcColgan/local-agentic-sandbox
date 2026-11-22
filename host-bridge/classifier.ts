@@ -9,9 +9,7 @@
  * replacing them with empty quotes ("") so tokens inside string literals are never matched.
  */
 export function stripQuotedStrings(cmd: string): string {
-  return cmd
-    .replace(/'(?:[^']|'')*'/g, '""')
-    .replace(/"(?:[^"`]|`[\s\S]|"")*"/g, '""');
+  return cmd.replace(/'(?:[^']|'')*'/g, '""').replace(/"(?:[^"`]|`[\s\S]|"")*"/g, '""');
 }
 
 /**
@@ -25,7 +23,7 @@ export const DESTRUCTIVE_POWERSHELL_PATTERNS: RegExp[] = [
   /\bremove-[a-z0-9_]+\b/i,
   /\b(format-volume|clear-disk|initialize-disk|restart-computer|stop-computer)\b/i,
   /(?:^|[;|&(\r\n])\s*(?:&\s+)?(?:shutdown(?:\.exe)?)(?![a-zA-Z0-9_\-])/i,
-  /(?:^|[;|&(\r\n])\s*(?:&\s+)?(?:del|erase|rd|rmdir|ri|rm)(?![a-zA-Z0-9_\-])/i
+  /(?:^|[;|&(\r\n])\s*(?:&\s+)?(?:del|erase|rd|rmdir|ri|rm)(?![a-zA-Z0-9_\-])/i,
 ];
 
 export interface DestructiveCheckResult {
@@ -36,11 +34,14 @@ export interface DestructiveCheckResult {
 /**
  * Evaluates whether a host tool action is destructive according to PR #44 audited behavior.
  */
-export function isDestructiveHostAction(tool: string, args: any): DestructiveCheckResult {
+export function isDestructiveHostAction(
+  tool: string,
+  args: Record<string, unknown> | undefined | null
+): DestructiveCheckResult {
   if (tool === "host_delete_path") {
     return {
       isDestructive: true,
-      reason: `Permanent deletion of host path: ${args?.path || ""}`
+      reason: `Permanent deletion of host path: ${args?.path || ""}`,
     };
   }
 
@@ -52,7 +53,7 @@ export function isDestructiveHostAction(tool: string, args: any): DestructiveChe
       if (pattern.test(strippedCmd)) {
         return {
           isDestructive: true,
-          reason: `High-risk PowerShell command matched: ${pattern.source}`
+          reason: `High-risk PowerShell command matched: ${pattern.source}`,
         };
       }
     }

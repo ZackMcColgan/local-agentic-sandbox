@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { ProjectRecord } from "./projectStore";
+import {
+  ProjectRecord,
+  ProjectFileReviewRecord,
+  getFileReviews,
+  setFileReviewStatus,
+} from "./projectStore";
 
 export interface ProjectTreeNode {
   name: string;
@@ -18,10 +23,13 @@ const IGNORED_DIRECTORIES = new Set([
   "build",
   "coverage",
   ".turbo",
-  ".cache"
+  ".cache",
 ]);
 
-export function assertAllowedProjectPath(project: ProjectRecord, relativeOrAbsolutePath: string): string {
+export function assertAllowedProjectPath(
+  project: ProjectRecord,
+  relativeOrAbsolutePath: string
+): string {
   if (project.allowlisted !== 1) {
     throw new Error(`Project '${project.name}' is not allowlisted (revoked). Access forbidden.`);
   }
@@ -35,15 +43,23 @@ export function assertAllowedProjectPath(project: ProjectRecord, relativeOrAbsol
 
   // Check for obvious traversal tokens before resolving
   const normalizedInput = rawPath.replace(/\\/g, "/");
-  if (normalizedInput.includes("../") || normalizedInput.includes("/..") || normalizedInput === "..") {
+  if (
+    normalizedInput.includes("../") ||
+    normalizedInput.includes("/..") ||
+    normalizedInput === ".."
+  ) {
     // Check if it escapes
-    const candidate = path.isAbsolute(rawPath) ? path.resolve(rawPath) : path.resolve(canonicalRoot, rawPath);
+    const candidate = path.isAbsolute(rawPath)
+      ? path.resolve(rawPath)
+      : path.resolve(canonicalRoot, rawPath);
     if (!candidate.startsWith(canonicalRoot + path.sep) && candidate !== canonicalRoot) {
       throw new Error(`Access forbidden: traversal outside project root: ${rawPath}`);
     }
   }
 
-  const resolved = path.isAbsolute(rawPath) ? path.resolve(rawPath) : path.resolve(canonicalRoot, rawPath);
+  const resolved = path.isAbsolute(rawPath)
+    ? path.resolve(rawPath)
+    : path.resolve(canonicalRoot, rawPath);
 
   // If path exists, canonicalize to detect symlink escapes
   if (fs.existsSync(resolved)) {
@@ -78,7 +94,10 @@ export function assertAllowedProjectPath(project: ProjectRecord, relativeOrAbsol
   return resolved;
 }
 
-export function getProjectTree(project: ProjectRecord, relativeSubdir: string = "."): ProjectTreeNode[] {
+export function getProjectTree(
+  project: ProjectRecord,
+  relativeSubdir: string = "."
+): ProjectTreeNode[] {
   const targetDir = assertAllowedProjectPath(project, relativeSubdir);
   const canonicalRoot = fs.realpathSync(project.root_path);
   const results: ProjectTreeNode[] = [];
@@ -108,14 +127,14 @@ export function getProjectTree(project: ProjectRecord, relativeSubdir: string = 
       }
 
       const fullPath = path.join(currentDir, entry.name);
-      let relativePath = path.relative(canonicalRoot, fullPath).replace(/\\/g, "/");
+      const relativePath = path.relative(canonicalRoot, fullPath).replace(/\\/g, "/");
 
       try {
         if (entry.isDirectory()) {
           results.push({
             name: entry.name,
             path: relativePath,
-            type: "directory"
+            type: "directory",
           });
           walk(fullPath);
         } else if (entry.isFile()) {
@@ -124,7 +143,7 @@ export function getProjectTree(project: ProjectRecord, relativeSubdir: string = 
             name: entry.name,
             path: relativePath,
             type: "file",
-            size: stat.size
+            size: stat.size,
           });
         }
       } catch {
@@ -155,7 +174,7 @@ export function readProjectFile(
   return {
     content,
     size: stat.size,
-    path: relPath
+    path: relPath,
   };
 }
 
@@ -169,7 +188,7 @@ export function runGit(project: ProjectRecord, args: string[]): string {
     cwd: canonicalRoot,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    shell: false
+    shell: false,
   }).trim();
 }
 
@@ -194,13 +213,17 @@ export function getProjectDiffSummary(
   assertAllowedProjectPath(project, ".");
   const base = baseSha || project.base_branch || "HEAD~1";
 
-  // Import store review helpers dynamically or from store
-  const { getFileReviews } = require("./projectStore");
-  const reviews = getFileReviews(taskId) as Array<{ file_path: string; status: "pending" | "accepted" | "reverted" }>;
+  const reviews = getFileReviews(taskId) as Array<{
+    file_path: string;
+    status: "pending" | "accepted" | "reverted";
+  }>;
   const reviewMap = new Map(reviews.map((r) => [r.file_path, r.status]));
 
   const rawDiff = runGit(project, ["diff", "--name-status", base]);
-  const lines = rawDiff.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = rawDiff
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   const fileMap = new Map<string, { changeType: "M" | "A" | "D" | "R" }>();
 
@@ -208,7 +231,8 @@ export function getProjectDiffSummary(
     const parts = line.split(/\s+/);
     if (parts.length >= 2) {
       const typeChar = parts[0][0].toUpperCase();
-      const changeType = (["M", "A", "D", "R"].includes(typeChar) ? typeChar : "M") as "M" | "A" | "D" | "R";
+      const changeType = (["M", "A", "D", "R"].includes(typeChar) ? typeChar : "M") as
+        "M" | "A" | "D" | "R";
       const filePath = parts[1].replace(/\\/g, "/");
       fileMap.set(filePath, { changeType });
     }
@@ -242,14 +266,14 @@ export function getProjectDiffSummary(
       filePath,
       changeType: info.changeType,
       diff,
-      status: reviewStatus
+      status: reviewStatus,
     });
   }
 
   return {
     taskId,
     baseSha: base,
-    files
+    files,
   };
 }
 
@@ -257,9 +281,8 @@ export function acceptProjectFile(
   project: ProjectRecord,
   taskId: string,
   filePath: string
-): any {
+): ProjectFileReviewRecord {
   assertAllowedProjectPath(project, filePath);
-  const { setFileReviewStatus } = require("./projectStore");
   return setFileReviewStatus(taskId, filePath, "accepted");
 }
 
@@ -268,7 +291,7 @@ export function revertProjectFile(
   taskId: string,
   filePath: string,
   baseSha: string
-): any {
+): ProjectFileReviewRecord {
   const targetPath = assertAllowedProjectPath(project, filePath);
 
   let existedAtBase = false;
@@ -293,7 +316,6 @@ export function revertProjectFile(
 
   runGit(project, ["commit", "-m", `revert: restore ${filePath} from ${baseSha}`]);
 
-  const { setFileReviewStatus } = require("./projectStore");
   return setFileReviewStatus(taskId, filePath, "reverted");
 }
 
@@ -301,7 +323,6 @@ export function finalizeProjectReview(
   project: ProjectRecord,
   taskId: string
 ): { finalized: boolean; acceptedCount: number; revertedCount: number } {
-  const { getFileReviews } = require("./projectStore");
   const reviews = getFileReviews(taskId) as Array<{ status: string }>;
   const acceptedCount = reviews.filter((r) => r.status === "accepted").length;
   const revertedCount = reviews.filter((r) => r.status === "reverted").length;
@@ -309,7 +330,6 @@ export function finalizeProjectReview(
   return {
     finalized: true,
     acceptedCount,
-    revertedCount
+    revertedCount,
   };
 }
-

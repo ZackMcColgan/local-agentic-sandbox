@@ -13,19 +13,22 @@ describe("Durable Clear Messages — ThreadStore, API route, and ChatStream wiri
       const created = store.createThread({
         title: "Keep My Title",
         model: "test-model",
-        initialPrompt: "First user message"
+        initialPrompt: "First user message",
       });
       created.status = "completed";
       created.messages.push({
         id: "m-2",
         role: "assistant",
         content: "Assistant reply",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       store.saveThread(created);
 
       const before = await store.getThread(created.id);
-      assert.ok(before && before.messages.length >= 2, "Thread must have persisted messages before clear");
+      assert.ok(
+        before && before.messages.length >= 2,
+        "Thread must have persisted messages before clear"
+      );
 
       const cleared = await store.clearThreadMessages(created.id);
       assert.ok(cleared, "clearThreadMessages must return the updated thread");
@@ -37,7 +40,11 @@ describe("Durable Clear Messages — ThreadStore, API route, and ChatStream wiri
       const reloadedStore = new ThreadStore(tmpDir);
       const reloaded = await reloadedStore.getThread(created.id);
       assert.ok(reloaded, "Thread must still exist on disk after clear");
-      assert.strictEqual(reloaded!.messages.length, 0, "Reloaded thread must still have 0 messages");
+      assert.strictEqual(
+        reloaded!.messages.length,
+        0,
+        "Reloaded thread must still have 0 messages"
+      );
       assert.strictEqual(reloaded!.title, "Keep My Title", "Reloaded title must survive");
       assert.strictEqual(reloaded!.status, "completed", "Reloaded status must survive");
     } finally {
@@ -61,8 +68,14 @@ describe("Durable Clear Messages — ThreadStore, API route, and ChatStream wiri
       path.resolve(__dirname, "../app/api/threads/route.ts"),
       "utf-8"
     );
-    assert.ok(routeSrc.includes('body.action === "clearMessages"'), "route.ts must handle clearMessages action");
-    assert.ok(routeSrc.includes("clearThreadMessages"), "route.ts must call threadStore.clearThreadMessages");
+    assert.ok(
+      routeSrc.includes('body.action === "clearMessages"'),
+      "route.ts must handle clearMessages action"
+    );
+    assert.ok(
+      routeSrc.includes("clearThreadMessages"),
+      "route.ts must call threadStore.clearThreadMessages"
+    );
 
     const chatSrc = fs.readFileSync(
       path.resolve(__dirname, "../components/ChatStream.tsx"),

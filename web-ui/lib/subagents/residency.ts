@@ -23,7 +23,7 @@ export const ROLE_WEIGHTS: Record<string, number> = {
   critic: 10,
   explorer: 3,
   recorder: 3,
-  planner: 1
+  planner: 1,
 };
 
 export interface ResidencyPlanInput {
@@ -62,7 +62,10 @@ export function planResidency(input: ResidencyPlanInput): ResidencyPlan {
   }
 
   const priority = Array.from(weights.entries())
-    .sort((a, b) => b[1] - a[1] || (input.modelSizes[a[0]] ?? Infinity) - (input.modelSizes[b[0]] ?? Infinity))
+    .sort(
+      (a, b) =>
+        b[1] - a[1] || (input.modelSizes[a[0]] ?? Infinity) - (input.modelSizes[b[0]] ?? Infinity)
+    )
     .map(([model]) => model);
 
   const pinned: string[] = [];
@@ -75,7 +78,7 @@ export function planResidency(input: ResidencyPlanInput): ResidencyPlan {
     // Always pin DEFAULT_PRIMARY_MODEL (swift-15-27b-mtp) even if size lookup was skipped or unknown
     if (model === DEFAULT_PRIMARY_MODEL || model === `${DEFAULT_PRIMARY_MODEL}:latest`) {
       pinned.push(model);
-      pinnedBytes += (size || 0);
+      pinnedBytes += size || 0;
       continue;
     }
     if (size === undefined) {
@@ -104,9 +107,15 @@ export function keepAliveFor(plan: ResidencyPlan, model: string): string | numbe
  * without evicting a pinned roster model. Transient and non-roster models go first.
  */
 export function evictionOrder(plan: ResidencyPlan, loaded: string[], incoming: string): string[] {
-  const others = loaded.filter((m) => m !== incoming && m.replace(/:latest$/, "") !== incoming.replace(/:latest$/, ""));
-  const transientLoaded = others.filter((m) => plan.transient.includes(m) || plan.transient.includes(m.replace(/:latest$/, "")));
-  const nonRoster = others.filter((m) => !plan.priority.includes(m) && !plan.priority.includes(m.replace(/:latest$/, "")));
+  const others = loaded.filter(
+    (m) => m !== incoming && m.replace(/:latest$/, "") !== incoming.replace(/:latest$/, "")
+  );
+  const transientLoaded = others.filter(
+    (m) => plan.transient.includes(m) || plan.transient.includes(m.replace(/:latest$/, ""))
+  );
+  const nonRoster = others.filter(
+    (m) => !plan.priority.includes(m) && !plan.priority.includes(m.replace(/:latest$/, ""))
+  );
   const pinnedLoaded = others
     .filter((m) => plan.pinned.includes(m) || plan.pinned.includes(m.replace(/:latest$/, "")))
     .sort((a, b) => plan.priority.indexOf(b) - plan.priority.indexOf(a));
@@ -119,7 +128,10 @@ export function resolveVramBudgetBytes(): number {
 }
 
 /** Reads model sizes from Ollama /api/tags or LlamaCpp /v1/models. Normalizes model names by stripping :latest. */
-export async function fetchModelSizes(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<Record<string, number>> {
+export async function fetchModelSizes(
+  baseUrl: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<Record<string, number>> {
   if (resolveLLMEngine() === "llamacpp") {
     const models = await getLLMProvider("llamacpp").listModels(baseUrl, { fetchImpl });
     const sizes: Record<string, number> = {};
@@ -135,7 +147,9 @@ export async function fetchModelSizes(baseUrl: string, fetchImpl: typeof fetch =
   }
   const res = await fetchImpl(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/tags failed: HTTP ${res.status}`);
-  const data: any = await res.json();
+  const data = (await res.json()) as {
+    models?: Array<{ name?: string; size?: number }>;
+  };
   const sizes: Record<string, number> = {};
   for (const m of data.models || []) {
     if (m?.name && typeof m.size === "number") {
@@ -148,26 +162,31 @@ export async function fetchModelSizes(baseUrl: string, fetchImpl: typeof fetch =
 }
 
 /** Reads currently loaded models from Ollama /api/ps or LlamaCpp /v1/models. Normalizes model names by stripping :latest. */
-export async function fetchLoadedModels(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<{ name: string; sizeVram: number; baseName: string }[]> {
+export async function fetchLoadedModels(
+  baseUrl: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<{ name: string; sizeVram: number; baseName: string }[]> {
   if (resolveLLMEngine() === "llamacpp") {
     const models = await getLLMProvider("llamacpp").listModels(baseUrl, { fetchImpl });
     const defaultSizeBytes = 14 * 1024 ** 3;
     return models.map((rawName) => ({
       name: rawName,
       baseName: rawName.replace(/:latest$/, ""),
-      sizeVram: defaultSizeBytes
+      sizeVram: defaultSizeBytes,
     }));
   }
   const res = await fetchImpl(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`GET /api/ps failed: HTTP ${res.status}`);
-  const data: any = await res.json();
-  return (data.models || []).map((m: any) => {
+  const data = (await res.json()) as {
+    models?: Array<{ name?: string; size_vram?: number; size?: number }>;
+  };
+  return (data.models || []).map((m) => {
     const rawName = m.name || "";
     const baseName = rawName.replace(/:latest$/, "");
     return {
       name: rawName,
       baseName,
-      sizeVram: m.size_vram ?? m.size ?? 0
+      sizeVram: m.size_vram ?? m.size ?? 0,
     };
   });
 }
@@ -198,21 +217,28 @@ export async function enforceResidency(
   const actions: string[] = [];
   const loaded = await fetchLoadedModels(baseUrl, fetchImpl);
   const loadedNames = loaded.flatMap((m) => [m.name, m.baseName]);
-  const sizeOf = (name: string) => loaded.find((m) => m.name === name || m.baseName === name)?.sizeVram || 0;
+  const sizeOf = (name: string) =>
+    loaded.find((m) => m.name === name || m.baseName === name)?.sizeVram || 0;
   let loadedBytes = loaded.reduce((s, m) => s + m.sizeVram, 0);
 
   // Bytes still needed for pinned models that are not loaded yet.
-  const pinnedLoadedBytes = plan.pinned.filter((m) => loadedNames.includes(m)).reduce((s, m) => s + sizeOf(m), 0);
+  const pinnedLoadedBytes = plan.pinned
+    .filter((m) => loadedNames.includes(m))
+    .reduce((s, m) => s + sizeOf(m), 0);
   const neededBytes = Math.max(0, plan.pinnedBytes - pinnedLoadedBytes);
 
   // Victims: transient + non-roster models only (never a pinned model), in policy order.
-  const victims = evictionOrder(plan, loaded.map((m) => m.name), "").filter((m) => !plan.pinned.includes(m) && !plan.pinned.includes(m.replace(/:latest$/, "")));
+  const victims = evictionOrder(
+    plan,
+    loaded.map((m) => m.name),
+    ""
+  ).filter((m) => !plan.pinned.includes(m) && !plan.pinned.includes(m.replace(/:latest$/, "")));
   for (const victim of victims) {
     if (loadedBytes + neededBytes <= plan.usableBytes) break;
     await fetchImpl(`${baseUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: victim, keep_alive: 0 })
+      body: JSON.stringify({ model: victim, keep_alive: 0 }),
     });
     loadedBytes -= sizeOf(victim);
     actions.push(`unloaded ${victim} (not pinned; freeing VRAM for roster)`);
@@ -224,7 +250,7 @@ export async function enforceResidency(
       await fetchImpl(`${baseUrl}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, keep_alive: PINNED_KEEP_ALIVE })
+        body: JSON.stringify({ model, keep_alive: PINNED_KEEP_ALIVE }),
       });
       actions.push(`refreshed ${model} keep_alive=${PINNED_KEEP_ALIVE}`);
       continue;
@@ -232,12 +258,94 @@ export async function enforceResidency(
     await fetchImpl(`${baseUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, keep_alive: PINNED_KEEP_ALIVE })
+      body: JSON.stringify({ model, keep_alive: PINNED_KEEP_ALIVE }),
     });
     actions.push(`preloaded ${model} keep_alive=${PINNED_KEEP_ALIVE}`);
   }
 
   return actions;
+}
+
+export interface UnloadModelsResult {
+  status: "unloaded" | "not_applicable" | "failed";
+  unloaded: string[];
+  reason?: string;
+}
+
+/**
+ * Unloads all models currently resident in Ollama VRAM and returns an explicit
+ * status so callers can distinguish confirmed unloads from engines where unload
+ * is not applicable (e.g. llama.cpp or OpenAI-compatible servers returning 404).
+ */
+export async function unloadAllModelsWithResult(
+  baseUrl: string = process.env.LLM_BASE_URL ||
+    process.env.OLLAMA_BASE_URL ||
+    "http://127.0.0.1:11434",
+  fetchImpl: typeof fetch = fetch
+): Promise<UnloadModelsResult> {
+  if (resolveLLMEngine() === "llamacpp") {
+    return {
+      status: "not_applicable",
+      unloaded: [],
+      reason: "not applicable to this engine",
+    };
+  }
+  const unloaded: string[] = [];
+  try {
+    const psRes = await fetchImpl(`${baseUrl}/api/ps`, { signal: AbortSignal.timeout(5000) });
+    if (psRes.status === 404 || psRes.status === 405 || psRes.status === 501) {
+      return {
+        status: "not_applicable",
+        unloaded: [],
+        reason: "not applicable to this engine",
+      };
+    }
+    if (!psRes.ok) {
+      return {
+        status: "failed",
+        unloaded: [],
+        reason: `GET /api/ps failed: HTTP ${psRes.status}`,
+      };
+    }
+    const data = (await psRes.json()) as { models?: Array<{ name?: string }> };
+    const loaded: { name: string }[] = (data.models || [])
+      .map((m) => ({
+        name: m.name || "",
+      }))
+      .filter((m: { name: string }) => Boolean(m.name));
+
+    for (const m of loaded) {
+      const genRes = await fetchImpl(`${baseUrl}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: m.name, keep_alive: 0 }),
+      });
+      if (genRes.status === 404 || genRes.status === 405 || genRes.status === 501) {
+        return {
+          status: "not_applicable",
+          unloaded,
+          reason: "not applicable to this engine",
+        };
+      }
+      if (!genRes.ok) {
+        return {
+          status: "failed",
+          unloaded,
+          reason: `POST /api/generate failed: HTTP ${genRes.status}`,
+        };
+      }
+      unloaded.push(m.name);
+    }
+    return { status: "unloaded", unloaded };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : undefined;
+    console.warn("Notice: could not unload models from LLM:", msg ?? String(err));
+    return {
+      status: "failed",
+      unloaded,
+      reason: msg || "Unload failed",
+    };
+  }
 }
 
 /**
@@ -246,25 +354,11 @@ export async function enforceResidency(
  * When LLM_ENGINE=llamacpp, standalone llama-server keeps its GGUF permanently resident, so this is a safe no-op.
  */
 export async function unloadAllModels(
-  baseUrl: string = process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+  baseUrl: string = process.env.LLM_BASE_URL ||
+    process.env.OLLAMA_BASE_URL ||
+    "http://127.0.0.1:11434",
   fetchImpl: typeof fetch = fetch
 ): Promise<string[]> {
-  if (resolveLLMEngine() === "llamacpp") {
-    return [];
-  }
-  const unloaded: string[] = [];
-  try {
-    const loaded = await fetchLoadedModels(baseUrl, fetchImpl);
-    for (const m of loaded) {
-      await fetchImpl(`${baseUrl}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: m.name, keep_alive: 0 })
-      });
-      unloaded.push(m.name);
-    }
-  } catch (err: any) {
-    console.warn("Notice: could not unload models from LLM:", err.message);
-  }
-  return unloaded;
+  const result = await unloadAllModelsWithResult(baseUrl, fetchImpl);
+  return result.unloaded;
 }

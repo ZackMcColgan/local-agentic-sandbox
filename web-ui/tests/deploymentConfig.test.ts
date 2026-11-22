@@ -45,10 +45,7 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
       dockerfileContent.includes("--chown=nextjs:nodejs"),
       "Dockerfile must set static asset ownership with --chown=nextjs:nodejs"
     );
-    assert.ok(
-      dockerfileContent.includes("USER nextjs"),
-      "Dockerfile must declare USER nextjs"
-    );
+    assert.ok(dockerfileContent.includes("USER nextjs"), "Dockerfile must declare USER nextjs");
   });
 
   it("deploy/k8s/web-ui.yaml drops ALL capabilities in securityContext", () => {
@@ -77,8 +74,8 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
 
     assert.ok(
       k8sDeployContent.includes("Swift-1.5-Qwen3.8-27B-IQ3_XS") ||
-      k8sDeployContent.includes("swift-15-27b-mtp") ||
-      k8sDeployContent.includes("qwen3.8-flash-next-gyro-gyro-s"),
+        k8sDeployContent.includes("swift-15-27b-mtp") ||
+        k8sDeployContent.includes("qwen3.8-flash-next-gyro-gyro-s"),
       "deploy/k8s/web-ui.yaml must configure Swift-1.5-Qwen3.8-27B-IQ3_XS, swift-15-27b-mtp, or qwen3.8-flash-next-gyro-gyro-s"
     );
     assert.ok(

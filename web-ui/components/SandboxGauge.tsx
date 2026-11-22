@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, Lock, HardDrive, Cpu, UserCheck, Zap, Activity } from "lucide-react";
+import { ShieldCheck, Lock, HardDrive, UserCheck, Zap, Activity } from "lucide-react";
 
 interface SandboxGaugeProps {
   securityPosture?: {
@@ -21,7 +21,8 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "ai-mesh (internal: true)",
       icon: Lock,
       status: "enforced",
-      accent: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-500/20"
+      accent:
+        "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-500/20",
     },
     {
       title: "Root Filesystem",
@@ -29,7 +30,8 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "read_only: true",
       icon: HardDrive,
       status: "enforced",
-      accent: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20"
+      accent:
+        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
     },
     {
       title: "Linux Capabilities",
@@ -37,7 +39,8 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "no-new-privileges: true",
       icon: ShieldCheck,
       status: "enforced",
-      accent: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20"
+      accent:
+        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
     },
     {
       title: "Execution User",
@@ -45,7 +48,8 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "Unprivileged non-root",
       icon: UserCheck,
       status: "enforced",
-      accent: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-500/20"
+      accent:
+        "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-500/20",
     },
     {
       title: "Ephemeral Buffer",
@@ -53,7 +57,8 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "rw,noexec,nosuid",
       icon: Zap,
       status: "enforced",
-      accent: "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20"
+      accent:
+        "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
     },
     {
       title: "Supply-Chain Trust",
@@ -61,8 +66,9 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       detail: "SPDX 2.3 SBOM Validated",
       icon: Activity,
       status: "enforced",
-      accent: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20"
-    }
+      accent:
+        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+    },
   ];
 
   return (

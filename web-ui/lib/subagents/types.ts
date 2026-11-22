@@ -123,19 +123,29 @@ export interface CheckpointState {
   milestoneIndex: number;
   gitHeadSha: string;
   completedMilestones: string[];
-  serializedGraphState?: any;
+  serializedGraphState?: unknown;
   timestamp: string;
   recoveryAttempted: boolean;
 }
 
-export type TaskStatus = "planning" | "queued" | "active" | "completed" | "parked" | "failed" | "cancelled" | "stopped" | "paused" | "crashed";
+export type TaskStatus =
+  | "planning"
+  | "queued"
+  | "active"
+  | "completed"
+  | "parked"
+  | "failed"
+  | "cancelled"
+  | "stopped"
+  | "paused"
+  | "crashed";
 
 export interface TaskJournalEntry {
   timestamp: string;
   role: string;
   action?: string;
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 export interface TaskManifest {

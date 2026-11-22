@@ -13,12 +13,15 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
 
   beforeEach(() => {
     win = new GlobalWindow();
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(container as any);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     root = createRoot(container);
   });
 
@@ -65,7 +68,7 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     act(() => {
       root.render(
         React.createElement(ThinkingPanel, {
-          rawThought: "<tool_call>{\"name\":\"ls\"}</tool_call>",
+          rawThought: '<tool_call>{"name":"ls"}</tool_call>',
           isStreaming: false,
           durationMs: 2000,
         })
@@ -75,13 +78,16 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
     const toggleBtn = container.querySelector("button[aria-expanded]");
     assert.ok(toggleBtn, "Toggle button should exist");
     act(() => {
-      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
     });
 
     const text = container.textContent ?? "";
     assert.match(text, /1 step/);
     const listItems = container.querySelectorAll("[data-testid^='phase-card-']");
-    assert.ok(listItems.length >= 1, `Expected at least 1 rendered step item, got ${listItems.length}`);
+    assert.ok(
+      listItems.length >= 1,
+      `Expected at least 1 rendered step item, got ${listItems.length}`
+    );
     assert.match(listItems[0].textContent ?? "", /Formulated response\./);
   });
 
@@ -140,10 +146,14 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
         durationMs: 12000,
         thinkingDurationMs: 12000,
         phaseTimings,
-      } as any,
+      } as unknown as Parameters<typeof sanitizeMessagesForStorage>[0][number],
     ]);
-    assert.deepEqual((sanitized[0] as any).phaseTimings, phaseTimings);
-    assert.equal((sanitized[0] as any).thinkingDurationMs, 12000);
+    const firstSanitized = sanitized[0] as unknown as {
+      phaseTimings?: typeof phaseTimings;
+      thinkingDurationMs?: number;
+    };
+    assert.deepEqual(firstSanitized.phaseTimings, phaseTimings);
+    assert.equal(firstSanitized.thinkingDurationMs, 12000);
 
     act(() => {
       root.render(
@@ -152,14 +162,14 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
           isStreaming: false,
           durationMs: 12000,
           phaseTimings,
-        } as any)
+        } as unknown as React.ComponentProps<typeof ThinkingPanel>)
       );
     });
 
     const toggleBtn = container.querySelector("button[aria-expanded]");
     assert.ok(toggleBtn, "Toggle button should exist");
     act(() => {
-      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as any);
+      toggleBtn!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
     });
 
     const breakdown = container.querySelector("[data-testid='phase-timings-breakdown']");
@@ -209,7 +219,10 @@ describe("UI-028b: ThinkingPanel completed-turn duration and past-tense label", 
         (msg.phaseTimings?.thinkingMs ?? 0) +
         (msg.phaseTimings?.toolsMs ?? 0) +
         (msg.phaseTimings?.writingMs ?? 0);
-      assert.ok(Math.abs(sum - durationMs) <= 100, `Expected phase sum ${sum} near durationMs ${durationMs}`);
+      assert.ok(
+        Math.abs(sum - durationMs) <= 100,
+        `Expected phase sum ${sum} near durationMs ${durationMs}`
+      );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

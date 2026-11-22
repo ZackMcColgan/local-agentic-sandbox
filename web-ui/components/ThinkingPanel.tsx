@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Map,
-  Cog,
-  CheckCircle2,
-  Loader2
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Map, Cog, CheckCircle2, Loader2 } from "lucide-react";
 
 import { resolveTurnStatusPhase } from "../lib/chatStatus";
 import { formatElapsedDuration, formatMessageTimestamp } from "../lib/chatUtils";
@@ -60,7 +53,7 @@ export function ThinkingPanel({
   hasContent = false,
   durationMs,
   phaseTimings,
-  timestamp
+  timestamp,
 }: ThinkingPanelProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(Boolean(isStreaming && defaultExpanded));
   const prevStreamingRef = useRef(isStreaming);
@@ -116,11 +109,12 @@ export function ThinkingPanel({
     if (phases && phases.length > 0) return phases;
 
     if (rawThought && rawThought.trim()) {
-      const cleanedNarrative = rawThought
-        .replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/```[\s\S]*?```/g, " ")
-        .trim() || "Formulated response.";
+      const cleanedNarrative =
+        rawThought
+          .replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, " ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/```[\s\S]*?```/g, " ")
+          .trim() || "Formulated response.";
       return [
         {
           phase: "planning",
@@ -128,8 +122,8 @@ export function ThinkingPanel({
           timestamp: formattedTime,
           timeAgo: timestamp ? undefined : "Now",
           narrative: cleanedNarrative,
-          status: isStreaming ? "in_progress" : "complete"
-        }
+          status: isStreaming ? "in_progress" : "complete",
+        },
       ];
     }
 
@@ -143,7 +137,7 @@ export function ThinkingPanel({
     streamStatus,
     activeTool,
     hasThought: Boolean(rawThought && rawThought.trim()),
-    hasContent
+    hasContent,
   });
 
   const streamStartMs = streamStartRef.current;
@@ -151,7 +145,7 @@ export function ThinkingPanel({
   const headerTitle = isStreaming
     ? "Thinking"
     : effectiveDurationMs != null && effectiveDurationMs > 0
-      ? `Thought for ${formatElapsedDuration(Math.max(1, Math.floor(effectiveDurationMs / 1000)))}`
+      ? formatThoughtLabel(Math.max(1000, Math.floor(effectiveDurationMs / 1000) * 1000))
       : "Thought";
 
   return (
@@ -190,7 +184,9 @@ export function ThinkingPanel({
             data-testid="streaming-badge"
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-300/70 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 shrink-0"
           >
-            {isStreaming && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            {isStreaming && (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            )}
             <span>
               {isStreaming ? (
                 <>
@@ -232,7 +228,10 @@ export function ThinkingPanel({
       {isExpanded && (
         <div className="p-3 sm:p-3.5 space-y-2.5 border-t border-slate-200/60 dark:border-zinc-800/80 bg-white/60 dark:bg-black/40">
           {phaseTimings &&
-            (phaseTimings.contextPrepMs || phaseTimings.thinkingMs || phaseTimings.toolsMs || phaseTimings.writingMs) && (
+            (phaseTimings.contextPrepMs ||
+              phaseTimings.thinkingMs ||
+              phaseTimings.toolsMs ||
+              phaseTimings.writingMs) && (
               <div
                 data-testid="phase-timings-breakdown"
                 className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-400"
@@ -243,7 +242,9 @@ export function ThinkingPanel({
                   { label: "Tools", ms: phaseTimings.toolsMs },
                   { label: "Writing", ms: phaseTimings.writingMs },
                 ]
-                  .filter((p): p is { label: string; ms: number } => typeof p.ms === "number" && p.ms > 0)
+                  .filter(
+                    (p): p is { label: string; ms: number } => typeof p.ms === "number" && p.ms > 0
+                  )
                   .map((p) => (
                     <span
                       key={p.label}
@@ -260,7 +261,6 @@ export function ThinkingPanel({
           {effectivePhases.map((phaseItem) => {
             const isPlanning = phaseItem.phase === "planning";
             const isBuilding = phaseItem.phase === "building";
-            const isValidating = phaseItem.phase === "validating";
 
             const Icon = isPlanning ? Map : isBuilding ? Cog : CheckCircle2;
             const isInProgress = phaseItem.status === "in_progress";
@@ -305,8 +305,6 @@ export function ThinkingPanel({
               </div>
             );
           })}
-
-
         </div>
       )}
     </div>

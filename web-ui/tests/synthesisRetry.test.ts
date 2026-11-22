@@ -19,7 +19,15 @@ import http from "node:http";
  * thread is resumable (not a bare silent ⚠️).
  */
 
-function makeScriptedOllamaServer(script: Array<{ content: string; toolCalls?: any[]; evalCount?: number }>) {
+interface ScriptToolCall {
+  id: string;
+  type: string;
+  function: { name: string; arguments: string };
+}
+
+function makeScriptedOllamaServer(
+  script: Array<{ content: string; toolCalls?: ScriptToolCall[]; evalCount?: number }>
+) {
   let completionCount = 0;
   const server = http.createServer((req, res) => {
     const url = req.url || "";
@@ -41,14 +49,17 @@ function makeScriptedOllamaServer(script: Array<{ content: string; toolCalls?: a
         completionCount++;
         const step = script[Math.min(completionCount - 1, script.length - 1)];
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        const msg: any = { role: "assistant", content: step.content };
+        const msg: { role: string; content: string; tool_calls?: ScriptToolCall[] } = {
+          role: "assistant",
+          content: step.content,
+        };
         if (step.toolCalls) msg.tool_calls = step.toolCalls;
         res.write(JSON.stringify({ message: msg }) + "\n");
         res.write(
           JSON.stringify({
             message: { role: "assistant", content: "" },
             done: true,
-            ...(step.evalCount ? { eval_count: step.evalCount } : {})
+            ...(step.evalCount ? { eval_count: step.evalCount } : {}),
           }) + "\n"
         );
         res.end();
@@ -61,8 +72,13 @@ function makeScriptedOllamaServer(script: Array<{ content: string; toolCalls?: a
   return { server, getCompletionCount: () => completionCount };
 }
 
-async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalCount?: number }>) {
-  const tmpThreadsDir = path.resolve(process.cwd(), "tmp-test-synth-retry-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6));
+async function runTurn(
+  script: Array<{ content: string; toolCalls?: ScriptToolCall[]; evalCount?: number }>
+) {
+  const tmpThreadsDir = path.resolve(
+    process.cwd(),
+    "tmp-test-synth-retry-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6)
+  );
   fs.mkdirSync(tmpThreadsDir, { recursive: true });
   const prev = {
     THREADS_DIR: process.env.THREADS_DIR,
@@ -71,14 +87,15 @@ async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalC
     LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
     BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
-    LLM_ENGINE: process.env.LLM_ENGINE
+    LLM_ENGINE: process.env.LLM_ENGINE,
   };
   process.env.THREADS_DIR = tmpThreadsDir;
   process.env.LLM_ENGINE = "ollama";
 
   const { server, getCompletionCount } = makeScriptedOllamaServer(script);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-  const port = (server.address() as any).port;
+  const addr = server.address();
+  const port = typeof addr === "object" && addr ? addr.port : 0;
   process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
@@ -101,12 +118,18 @@ async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalC
         threadId,
         userMessageId: "u-1",
         assistantMessageId: "a-1",
-        messages: [{ role: "user", content: "Inspect the repo patterns and report what you find.", id: "u-1" }],
+        messages: [
+          {
+            role: "user",
+            content: "Inspect the repo patterns and report what you find.",
+            id: "u-1",
+          },
+        ],
         model: "swift-15-27b-mtp",
-        enableTools: true
-      })
+        enableTools: true,
+      }),
     });
-    const res = await chatRouteModule.POST(req as any);
+    const res = await chatRouteModule.POST(req);
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let raw = "";
@@ -117,7 +140,7 @@ async function runTurn(script: Array<{ content: string; toolCalls?: any[]; evalC
     }
 
     const thread = await store.getThread(threadId);
-    const asst = thread?.messages.find((m: any) => m.id === "a-1");
+    const asst = thread?.messages.find((m) => m.id === "a-1");
     return { asst, raw, completionCount: getCompletionCount() };
   } finally {
     server.close();
@@ -133,7 +156,7 @@ test("Empty post-tool synthesis retries once and lands a real summary", async ()
   const toolCall = {
     id: "call-1",
     type: "function",
-    function: { name: "workspace_get_tree", arguments: "{}" }
+    function: { name: "workspace_get_tree", arguments: "{}" },
   };
   const script = [
     // Round 1: narration + tool call (MCP unreachable -> graceful trace recorded).
@@ -143,7 +166,7 @@ test("Empty post-tool synthesis retries once and lands a real summary", async ()
     // Synthesis pass 1: empty again, stop -> the OLD code strands here.
     { content: "" },
     // Synthesis retry pass 2: real summary.
-    { content: "FINAL SUMMARY: the fix landed.", evalCount: 128 }
+    { content: "FINAL SUMMARY: the fix landed.", evalCount: 128 },
   ];
 
   const { asst, raw, completionCount } = await runTurn(script);
@@ -169,13 +192,13 @@ test("Double-empty synthesis ends honestly: work persisted, resumable stamp, inc
   const toolCall = {
     id: "call-1",
     type: "function",
-    function: { name: "workspace_get_tree", arguments: "{}" }
+    function: { name: "workspace_get_tree", arguments: "{}" },
   };
   const script = [
     { content: "Reading patterns first. ", toolCalls: [toolCall], evalCount: 40 },
     { content: "" },
     { content: "" },
-    { content: "" } // retry also empty
+    { content: "" }, // retry also empty
   ];
 
   const { asst, raw, completionCount } = await runTurn(script);
@@ -202,7 +225,7 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
   const toolCall = {
     id: "call-1",
     type: "function",
-    function: { name: "workspace_get_tree", arguments: "{}" }
+    function: { name: "workspace_get_tree", arguments: "{}" },
   };
   const prevInactivity = process.env.CHAT_ROUND_INACTIVITY_MS;
   const prevTotal = process.env.CHAT_ROUND_TOTAL_MS;
@@ -229,15 +252,25 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
         completionCount++;
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (completionCount === 1) {
-          res.write(JSON.stringify({ message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] } }) + "\n");
-          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] },
+            }) + "\n"
+          );
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n"
+          );
           res.end();
         } else if (completionCount === 2) {
-          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n");
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n"
+          );
           res.end();
         } else {
           // Synthesis pass: emit partial content then stall forever until aborted.
-          res.write(JSON.stringify({ message: { role: "assistant", content: "Partial synth " } }) + "\n");
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "Partial synth " } }) + "\n"
+          );
           req.on("close", () => {
             if (!res.writableEnded) res.end();
           });
@@ -258,12 +291,13 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
     LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
     BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
-    LLM_ENGINE: process.env.LLM_ENGINE
+    LLM_ENGINE: process.env.LLM_ENGINE,
   };
 
   try {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as any).port;
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
     process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
@@ -289,27 +323,32 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
         assistantMessageId: "a-1",
         messages: [{ role: "user", content: "Inspect.", id: "u-1" }],
         model: "swift-15-27b-mtp",
-        enableTools: true
-      })
+        enableTools: true,
+      }),
     });
 
     const res = await Promise.race([
-      chatRouteModule.POST(req as any),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("POST hung")), 4000))
+      chatRouteModule.POST(req),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("POST hung")), 4000)),
     ]);
     const reader = res.body!.getReader();
     while (true) {
       const { done } = await Promise.race([
         reader.read(),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Stream hung past synthesis deadline")), 4000))
+        new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error("Stream hung past synthesis deadline")), 4000)
+        ),
       ]);
       if (done) break;
     }
 
     const thread = await store.getThread(threadId);
-    const asst = thread?.messages.find((m: any) => m.id === "a-1");
+    const asst = thread?.messages.find((m) => m.id === "a-1");
     assert.ok(asst, "assistant message must exist");
-    assert.ok(asst!.content.includes("Partial synth"), `partial content must be preserved, got: ${asst!.content}`);
+    assert.ok(
+      asst!.content.includes("Partial synth"),
+      `partial content must be preserved, got: ${asst!.content}`
+    );
   } finally {
     server.close();
     if (prevInactivity === undefined) delete process.env.CHAT_ROUND_INACTIVITY_MS;
@@ -325,18 +364,19 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
 });
 
 test("Synthesis cap: runaway synthesis stream stops at MAX_STREAMED_CONTENT_CHARS", async () => {
-  const { MAX_STREAMED_CONTENT_CHARS, TURN_SIZE_LIMIT_MARKER } = await import("../lib/contextBudget");
+  const { MAX_STREAMED_CONTENT_CHARS, TURN_SIZE_LIMIT_MARKER } =
+    await import("../lib/contextBudget");
   const toolCall = {
     id: "call-1",
     type: "function",
-    function: { name: "workspace_get_tree", arguments: "{}" }
+    function: { name: "workspace_get_tree", arguments: "{}" },
   };
   const hugeChunk = "x".repeat(Math.ceil(MAX_STREAMED_CONTENT_CHARS / 2) + 5000);
   const script = [
     { content: "Checking. ", toolCalls: [toolCall], evalCount: 10 },
     { content: "" },
     // Synthesis emits 3 huge chunks (> MAX_STREAMED_CONTENT_CHARS).
-    { content: hugeChunk + hugeChunk + hugeChunk, evalCount: 100 }
+    { content: hugeChunk + hugeChunk + hugeChunk, evalCount: 100 },
   ];
 
   const { raw } = await runTurn(script);
@@ -350,7 +390,7 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
   const toolCall = {
     id: "call-1",
     type: "function",
-    function: { name: "workspace_get_tree", arguments: "{}" }
+    function: { name: "workspace_get_tree", arguments: "{}" },
   };
   let completionCount = 0;
   const server = http.createServer((req, res) => {
@@ -372,13 +412,40 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
         completionCount++;
         res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         if (completionCount === 1) {
-          res.write(JSON.stringify({ message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] } }) + "\n");
-          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 100, eval_count: 10 }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] },
+            }) + "\n"
+          );
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "" },
+              done: true,
+              prompt_eval_count: 100,
+              eval_count: 10,
+            }) + "\n"
+          );
         } else if (completionCount === 2) {
-          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 200, eval_count: 5 }) + "\n");
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "" },
+              done: true,
+              prompt_eval_count: 200,
+              eval_count: 5,
+            }) + "\n"
+          );
         } else {
-          res.write(JSON.stringify({ message: { role: "assistant", content: "Final synthesis." } }) + "\n");
-          res.write(JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 333, eval_count: 20 }) + "\n");
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "Final synthesis." } }) + "\n"
+          );
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "" },
+              done: true,
+              prompt_eval_count: 333,
+              eval_count: 20,
+            }) + "\n"
+          );
         }
         res.end();
         return;
@@ -397,11 +464,12 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
     LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
     MCP_SERVER_URL: process.env.MCP_SERVER_URL,
     BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
-    LLM_ENGINE: process.env.LLM_ENGINE
+    LLM_ENGINE: process.env.LLM_ENGINE,
   };
   try {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as any).port;
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
     process.env.THREADS_DIR = tmpThreadsDir;
     process.env.LLM_ENGINE = "ollama";
     process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
@@ -427,10 +495,10 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
         assistantMessageId: "a-1",
         messages: [{ role: "user", content: "Inspect.", id: "u-1" }],
         model: "swift-15-27b-mtp",
-        enableTools: true
-      })
+        enableTools: true,
+      }),
     });
-    const res = await chatRouteModule.POST(req as any);
+    const res = await chatRouteModule.POST(req);
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let raw = "";
@@ -458,7 +526,7 @@ test("Synthesis markup guard: tool-call markup in synthesis triggers one retry; 
   const toolCall = {
     id: "call-1",
     type: "function",
-    function: { name: "workspace_get_tree", arguments: "{}" }
+    function: { name: "workspace_get_tree", arguments: "{}" },
   };
   const markupText = `<function=workspace_read_file><parameter=path>foo.ts</parameter></function>`;
   const script = [
@@ -467,12 +535,15 @@ test("Synthesis markup guard: tool-call markup in synthesis triggers one retry; 
     // Synthesis pass 1: emits tool-call markup as text
     { content: markupText, evalCount: 20 },
     // Synthesis retry pass 2: emits tool-call markup again
-    { content: markupText, evalCount: 20 }
+    { content: markupText, evalCount: 20 },
   ];
 
   const { asst, raw, completionCount } = await runTurn(script);
   assert.ok(asst, "assistant message must exist");
-  assert.ok(completionCount >= 4, `markup in synthesis must trigger retry (got ${completionCount})`);
+  assert.ok(
+    completionCount >= 4,
+    `markup in synthesis must trigger retry (got ${completionCount})`
+  );
   assert.ok(
     raw.includes("retrying once") || raw.includes("tool calls were not executable"),
     "must emit retry status or honest markup end marker"

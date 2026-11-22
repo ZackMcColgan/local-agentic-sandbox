@@ -1,17 +1,28 @@
 "use client";
 
 import React, { useState } from "react";
-import { Terminal, ShieldCheck, Clock, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, Copy, Check } from "lucide-react";
+import {
+  Terminal,
+  ShieldCheck,
+  Clock,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  AlertTriangle,
+  Copy,
+  Check,
+} from "lucide-react";
 import { copyText } from "@/lib/clipboard";
 
 export interface ExecutionTraceItem {
   tool: string;
-  args: Record<string, any>;
-  result: any;
+  args: Record<string, unknown>;
+  result: unknown;
   durationMs: number;
   timestamp: string;
   model?: string;
   tier?: "sandbox" | "browser";
+  round?: number;
 }
 
 interface ExecutionTraceProps {
@@ -38,9 +49,12 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] p-6 text-center shadow-sm">
         <Terminal className="h-8 w-8 text-slate-400 dark:text-zinc-400 mx-auto mb-2 opacity-50" />
-        <h4 className="text-sm font-medium text-slate-700 dark:text-zinc-100">No Tool Executions Yet</h4>
+        <h4 className="text-sm font-medium text-slate-700 dark:text-zinc-100">
+          No Tool Executions Yet
+        </h4>
         <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
-          When the autonomous agent invokes tools inside the sandboxed container, execution logs and security boundary proofs will appear here.
+          When the autonomous agent invokes tools inside the sandboxed container, execution logs and
+          security boundary proofs will appear here.
         </p>
       </div>
     );
@@ -63,13 +77,18 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
       <div className="space-y-2">
         {traces.map((trace, idx) => {
           const isOpen = !!openIndexes[idx];
-          const isSuccess = !trace.result?.isError && (!trace.result?.content?.[0]?.text?.includes("EXECUTION_ERROR"));
+          const resObj =
+            trace.result && typeof trace.result === "object"
+              ? (trace.result as { isError?: boolean; content?: Array<{ text?: string }> })
+              : null;
+          const isSuccess =
+            !resObj?.isError && !resObj?.content?.[0]?.text?.includes("EXECUTION_ERROR");
 
           // Parse result text if it's formatted as stringified JSON
-          let parsedResult: any = trace.result;
+          let parsedResult: unknown = trace.result;
           try {
-            if (trace.result?.content?.[0]?.text) {
-              parsedResult = JSON.parse(trace.result.content[0].text);
+            if (resObj?.content?.[0]?.text) {
+              parsedResult = JSON.parse(resObj.content[0].text);
             }
           } catch {
             // Keep as-is
@@ -122,7 +141,6 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               {/* Accordion Body */}
               {isOpen && (
                 <div className="p-3.5 pt-0 border-t border-slate-100 dark:border-zinc-800/80 space-y-3 bg-slate-50/50 dark:bg-black/40">
-                  
                   {/* Tool Arguments / Code */}
                   <div>
                     <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-300 mb-1 flex items-center justify-between">
@@ -198,7 +216,6 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                       </>
                     )}
                   </div>
-
                 </div>
               )}
             </div>

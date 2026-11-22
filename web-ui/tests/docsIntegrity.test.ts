@@ -11,11 +11,12 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     "ARCHITECTURE.md",
     "docs/KUBERNETES_DEPLOYMENT.md",
     "docs/AI_GOVERNANCE.md",
-    "deploy/modelfiles/README.md"
+    "deploy/modelfiles/README.md",
   ];
 
   it("extracts all relative Markdown links and asserts every referenced file exists on disk", () => {
-    const linkRegex = /\[([^\]]+)\]\(((\.{1,2}\/|docs\/|web-ui\/|mcp-server\/|deploy\/)[^)#\s]+)(?:#[^)]*)?\)/g;
+    const linkRegex =
+      /\[([^\]]+)\]\(((\.{1,2}\/|docs\/|web-ui\/|mcp-server\/|deploy\/)[^)#\s]+)(?:#[^)]*)?\)/g;
 
     for (const relDoc of docsToCheck) {
       const fullDocPath = path.join(repoRoot, relDoc);
@@ -55,10 +56,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
   });
 
   it("README.md and deploy/modelfiles/README.md reference swift-15-27b-mtp as active model", () => {
-    const targetFiles = [
-      "README.md",
-      "deploy/modelfiles/README.md"
-    ];
+    const targetFiles = ["README.md", "deploy/modelfiles/README.md"];
 
     for (const relFile of targetFiles) {
       const fullPath = path.join(repoRoot, relFile);
@@ -91,7 +89,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
       "web-ui/lib/ledger/runLedger.ts",
       "web-ui/lib/git/workerGitOps.ts",
       "web-ui/lib/deploy/selfDeploy.ts",
-      "mcp-server/src/tools/workspaceTools.ts"
+      "mcp-server/src/tools/workspaceTools.ts",
     ];
 
     for (const proof of requiredProofs) {
@@ -123,8 +121,14 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     // Assert OWASP Top 10 for Agentic Applications
     assert.ok(govContent.includes("OWASP"), "Must reference OWASP framework");
     assert.ok(govContent.includes("ASI01"), "Must reference OWASP ASI01 (Agent Goal Hijack)");
-    assert.ok(govContent.includes("ASI02"), "Must reference OWASP ASI02 (Tool Misuse & Exploitation)");
-    assert.ok(govContent.includes("ASI03"), "Must reference OWASP ASI03 (Identity & Privilege Abuse)");
+    assert.ok(
+      govContent.includes("ASI02"),
+      "Must reference OWASP ASI02 (Tool Misuse & Exploitation)"
+    );
+    assert.ok(
+      govContent.includes("ASI03"),
+      "Must reference OWASP ASI03 (Identity & Privilege Abuse)"
+    );
 
     // Assert relative links to enforcement source files
     const requiredEnforcementFiles = [
@@ -137,7 +141,7 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
       "web-ui/lib/git/workerGitOps.ts",
       "web-ui/lib/deploy/selfDeploy.ts",
       "web-ui/lib/memory/profile.ts",
-      "mcp-server/src/tools/attestation.ts"
+      "mcp-server/src/tools/attestation.ts",
     ];
 
     for (const relFile of requiredEnforcementFiles) {
@@ -154,8 +158,78 @@ describe("Sprint 5 — Documentation Integrity & Hiring Manager Polish Suite", (
     // Assert README.md links to docs/AI_GOVERNANCE.md
     const readmeContent = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
     assert.ok(
-      readmeContent.includes("docs/AI_GOVERNANCE.md") || readmeContent.includes("./docs/AI_GOVERNANCE.md"),
+      readmeContent.includes("docs/AI_GOVERNANCE.md") ||
+        readmeContent.includes("./docs/AI_GOVERNANCE.md"),
       "README.md must link to ./docs/AI_GOVERNANCE.md"
+    );
+  });
+
+  it("README.md and ARCHITECTURE.md state the live Playwright census (284 tests, 13 spec files, 4 projects)", () => {
+    for (const rel of ["README.md", "ARCHITECTURE.md"]) {
+      const content = fs.readFileSync(path.join(repoRoot, rel), "utf8");
+      assert.ok(
+        !/272 tests|12 spec files|12 Playwright/.test(content),
+        `${rel} must not claim the stale 272-test / 12-spec Playwright census`
+      );
+      assert.ok(
+        /284 tests across 13 spec files and 4 projects/.test(content),
+        `${rel} must state the live Playwright census: 284 tests across 13 spec files and 4 projects`
+      );
+    }
+  });
+
+  it("README.md states the live unit-test census (1,930 tests across 283 files)", () => {
+    const content = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    assert.ok(
+      !/1,647|1,681|1,677|1,227/.test(content),
+      "README.md must not claim stale unit-test counts (1,647 / 1,681 / 1,677 / 1,227+)"
+    );
+    assert.ok(
+      /1,930 unit and contract tests across 283 files/.test(content),
+      "README.md must state the live unit census: 1,930 tests across 283 files"
+    );
+  });
+
+  it("README.md documents host-port egress instead of claiming zero external internet egress", () => {
+    const content = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    assert.ok(
+      !content.includes("zero external internet egress"),
+      "README.md must not claim 'zero external internet egress': deploy/k8s/network-policies.yaml leaves host ports 8080/11434/11435/8765 open without to: selectors"
+    );
+    assert.ok(
+      /8080/.test(content) && /8765/.test(content),
+      "README.md must accurately document the host-port egress (Strata :8080, llama/ollama :11434/:11435, host bridge :8765)"
+    );
+  });
+
+  it("ARCHITECTURE.md does NOT reference nonexistent lib/agentEngine.ts", () => {
+    const content = fs.readFileSync(path.join(repoRoot, "ARCHITECTURE.md"), "utf8");
+    assert.ok(
+      !content.includes("agentEngine.ts"),
+      "ARCHITECTURE.md must not reference nonexistent web-ui/lib/agentEngine.ts"
+    );
+  });
+
+  it("docs/AI_GOVERNANCE.md attestation snippet does not require() the ESM attestation module", () => {
+    const content = fs.readFileSync(path.join(repoRoot, "docs/AI_GOVERNANCE.md"), "utf8");
+    assert.ok(
+      !content.includes("require('./dist/tools/attestation.js')"),
+      "AI_GOVERNANCE.md must not require() dist/tools/attestation.js: mcp-server is ESM ('type': 'module') and attestation.ts exports only registerAttestation(mcp)"
+    );
+    assert.ok(
+      content.includes("verify_container_provenance"),
+      "AI_GOVERNANCE.md must reference the attestation MCP tool name"
+    );
+  });
+
+  it("scripts/lan-bridge.js warning cites a README section that exists", () => {
+    const bridge = fs.readFileSync(path.join(repoRoot, "scripts/lan-bridge.js"), "utf8");
+    const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    const cited = bridge.match(/See README\.?md "?([^"]+)"? section/);
+    assert.ok(cited, "lan-bridge.js must cite a README section");
+    assert.ok(
+      readme.includes(cited[1]),
+      `README.md must contain the section "${cited[1]}" cited by scripts/lan-bridge.js`
     );
   });
 });

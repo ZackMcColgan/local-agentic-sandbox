@@ -7,7 +7,17 @@ import assert from "node:assert/strict";
 // 3. Task list capped with an expand control.
 // 4. "Parked" wording replaced by "Stalled" in the rendered view.
 
-function makeTask(overrides: Record<string, unknown> = {}): any {
+type OvernightTaskInput = Parameters<
+  typeof import("../lib/subagents/morningReport.js").generateOvernightMorningReport
+>[0][number];
+type AmbiguityFlagInput = Parameters<
+  typeof import("../lib/subagents/morningReport.js").generateMorningReport
+>[0]["ambiguityFlags"][number];
+type MorningReportViewProps = Parameters<
+  typeof import("../components/MorningReportView.js").MorningReportView
+>[0];
+
+function makeTask(overrides: Record<string, unknown> = {}): OvernightTaskInput {
   return {
     taskId: "task-001",
     goal: "Generic overnight task",
@@ -21,11 +31,11 @@ function makeTask(overrides: Record<string, unknown> = {}): any {
     checkpoints: [],
     ambiguityFlags: [],
     journal: [],
-    ...overrides
-  };
+    ...overrides,
+  } as unknown as OvernightTaskInput;
 }
 
-function mixedTasks(): any[] {
+function mixedTasks(): OvernightTaskInput[] {
   return [
     makeTask({
       taskId: "task-artifact",
@@ -36,9 +46,9 @@ function mixedTasks(): any[] {
           title: "Write document",
           description: "Artifact generation",
           status: "completed",
-          plannedFiles: ["docs/single-output.md"]
-        }
-      ]
+          plannedFiles: ["docs/single-output.md"],
+        },
+      ],
     }),
     makeTask({ taskId: "task-done-2", goal: "Second completed task" }),
     makeTask({ taskId: "task-done-3", goal: "Third completed task" }),
@@ -48,49 +58,51 @@ function mixedTasks(): any[] {
       taskId: "task-stalled-1",
       goal: "Schema change run",
       status: "parked",
-      parkedReason: "Waiting on manual review of the produced diff."
+      parkedReason: "Waiting on manual review of the produced diff.",
     }),
     makeTask({
       taskId: "task-stalled-2",
       goal: "Config migration run",
       status: "parked",
-      parkedReason: "Waiting on a decision about the schema change."
+      parkedReason: "Waiting on a decision about the schema change.",
     }),
     makeTask({
       taskId: "task-failed-1",
       goal: "Verification run",
       status: "failed",
-      errorSummary: "Verification step exited non-zero."
-    })
+      errorSummary: "Verification step exited non-zero.",
+    }),
   ];
 }
 
-const sampleFlag: any = {
+const sampleFlag: AmbiguityFlagInput = {
   id: "AMB-1",
   milestoneId: "M1",
   question: "Should the summary document default to a white background?",
   judgmentCall: "Selected a white background per the standing light-mode rule.",
   reasoning: "Light Mode Purity specifies white backgrounds for documents.",
   revertAction: { type: "git_revert", target: "bca5b34" },
-  reviewed: false
-};
+  reviewed: false,
+} as unknown as AmbiguityFlagInput;
 
-async function renderView(overnightReport: any, report?: any): Promise<string> {
+async function renderView(
+  overnightReport: MorningReportViewProps["overnightReport"],
+  report?: MorningReportViewProps["report"]
+): Promise<string> {
   const React = await import("react");
   const { renderToString } = await import("react-dom/server");
   const { MorningReportView } = await import("../components/MorningReportView.js");
   return renderToString(
     React.createElement(MorningReportView, {
       overnightReport,
-      report: report ?? null
+      report: report ?? null,
     })
   );
 }
 
 async function buildMixedRender() {
-  const { generateOvernightMorningReport, generateMorningReport } = await import(
-    "../lib/subagents/morningReport.js"
-  );
+  const { generateOvernightMorningReport, generateMorningReport } =
+    await import("../lib/subagents/morningReport.js");
   const overnightReport = generateOvernightMorningReport(mixedTasks());
   const singleReport = generateMorningReport({
     taskId: "task-artifact",
@@ -102,7 +114,7 @@ async function buildMixedRender() {
     completedAt: new Date().toISOString(),
     milestones: [],
     ambiguityFlags: [sampleFlag],
-    parkedItems: []
+    parkedItems: [],
   });
   return renderView(overnightReport, singleReport);
 }
@@ -126,9 +138,15 @@ describe("uir-4 — Morning Report verdict banner", () => {
       "a night with failures must produce the failure verdict state"
     );
     const text = banner.textContent || "";
-    assert.ok(text.includes("5/8 tasks completed"), `verdict must carry the real completion count, got: ${text}`);
+    assert.ok(
+      text.includes("5/8 tasks completed"),
+      `verdict must carry the real completion count, got: ${text}`
+    );
     assert.ok(text.includes("1 failed"), `verdict must carry the real failed count, got: ${text}`);
-    assert.ok(text.includes("2 stalled"), `verdict must carry the real stalled count, got: ${text}`);
+    assert.ok(
+      text.includes("2 stalled"),
+      `verdict must carry the real stalled count, got: ${text}`
+    );
     assert.ok(
       text.includes("1 flag needs a decision"),
       `verdict must carry the real unreviewed flag count, got: ${text}`
@@ -150,13 +168,13 @@ describe("uir-4 — Morning Report verdict banner", () => {
         taskId: "t-comp-1",
         status: "completed",
         startedAt: new Date(now - 120_000).toISOString(),
-        completedAt: new Date(now - 60_000).toISOString()
+        completedAt: new Date(now - 60_000).toISOString(),
       }),
       makeTask({
         taskId: "t-comp-2",
         status: "completed",
         startedAt: new Date(now - 90_000).toISOString(),
-        completedAt: new Date(now - 30_000).toISOString()
+        completedAt: new Date(now - 30_000).toISOString(),
       }),
       makeTask({
         taskId: "t-parked-1",
@@ -164,15 +182,15 @@ describe("uir-4 — Morning Report verdict banner", () => {
         parkedReason: "Chunk boundary reached",
         startedAt: new Date(now - 7 * 3600_000).toISOString(),
         updatedAt: new Date(now - 7 * 3600_000 + 300_000).toISOString(),
-        completedAt: undefined
+        completedAt: undefined,
       }),
       makeTask({
         taskId: "t-stopped-1",
         status: "stopped",
         startedAt: new Date(now - 180_000).toISOString(),
         updatedAt: new Date(now - 120_000).toISOString(),
-        completedAt: undefined
-      })
+        completedAt: undefined,
+      }),
     ];
 
     const report = generateOvernightMorningReport(tasks);
@@ -194,7 +212,7 @@ describe("uir-4 — Morning Report verdict banner", () => {
     const overnightReport = generateOvernightMorningReport([
       makeTask({ taskId: "task-clear-1" }),
       makeTask({ taskId: "task-clear-2" }),
-      makeTask({ taskId: "task-clear-3" })
+      makeTask({ taskId: "task-clear-3" }),
     ]);
     const html = await renderView(overnightReport);
     const { Window } = await import("happy-dom");
@@ -205,7 +223,10 @@ describe("uir-4 — Morning Report verdict banner", () => {
     assert.ok(banner, "verdict banner must render");
     assert.equal(banner.getAttribute("data-verdict"), "clear");
     const text = banner.textContent || "";
-    assert.ok(text.includes("3/3 tasks completed"), `verdict must carry the real count, got: ${text}`);
+    assert.ok(
+      text.includes("3/3 tasks completed"),
+      `verdict must carry the real count, got: ${text}`
+    );
     assert.ok(text.includes("All clear"), `clear verdict must say so, got: ${text}`);
   });
 });

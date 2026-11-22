@@ -44,7 +44,10 @@ export function htmlToMarkdown(html: string): string {
     .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, "")
     .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, "")
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
-    .replace(/<div\b[^>]*(?:class|id)=["'][^"']*(?:cookie|banner|advert|ad-|ad_|sidebar|nav-|nav_)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, "");
+    .replace(
+      /<div\b[^>]*(?:class|id)=["'][^"']*(?:cookie|banner|advert|ad-|ad_|sidebar|nav-|nav_)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi,
+      ""
+    );
 
   // Format headers
   text = text.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n\n### $1\n\n");
@@ -89,18 +92,30 @@ export function registerBrowserTools(mcp: McpServer) {
     "search_web",
     "Search the public internet using DuckDuckGo for live facts, current events, technical documentation, library APIs, or web information. Automatically fetches and attaches clean markdown for the most informative top result.",
     {
-      query: z.string().describe("Search keywords or technical question (e.g. 'latest PyTorch release notes', 'pydantic v2 field validator syntax')"),
-      limit: z.number().min(1).max(10).optional().default(5).describe("Maximum number of search results to return")
+      query: z
+        .string()
+        .describe(
+          "Search keywords or technical question (e.g. 'latest PyTorch release notes', 'pydantic v2 field validator syntax')"
+        ),
+      limit: z
+        .number()
+        .min(1)
+        .max(10)
+        .optional()
+        .default(5)
+        .describe("Maximum number of search results to return"),
     },
     async ({ query, limit }) => {
       try {
         // Test hook: when SEARCH_FORCE_EMPTY_RESULTS=1, return empty results immediately without touching the network.
         if (process.env.SEARCH_FORCE_EMPTY_RESULTS === "1") {
           return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({ results: [] })
-            }]
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({ results: [] }),
+              },
+            ],
           };
         }
 
@@ -113,11 +128,12 @@ export function registerBrowserTools(mcp: McpServer) {
           body: new URLSearchParams({ q: query }),
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Referer": "https://lite.duckduckgo.com/lite/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            Referer: "https://lite.duckduckgo.com/lite/",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           },
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(5000),
         });
 
         if (res.ok) {
@@ -149,7 +165,7 @@ export function registerBrowserTools(mcp: McpServer) {
             results.push({
               title: links[i].title,
               snippet: snippets[i] || "Click to fetch full page content.",
-              url: links[i].url
+              url: links[i].url,
             });
           }
         }
@@ -158,22 +174,41 @@ export function registerBrowserTools(mcp: McpServer) {
         if (results.length === 0 && /\b(weather|forecast|temperature)\b/i.test(query)) {
           try {
             const cleanLoc = query
-              .replace(/\b(what|is|the|tomorrow'?s?|today'?s?|weather|forecast|temperature|in|for|at)\b/gi, " ")
+              .replace(
+                /\b(what|is|the|tomorrow'?s?|today'?s?|weather|forecast|temperature|in|for|at)\b/gi,
+                " "
+              )
               .trim()
               .replace(/\s+/g, "+");
             if (cleanLoc) {
-              const weatherRes = await fetch(`https://wttr.in/${encodeURIComponent(cleanLoc)}?format=j1`, {
-                signal: AbortSignal.timeout(4000)
-              });
+              const weatherRes = await fetch(
+                `https://wttr.in/${encodeURIComponent(cleanLoc)}?format=j1`,
+                {
+                  signal: AbortSignal.timeout(4000),
+                }
+              );
               if (weatherRes.ok) {
-                const wData: any = await weatherRes.json();
+                interface WttrWeatherDay {
+                  date?: string;
+                  maxtempF?: string;
+                  mintempF?: string;
+                  hourly?: Array<{ weatherDesc?: Array<{ value?: string }> }>;
+                }
+                interface WttrResponse {
+                  current_condition?: Array<{
+                    temp_F?: string;
+                    weatherDesc?: Array<{ value?: string }>;
+                  }>;
+                  weather?: WttrWeatherDay[];
+                }
+                const wData = (await weatherRes.json()) as WttrResponse;
                 const current = wData.current_condition?.[0];
                 const forecasts = wData.weather || [];
-                const snippet = `Weather for ${query}: Current: ${current?.temp_F}°F, ${current?.weatherDesc?.[0]?.value}. Forecast: ${forecasts.map((f: any) => `${f.date}: High ${f.maxtempF}°F, Low ${f.mintempF}°F, ${f.hourly?.[4]?.weatherDesc?.[0]?.value || 'clear'}`).join("; ")}`;
+                const snippet = `Weather for ${query}: Current: ${current?.temp_F}°F, ${current?.weatherDesc?.[0]?.value}. Forecast: ${forecasts.map((f) => `${f.date}: High ${f.maxtempF}°F, Low ${f.mintempF}°F, ${f.hourly?.[4]?.weatherDesc?.[0]?.value || "clear"}`).join("; ")}`;
                 results.push({
                   title: `Weather Forecast: ${query}`,
                   snippet,
-                  url: `https://wttr.in/${encodeURIComponent(cleanLoc)}`
+                  url: `https://wttr.in/${encodeURIComponent(cleanLoc)}`,
                 });
               }
             }
@@ -192,10 +227,11 @@ export function registerBrowserTools(mcp: McpServer) {
             try {
               const pageRes = await fetch(c.url, {
                 headers: {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                  "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 },
-                signal: AbortSignal.timeout(3500)
+                signal: AbortSignal.timeout(3500),
               });
               if (!pageRes.ok) return null;
               const pageHtml = await pageRes.text();
@@ -208,7 +244,12 @@ export function registerBrowserTools(mcp: McpServer) {
           });
 
           const settled = await Promise.allSettled(fetchPromises);
-          let bestCandidate: { title: string; url: string; markdown: string; score: number } | null = null;
+          let bestCandidate: {
+            title: string;
+            url: string;
+            markdown: string;
+            score: number;
+          } | null = null;
           for (const item of settled) {
             if (item.status === "fulfilled" && item.value && item.value.score >= 500) {
               if (!bestCandidate || item.value.score > bestCandidate.score) {
@@ -218,44 +259,64 @@ export function registerBrowserTools(mcp: McpServer) {
           }
 
           if (bestCandidate) {
-            const truncated = bestCandidate.markdown.length > 3000
-              ? bestCandidate.markdown.substring(0, 3000) + "\n\n...[Content truncated for context window]"
-              : bestCandidate.markdown;
+            const truncated =
+              bestCandidate.markdown.length > 3000
+                ? bestCandidate.markdown.substring(0, 3000) +
+                  "\n\n...[Content truncated for context window]"
+                : bestCandidate.markdown;
 
             topResultContent = {
               title: bestCandidate.title,
               url: bestCandidate.url,
-              markdown: truncated
+              markdown: truncated,
             };
           }
         }
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              query,
-              count: results.length,
-              top_result_content: topResultContent,
-              results: results.length > 0 ? results : [{
-                title: "Fallback Notice",
-                snippet: `Query submitted for '${query}'. Use fetch_webpage_markdown to inspect direct URLs.`,
-                url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`
-              }]
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  query,
+                  count: results.length,
+                  top_result_content: topResultContent,
+                  results:
+                    results.length > 0
+                      ? results
+                      : [
+                          {
+                            title: "Fallback Notice",
+                            snippet: `Query submitted for '${query}'. Use fetch_webpage_markdown to inspect direct URLs.`,
+                            url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+                          },
+                        ],
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SEARCH_ERROR",
-              error: err.message,
-              query
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SEARCH_ERROR",
+                  error: message,
+                  query,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }
@@ -266,19 +327,29 @@ export function registerBrowserTools(mcp: McpServer) {
     "fetch_webpage_markdown",
     "Fetch a public web page or documentation URL and convert its HTML content into clean, readable Markdown.",
     {
-      url: z.string().url().describe("Target documentation or website URL to scrape (must be public HTTP/HTTPS)")
+      url: z
+        .string()
+        .url()
+        .describe("Target documentation or website URL to scrape (must be public HTTP/HTTPS)"),
     },
     async ({ url }) => {
       if (isPrivateIpOrLocalhost(url)) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "BLOCKED_SSRF",
-              error: "Access to private or local network hosts is strictly prohibited by security policy.",
-              url
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "BLOCKED_SSRF",
+                  error:
+                    "Access to private or local network hosts is strictly prohibited by security policy.",
+                  url,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
 
@@ -289,9 +360,10 @@ export function registerBrowserTools(mcp: McpServer) {
         const res = await fetch(url, {
           signal: controller.signal,
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-          }
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          },
         });
         clearTimeout(timeout);
 
@@ -301,29 +373,45 @@ export function registerBrowserTools(mcp: McpServer) {
 
         const rawHtml = await res.text();
         const markdown = htmlToMarkdown(rawHtml);
-        const truncated = markdown.length > 4000 ? markdown.substring(0, 4000) + "\n\n...[Content truncated for context window]" : markdown;
+        const truncated =
+          markdown.length > 4000
+            ? markdown.substring(0, 4000) + "\n\n...[Content truncated for context window]"
+            : markdown;
 
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "SUCCESS",
-              url,
-              char_count: truncated.length,
-              markdown: truncated
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  url,
+                  char_count: truncated.length,
+                  markdown: truncated,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "FETCH_ERROR",
-              error: err.message,
-              url
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  status: "FETCH_ERROR",
+                  error: message,
+                  url,
+                },
+                null,
+                2
+              ),
+            },
+          ],
         };
       }
     }

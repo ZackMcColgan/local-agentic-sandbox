@@ -1,4 +1,4 @@
-import { Page, expect } from "@playwright/test";
+import { Page } from "@playwright/test";
 
 export interface LayoutInvariantOptions {
   checkOverflow?: boolean;
@@ -32,22 +32,25 @@ export interface ElementSummary {
 export const INTENTIONAL_OVERLAP_EXCEPTIONS: OverlapException[] = [
   {
     id: "badge-overlay",
-    justification: "Notification / status counter badges intentionally overlay corner of parent button / icon",
+    justification:
+      "Notification / status counter badges intentionally overlay corner of parent button / icon",
     match: (a, b) =>
       a.className.includes("badge") ||
       b.className.includes("badge") ||
-      a.className.includes("rounded-full") && (a.rect.width < 24 || b.rect.width < 24),
+      (a.className.includes("rounded-full") && (a.rect.width < 24 || b.rect.width < 24)),
   },
   {
     id: "hidden-file-input",
     justification: "Hidden file input element used for paperclip upload attachment triggers",
-    match: (a, b) => a.tag === "input" && a.rect.width <= 1 || b.tag === "input" && b.rect.width <= 1,
+    match: (a, b) =>
+      (a.tag === "input" && a.rect.width <= 1) || (b.tag === "input" && b.rect.width <= 1),
   },
   {
     id: "segmented-pill-slider",
     justification: "Animated slider background pill under active tab in segmented controls",
     match: (a, b) =>
-      (a.className.includes("segmented") || b.className.includes("segmented")) ||
+      a.className.includes("segmented") ||
+      b.className.includes("segmented") ||
       (a.role === "tab" && b.role === "tablist") ||
       (b.role === "tab" && a.role === "tablist"),
   },
@@ -77,7 +80,14 @@ export async function assertLayoutInvariants(
   await page.waitForLoadState("domcontentloaded");
 
   const results = await page.evaluate(
-    ({ viewName, checkOverflow, checkOverlap, checkTapTargets, checkClipping, containerSelector }) => {
+    ({
+      viewName,
+      checkOverflow,
+      checkOverlap,
+      checkTapTargets,
+      checkClipping,
+      containerSelector,
+    }) => {
       const errors: string[] = [];
       const warnings: string[] = [];
 
@@ -96,9 +106,12 @@ export async function assertLayoutInvariants(
       // Collect visible interactive elements
       // If an active modal dialog is present (role="dialog" with aria-modal="true"),
       // the background is inert and occluded by the backdrop; scope interactive checks to the modal dialog
-      const activeModal = (containerSelector === "body" || !containerSelector)
-        ? document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]:not([style*="display: none"])')
-        : null;
+      const activeModal =
+        containerSelector === "body" || !containerSelector
+          ? document.querySelector<HTMLElement>(
+              '[role="dialog"][aria-modal="true"]:not([style*="display: none"])'
+            )
+          : null;
       const container = activeModal || document.querySelector(containerSelector) || document.body;
       const candidates = Array.from(
         container.querySelectorAll<HTMLElement>(
@@ -160,8 +173,14 @@ export async function assertLayoutInvariants(
             const sumA = summaries[i];
             const sumB = summaries[j];
 
-            const overlapW = Math.max(0, Math.min(sumA.rect.right, sumB.rect.right) - Math.max(sumA.rect.left, sumB.rect.left));
-            const overlapH = Math.max(0, Math.min(sumA.rect.bottom, sumB.rect.bottom) - Math.max(sumA.rect.top, sumB.rect.top));
+            const overlapW = Math.max(
+              0,
+              Math.min(sumA.rect.right, sumB.rect.right) - Math.max(sumA.rect.left, sumB.rect.left)
+            );
+            const overlapH = Math.max(
+              0,
+              Math.min(sumA.rect.bottom, sumB.rect.bottom) - Math.max(sumA.rect.top, sumB.rect.top)
+            );
             const overlapArea = overlapW * overlapH;
 
             // If overlap area > 4px²
@@ -170,12 +189,14 @@ export async function assertLayoutInvariants(
               const isExempt =
                 sumA.className.includes("badge") ||
                 sumB.className.includes("badge") ||
-                (sumA.className.includes("rounded-full") && (sumA.rect.width < 24 || sumB.rect.width < 24)) ||
+                (sumA.className.includes("rounded-full") &&
+                  (sumA.rect.width < 24 || sumB.rect.width < 24)) ||
                 (sumA.tag === "input" && sumA.rect.width <= 1) ||
                 (sumB.tag === "input" && sumB.rect.width <= 1) ||
                 sumA.className.includes("sr-only") ||
                 sumB.className.includes("sr-only") ||
-                (sumA.className.includes("segmented") || sumB.className.includes("segmented")) ||
+                sumA.className.includes("segmented") ||
+                sumB.className.includes("segmented") ||
                 (sumA.role === "tab" && sumB.role === "tablist") ||
                 (sumB.role === "tab" && sumA.role === "tablist");
 
@@ -202,7 +223,9 @@ export async function assertLayoutInvariants(
           if (s.className.includes("sr-only")) continue;
 
           // Check header and navigation controls
-          const isPrimaryNavControl = el.closest("header, nav, .panel-toggle-btn, .mobile-dock, .inspector-header");
+          const isPrimaryNavControl = el.closest(
+            "header, nav, .panel-toggle-btn, .mobile-dock, .inspector-header"
+          );
           if (isPrimaryNavControl) {
             if (s.rect.width < 40 || s.rect.height < 40) {
               errors.push(
@@ -220,7 +243,9 @@ export async function assertLayoutInvariants(
           const s = summaries[i];
           const el = visibleControls[i];
           // If element is fixed or header control, ensure not clipped outside [0, vw]
-          const isFixedOrSticky = ["fixed", "sticky"].includes(window.getComputedStyle(el).position);
+          const isFixedOrSticky = ["fixed", "sticky"].includes(
+            window.getComputedStyle(el).position
+          );
           const inFixedContainer = !!el.closest("header, nav, aside.fixed, .app-inspector");
           if (isFixedOrSticky || inFixedContainer) {
             if (s.rect.left < -2 || s.rect.right > vw + 2) {

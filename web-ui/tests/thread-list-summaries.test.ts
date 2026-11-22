@@ -25,21 +25,36 @@ describe("B1: Lightweight thread summaries", () => {
           role: "assistant",
           content: hugeText,
           thought: hugeText,
-          traces: [{ id: "t1", type: "tool", name: "read_file", result: hugeText }] as any,
-          diffs: [{ filePath: "a.ts", diff: "+foo" }] as any,
+          traces: [
+            { id: "t1", type: "tool", name: "read_file", result: hugeText },
+          ] as unknown as NonNullable<(typeof thread.messages)[number]["traces"]>,
+          diffs: [{ filePath: "a.ts", diff: "+foo" }] as unknown as NonNullable<
+            (typeof thread.messages)[number]["diffs"]
+          >,
           timestamp: new Date().toISOString(),
         },
       ];
       store.saveThread(thread);
 
-      const summaries = await (store as any).listThreadSummaries();
-      const summary = summaries.find((s: any) => s.id === thread.id);
+      type ThreadSummary = {
+        id: string;
+        messageCount: number;
+        hasDiffs: boolean;
+        lastMessagePreview?: string;
+        title?: string;
+      };
+      const summaries = await (
+        store as unknown as { listThreadSummaries(): Promise<ThreadSummary[]> }
+      ).listThreadSummaries();
+      const summary = summaries.find((s) => s.id === thread.id);
       assert.ok(summary, "Expected created thread summary");
       const serializedSize = Buffer.byteLength(JSON.stringify(summary), "utf8");
       assert.ok(serializedSize < 1024, `Expected summary < 1024 bytes, got ${serializedSize}`);
       assert.equal(summary.messageCount, 2);
       assert.equal(summary.hasDiffs, true);
-      assert.ok(typeof summary.lastMessagePreview === "string" && summary.lastMessagePreview.length > 0);
+      assert.ok(
+        typeof summary.lastMessagePreview === "string" && summary.lastMessagePreview.length > 0
+      );
       assert.ok(summary.title && summary.title !== "New session", "Expected derived title");
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -51,7 +66,7 @@ describe("B1: Lightweight thread summaries", () => {
     try {
       const store = new ThreadStore(tmpDir);
       let listCalled = false;
-      (store as any).listThreads = async () => {
+      store.listThreads = async () => {
         listCalled = true;
         return [];
       };

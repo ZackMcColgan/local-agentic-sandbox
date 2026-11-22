@@ -1,24 +1,17 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import NextImage from "next/image";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import type { SupervisorBadgeInput } from "./supervisorBadgeState";
-import { classifyHostRunnerDisconnect } from "@/lib/liveActivity";
 import {
   Send,
-  Bot,
-  User,
   Sparkles,
   Loader2,
-  Terminal,
   ShieldAlert,
-  ShieldCheck,
-  Copy,
   Check,
   RotateCcw,
   ChevronDown,
-  ChevronUp,
-  Globe,
   Trash2,
   Paperclip,
   FileText,
@@ -31,52 +24,32 @@ import {
   ArrowDown,
   PanelLeft,
   FolderGit2,
-  FileCode,
-  ExternalLink,
-  Download,
-  RefreshCw
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ExecutionTraceItem } from "./ExecutionTrace";
-import { CompletionVerificationBadge } from "./CompletionVerificationBadge";
 import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
 import {
   RECONCILE_POLL_MAX_ATTEMPTS,
   reconcilePollDelayMs,
-  shouldStopReconcilePoll
+  shouldStopReconcilePoll,
 } from "../lib/reconcilePollPolicy";
-import { SvgViewer, SvgFileLink } from "./SvgViewer";
 import { LiveRunBlock } from "./LiveRunBlock";
-import { ThinkingPanel } from "./ThinkingPanel";
-import { LiveActivityHeader } from "./LiveActivityHeader";
-import {
-  phaseLabelForTool,
-  hostDisconnectChipVisible,
-  streamBannerKind
-} from "../lib/liveActivity";
-import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock, highlightTokens } from "./ArtifactRenderers";
+import { hostDisconnectChipVisible, streamBannerKind } from "../lib/liveActivity";
+import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
-import {
-  isSvgCode,
-  isSvgFilePath,
-  resolveSvgUrl,
-  wrapRawSvgInMarkdown,
-  extractSvgsFromMessage,
-  hasCompleteInlineSvg,
-  extractCodeDeliverablesFromMessage
-} from "../lib/svgUtils";
-import { AgentMode, isReasoningEffortSupported } from "../config/models";
-import { isMarkupOnlyToolCall, TURN_TOOL_MARKUP_MARKER } from "../lib/toolCallIntegrity";
+import { AgentMode } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import { parseThinkingAndContent, formatThinkingDisplay, formatHumanReadableTrace, formatChatErrorMessage, getServedByNote, extractFileWriteDiffsFromTraces, formatElapsedDuration, formatMessageTimestamp, displayRepoPath, displayBasename } from "../lib/chatUtils";
-import { DiffViewer } from "./DiffViewer";
+import {
+  parseThinkingAndContent,
+  formatHumanReadableTrace,
+  formatChatErrorMessage,
+  formatElapsedDuration,
+} from "../lib/chatUtils";
 import { CanvasProvider } from "./CanvasContext";
-import { ArtifactCanvasPane, CanvasDiffCard, CanvasFileOpenButton } from "./ArtifactCanvas";
-import { TurnFileDiff, MAX_DIFF_LINES_CAP } from "../lib/chatDiffs";
+import { ArtifactCanvasPane } from "./ArtifactCanvas";
+import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
@@ -86,21 +59,25 @@ import {
   createSimulatedChatResponse,
   runSimulatedTask,
   getScenario,
-  SimulationScenarioKey
+  SimulationScenarioKey,
 } from "../lib/simulator";
 
-
-
-
-export interface AttachedFileItem {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  previewUrl?: string;
-  base64: string;
-  isImage: boolean;
-}
+import { deduplicateStreamMessages } from "../lib/chat/streamMessages";
+export { deduplicateStreamMessages };
+import { ChatMessageItem, UserMessageContent } from "./chat/messageRender";
+import { NowLineBar } from "./NowLineBar";
+import { CanvasDiffSheet } from "./CanvasDiffSheet";
+import type { TimelineWriteDiff } from "../lib/activityTimeline";
+import { computeFollowState } from "../lib/autoFollow";
+export { UserMessageContent };
+import { HostApprovalsPanel } from "./chat/approvals";
+import {
+  formatFileSize,
+  fileToBase64,
+  buildAttachedFileItem,
+  type AttachedFileItem,
+} from "../lib/chat/attachments";
+export { formatFileSize, fileToBase64, type AttachedFileItem };
 
 export interface ChatMessage {
   id: string;
@@ -136,6 +113,8 @@ export interface ChatMessage {
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
   roundPromptTokens?: number[];
+  roundGenerationMs?: number[];
+  thinkingSegments?: Array<{ round: number; text: string }>;
   outputTokens?: number;
   compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
@@ -145,12 +124,18 @@ export interface UiHostApproval {
   id: string;
   threadId?: string;
   tool: string;
-  args: Record<string, any>;
+  args: {
+    command?: string;
+    path?: string;
+    cwd?: string;
+    recursive?: boolean;
+    [key: string]: unknown;
+  };
   riskReason: string;
   createdAt?: number;
   expiresAt?: number;
   status: "pending" | "executed" | "denied" | "expired" | "error";
-  result?: any;
+  result?: unknown;
   error?: string;
   isSubmitting?: boolean;
 }
@@ -170,22 +155,31 @@ interface ChatStreamProps {
   threadId?: string;
   threadTitle?: string;
   supervisorState?: SupervisorBadgeInput;
-  threadStatus?: "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
+  threadStatus?:
+    "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
   threadHostAccess?: boolean;
-  onHostAccessChanged?: (enabled: boolean, updatedThread?: any) => void;
+  onHostAccessChanged?: (
+    enabled: boolean,
+    updatedThread?: { id: string; [key: string]: unknown }
+  ) => void;
   activeTask?: TaskManifest | null;
   initialScope?: TaskScope;
   threadScope?: TaskScope;
   onStopTask?: () => Promise<void> | void;
-  onTaskUpdated?: (task?: TaskManifest, thread?: any) => void;
+  onTaskUpdated?: (task?: TaskManifest, thread?: { id: string; [key: string]: unknown }) => void;
   onBackToList?: () => void;
   onOpenModelSheet?: () => void;
   onOpenSettings?: () => void;
-  onLaunchTask?: (goal: string, attachments?: any[], scope?: TaskScope, autoDeployOnGreen?: boolean) => Promise<void>;
+  onLaunchTask?: (
+    goal: string,
+    attachments?: unknown[],
+    scope?: TaskScope,
+    autoDeployOnGreen?: boolean
+  ) => Promise<void>;
   defaultComposerMode?: "chat" | "build";
   onNewThread?: () => void;
   onDeleteThread?: () => void;
-  onSendMessage?: (content: string, attachments?: any[]) => Promise<void>;
+  onSendMessage?: (content: string, attachments?: unknown[]) => Promise<void>;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   onOpenDrawer?: () => void;
   onEnsureThread?: (initialTitle: string) => Promise<string | null>;
@@ -208,141 +202,6 @@ interface ChatStreamProps {
   };
 }
 
-// Human-readable labels for the CompactionAction union emitted by
-// fitConversationToBudget (web-ui/lib/contextBudget.ts:816-820) and persisted on
-// thread messages as compactionActions (web-ui/lib/threads/threadStore.ts:66).
-const COMPACTION_ACTION_LABELS: Record<string, string> = {
-  compaction: "Compaction",
-  elide_tool_outputs: "Elide tool outputs",
-  drop_old_turns: "Drop old turns",
-  truncate_oversize: "Truncate oversize"
-};
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Check if raster image that benefits from high-performance client-side scaling
-    if (file.type.startsWith("image/") && !file.type.includes("svg") && typeof window !== "undefined") {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const rawUrl = e.target?.result as string;
-        if (!rawUrl) {
-          resolve("");
-          return;
-        }
-        const img = new Image();
-        img.onload = () => {
-          const MAX_DIM = 1600;
-          let { width, height } = img;
-          if (width > MAX_DIM || height > MAX_DIM) {
-            if (width > height) {
-              height = Math.round((height * MAX_DIM) / width);
-              width = MAX_DIM;
-            } else {
-              width = Math.round((width * MAX_DIM) / height);
-              height = MAX_DIM;
-            }
-          } else {
-            resolve(rawUrl);
-            return;
-          }
-
-          try {
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, width, height);
-              resolve(canvas.toDataURL("image/jpeg", 0.88));
-              return;
-            }
-          } catch {
-            // fallback to original if canvas fails
-          }
-          resolve(rawUrl);
-        };
-        img.onerror = () => resolve(rawUrl);
-        img.src = rawUrl;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
-}
-
-// UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
-// "Show full brief" toggle so a pasted job brief never walls off the thread.
-const BRIEF_COLLAPSE_MAX_CHARS = 320;
-const BRIEF_COLLAPSE_MAX_LINES = 6;
-
-function UserMessageContent({ content }: { content: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const collapsible =
-    content.length > BRIEF_COLLAPSE_MAX_CHARS ||
-    content.split("\n").length > BRIEF_COLLAPSE_MAX_LINES;
-  const markdown = (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        code: ({ children }: any) => (
-          <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
-            {children}
-          </code>
-        ),
-        p: ({ children }: any) => (
-          <p className="mb-1 last:mb-0 leading-relaxed whitespace-pre-line text-blue-950 dark:text-sky-100">{children}</p>
-        )
-      }}
-    >
-      {content}
-    </ReactMarkdown>
-  );
-  if (!collapsible) return <>{markdown}</>;
-  return (
-    <div>
-      <div className={expanded ? undefined : "relative max-h-[9rem] overflow-hidden"}>
-        {markdown}
-        {!expanded && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-blue-50 dark:from-[#03151a] to-transparent" />
-        )}
-      </div>
-      <div className="mt-2 -mb-1 border-t border-blue-200/70 dark:border-[rgba(56,189,248,0.25)]">
-        <button
-          type="button"
-          data-testid="brief-collapse-toggle"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-blue-700 dark:text-[#bae6fd] hover:underline cursor-pointer"
-        >
-          {expanded ? (
-            <>
-              <span>Show less</span>
-              <ChevronUp className="h-3.5 w-3.5" />
-            </>
-          ) : (
-            <>
-              <span>Show full brief ({content.length.toLocaleString()} chars)</span>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function ChatStream({
   draftPrompt,
   onClearDraftPrompt,
@@ -352,15 +211,12 @@ export function ChatStream({
   agentMode = "auto",
   reasoningEffort,
   onViewSecurityTelemetry,
-  activeBranch,
   messages: propsMessages,
   setMessages: propsSetMessages,
   threadId,
   threadTitle,
   supervisorState,
-  threadStatus,
   threadHostAccess,
-  onHostAccessChanged,
   activeTask,
   initialScope = "PROJECT",
   threadScope,
@@ -372,7 +228,6 @@ export function ChatStream({
   onLaunchTask,
   onNewThread,
   onDeleteThread,
-  onSendMessage,
   onDeployRun,
   onOpenDrawer,
   onEnsureThread,
@@ -384,10 +239,10 @@ export function ChatStream({
   defaultComposerMode,
   onOpenProjects,
   isActiveView = true,
-  initialSimulation
+  initialSimulation,
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
-    getInitialWelcomeMessage(activeModel)
+    getInitialWelcomeMessage(activeModel),
   ]);
   const messages = propsMessages ?? localMessages;
   const setMessages = propsSetMessages ?? setLocalMessages;
@@ -396,6 +251,10 @@ export function ChatStream({
   // mode is fixed at mount from defaultComposerMode; Build is entered via
   // the /build prefix or the Builds view, never a composer toggle.
   const [composerMode] = useState<"chat" | "build">(defaultComposerMode ?? "chat");
+  const [activeCanvasDiff, setActiveCanvasDiff] = useState<{
+    current: TimelineWriteDiff;
+    all: TimelineWriteDiff[];
+  } | null>(null);
   const [autoDeployOnGreen, setAutoDeployOnGreen] = useState(false);
   const [midTurnAction, setMidTurnAction] = useState<"queue" | "steer">(() => {
     if (typeof window !== "undefined" && threadId) {
@@ -459,10 +318,8 @@ export function ChatStream({
   }, [recoveredAtMs]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
-  const [expandedDiffCards, setExpandedDiffCards] = useState<Record<string, boolean>>({});
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   useEffect(() => {
@@ -491,7 +348,9 @@ export function ChatStream({
 
   useEffect(() => {
     let active = true;
-    const url = threadId ? `/api/host/status?threadId=${encodeURIComponent(threadId)}` : "/api/host/status";
+    const url = threadId
+      ? `/api/host/status?threadId=${encodeURIComponent(threadId)}`
+      : "/api/host/status";
     fetch(url)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -537,8 +396,8 @@ export function ChatStream({
       .then((data) => {
         if (!active || !data?.approvals) return;
         const now = Date.now();
-        const unexpired = data.approvals.filter(
-          (a: any) => (!a.expiresAt || a.expiresAt > now) && a.status === "pending"
+        const unexpired = (data.approvals as UiHostApproval[]).filter(
+          (a) => (!a.expiresAt || a.expiresAt > now) && a.status === "pending"
         );
 
         setHostApprovals((prev) => {
@@ -553,7 +412,7 @@ export function ChatStream({
               riskReason: app.riskReason || "Destructive action requires approval",
               createdAt: app.createdAt,
               expiresAt: app.expiresAt,
-              status: "pending"
+              status: "pending",
             };
             if (idx >= 0) {
               merged[idx] = { ...merged[idx], ...uiApp };
@@ -590,66 +449,14 @@ export function ChatStream({
     };
   }, [threadId]);
 
-  const handleToggleHostAccess = async () => {
-    let targetThreadId = activeThreadId || threadId;
-    if (!targetThreadId && onEnsureThread) {
-      targetThreadId = (await onEnsureThread("New session")) || undefined;
-      if (targetThreadId) {
-        activeThreadIdRef.current = targetThreadId;
-        setActiveThreadId(targetThreadId);
-      }
-    }
-    if (!targetThreadId) {
-      return;
-    }
-
-    const nextHostAccess = !hostAccess;
-    try {
-      const res = await fetch(`/api/threads/${targetThreadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setHostAccess", hostAccess: nextHostAccess })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setHostAccess(nextHostAccess);
-        if (onTaskUpdated && data.thread) {
-          onTaskUpdated(undefined, data.thread);
-        }
-        if (onHostAccessChanged && data.thread) {
-          onHostAccessChanged(nextHostAccess, data.thread);
-        }
-
-        // Fresh check of runner availability
-        try {
-          const statusRes = await fetch(`/api/host/status?threadId=${encodeURIComponent(targetThreadId)}`);
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            if (typeof statusData.runnerAvailable === "boolean") {
-              setRunnerAvailable(statusData.runnerAvailable);
-            }
-            if (statusData.runnerState) {
-              setRunnerState(statusData.runnerState);
-            } else if (typeof statusData.runnerAvailable === "boolean") {
-              setRunnerState(statusData.runnerAvailable ? "READY" : "UNAVAILABLE");
-            }
-            if (statusData.reason) {
-              setRunnerReason(statusData.reason);
-            }
-          }
-        } catch {}
-      }
-    } catch (err) {
-      console.warn("Failed to toggle host access:", err);
-    }
-  };
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
   } | null>(initialSimulation ?? null);
   const activeSimTaskCancelRef = useRef<(() => void) | null>(null);
   const initialSimulationTriggeredRef = useRef(false);
+
+  const handleSendRef = useRef<((overridePrompt?: string) => void) | null>(null);
 
   useEffect(() => {
     if (initialSimulation && !initialSimulationTriggeredRef.current) {
@@ -658,7 +465,7 @@ export function ChatStream({
       const cmd = `/simulate ${initialSimulation.scenarioKey}${
         initialSimulation.speedMultiplier ? ` ${initialSimulation.speedMultiplier}` : ""
       }`;
-      handleSend(cmd);
+      handleSendRef.current?.(cmd);
     }
   }, [initialSimulation]);
 
@@ -676,7 +483,7 @@ export function ChatStream({
     tokensAfterCompaction?: number;
   }>({
     estimatedTokens: 0,
-    budgetTokens: 100000
+    budgetTokens: 100000,
   });
   const [threadCompaction, setThreadCompaction] = useState<{
     throughMessageId: string;
@@ -720,7 +527,7 @@ export function ChatStream({
       thought: "",
       traces: [],
       modelUsed: activeModel,
-      selectedModel: activeModel
+      selectedModel: activeModel,
     };
     if (!exists) {
       return [...prev, patch(base)];
@@ -757,6 +564,11 @@ export function ChatStream({
   // kept polling while ChatStream was hidden (page.tsx hides via CSS; the
   // component stays mounted). Now: exponential backoff, attempt + total-time
   // caps, and no polling while ChatStream is not the active view.
+  const disconnectedAtMsRef = useRef<number | null>(disconnectedAtMs);
+  disconnectedAtMsRef.current = disconnectedAtMs;
+  const setMessagesRef = useRef(setMessages);
+  setMessagesRef.current = setMessages;
+
   useEffect(() => {
     if (!reconcilingThreadId) return;
     if (!isActiveView) return;
@@ -770,7 +582,7 @@ export function ChatStream({
       try {
         const res = await fetch(`/api/threads/${reconcilingThreadId}`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" }
+          headers: { "Cache-Control": "no-cache" },
         });
         if (!res.ok || !active) return;
         const data = await res.json();
@@ -778,7 +590,7 @@ export function ChatStream({
           const threadMsgs: ChatMessage[] = data.thread.messages;
           const lastAsst = [...threadMsgs].reverse().find((m) => m.role === "assistant");
           if (lastAsst) {
-            setMessages(threadMsgs);
+            setMessagesRef.current(threadMsgs);
             if (lastAsst.status !== "streaming") {
               setIsTransientDisconnected(false);
               setReconcilingThreadId(null);
@@ -788,7 +600,7 @@ export function ChatStream({
               const now = Date.now();
               setRecoveredAtMs(now);
               setRecoveredAfterSec(
-                Math.max(1, Math.round((now - (disconnectedAtMs ?? startedAt)) / 1000))
+                Math.max(1, Math.round((now - (disconnectedAtMsRef.current ?? startedAt)) / 1000))
               );
               setDisconnectedAtMs(null);
               return;
@@ -804,7 +616,7 @@ export function ChatStream({
         !shouldStopReconcilePoll({
           attempts,
           elapsedMs: Date.now() - startedAt,
-          isActiveView
+          isActiveView,
         })
       ) {
         setReconnectAttempt(attempts + 1);
@@ -854,14 +666,13 @@ export function ChatStream({
     if (isProgrammaticScrollRef.current) return;
     const el = chatContainerRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
-    const unpinned = distanceFromBottom > 90;
-    if (unpinned) {
-      isFollowPinnedRef.current = false;
-    } else {
-      isFollowPinnedRef.current = true;
-    }
-    setIsUserScrolledUp(unpinned);
+    const { isAtBottom, shouldShowLivePill } = computeFollowState({
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    });
+    isFollowPinnedRef.current = isAtBottom;
+    setIsUserScrolledUp(shouldShowLivePill);
   };
 
   const handleContainerWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -900,10 +711,14 @@ export function ChatStream({
   const tailMessage = messages[messages.length - 1];
   const lastMsg = tailMessage;
   useEffect(() => {
-    if (!isUserScrolledUp && isFollowPinnedRef.current && (isLoading || lastMsg?.role === "assistant")) {
+    if (
+      !isUserScrolledUp &&
+      isFollowPinnedRef.current &&
+      (isLoading || lastMsg?.role === "assistant")
+    ) {
       scrollToBottom("auto");
     }
-  }, [lastMsg?.content, isLoading, isUserScrolledUp]);
+  }, [lastMsg?.content, lastMsg?.role, isLoading, isUserScrolledUp]);
 
   useEffect(() => {
     if (!isFollowPinnedRef.current || isUserScrolledUp) {
@@ -930,10 +745,6 @@ export function ChatStream({
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isLoading, isTaskActive, isUserScrolledUp]);
-
-  const toggleThought = (msgId: string) => {
-    setExpandedThoughts((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
-  };
 
   const toggleProof = (proofKey: string) => {
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
@@ -965,18 +776,17 @@ export function ChatStream({
     const newItems: AttachedFileItem[] = [];
     for (let i = 0; i < fileList.length; i++) {
       const f = fileList[i];
-      const isImg = f.type.startsWith("image/");
       try {
         const b64 = await fileToBase64(f);
-        newItems.push({
-          id: `att-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-          name: f.name,
-          type: f.type || "application/octet-stream",
-          size: f.size,
-          previewUrl: isImg ? b64 : undefined,
-          base64: b64,
-          isImage: isImg
-        });
+        newItems.push(
+          buildAttachedFileItem({
+            id: `att-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+            name: f.name,
+            type: f.type,
+            size: f.size,
+            base64: b64,
+          })
+        );
       } catch (err) {
         console.error("Failed to read attached file:", f.name, err);
       }
@@ -1035,7 +845,7 @@ export function ChatStream({
       fetch(`/api/threads/${effectiveThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stop" })
+        body: JSON.stringify({ action: "stop" }),
       }).catch((err) => console.error("Failed to stop server turn:", err));
     }
     setIsLoading(false);
@@ -1056,8 +866,8 @@ export function ChatStream({
             ...last,
             isStopped: true,
             isStreaming: false,
-            content: nextContent
-          }
+            content: nextContent,
+          },
         ];
       }
       return prev;
@@ -1072,7 +882,7 @@ export function ChatStream({
       const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "compact" })
+        body: JSON.stringify({ action: "compact" }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1080,7 +890,7 @@ export function ChatStream({
           setThreadCompaction(data.thread.compaction);
           setContextStats((prev) => ({
             ...prev,
-            estimatedTokens: data.tokensAfter ?? prev.estimatedTokens
+            estimatedTokens: data.tokensAfter ?? prev.estimatedTokens,
           }));
         }
       }
@@ -1098,7 +908,7 @@ export function ChatStream({
       const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restoreCompaction" })
+        body: JSON.stringify({ action: "restoreCompaction" }),
       });
       if (res.ok) {
         setThreadCompaction(null);
@@ -1116,7 +926,7 @@ export function ChatStream({
       const res = await fetch(`/api/threads/${currentThreadId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1135,7 +945,8 @@ export function ChatStream({
     startTime: number = performance.now(),
     providedAssistantMsgId?: string
   ) => {
-    const assistantMsgId = providedAssistantMsgId || activeAssistantMsgIdRef.current || `assistant-${Date.now()}`;
+    const assistantMsgId =
+      providedAssistantMsgId || activeAssistantMsgIdRef.current || `assistant-${Date.now()}`;
     activeAssistantMsgIdRef.current = assistantMsgId;
     setMessages((prev) => {
       const exists = prev.some((m) => m.id === assistantMsgId);
@@ -1149,8 +960,8 @@ export function ChatStream({
           thought: "",
           traces: [],
           modelUsed: activeModel,
-          selectedModel: activeModel
-        }
+          selectedModel: activeModel,
+        },
       ];
     });
 
@@ -1180,7 +991,7 @@ export function ChatStream({
         thought: "",
         traces: [],
         modelUsed: currentModel,
-        selectedModel: activeModel
+        selectedModel: activeModel,
       };
       if (!exists) {
         return [...prev, patch(base)];
@@ -1214,7 +1025,7 @@ export function ChatStream({
                 budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
                 compactedThisTurn: event.context.compactedThisTurn,
                 tokensBeforeCompaction: event.context.tokensBeforeCompaction,
-                tokensAfterCompaction: event.context.tokensAfterCompaction
+                tokensAfterCompaction: event.context.tokensAfterCompaction,
               }));
               if (event.context.compactedThisTurn) {
                 compactedThisTurn = true;
@@ -1225,7 +1036,7 @@ export function ChatStream({
                     ...msg,
                     compactedThisTurn: true,
                     tokensBeforeCompaction,
-                    tokensAfterCompaction
+                    tokensAfterCompaction,
                   }))
                 );
               }
@@ -1239,7 +1050,7 @@ export function ChatStream({
               estimatedTokens: event.tokensAfter,
               compactedThisTurn: true,
               tokensBeforeCompaction: event.tokensBefore,
-              tokensAfterCompaction: event.tokensAfter
+              tokensAfterCompaction: event.tokensAfter,
             }));
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
@@ -1247,7 +1058,7 @@ export function ChatStream({
                 compactedThisTurn: true,
                 tokensBeforeCompaction: event.tokensBefore,
                 tokensAfterCompaction: event.tokensAfter,
-                compactionActions: event.actions
+                compactionActions: event.actions,
               }))
             );
           } else if (event.type === "status") {
@@ -1256,14 +1067,17 @@ export function ChatStream({
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
                 ...msg,
-                thought: event.thought
+                thought: event.thought,
+                thinkingSegments: Array.isArray(event.thinkingSegments)
+                  ? event.thinkingSegments
+                  : msg.thinkingSegments,
               }))
             );
           } else if (event.type === "thinking") {
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
                 ...msg,
-                thought: msg.thought ? msg.thought + (event.content || "") : (event.content || "")
+                thought: msg.thought ? msg.thought + (event.content || "") : event.content || "",
               }))
             );
           } else if (event.type === "token") {
@@ -1274,7 +1088,7 @@ export function ChatStream({
                 ...msg,
                 content: parsed.content,
                 thought: parsed.thought,
-                modelUsed: currentModel
+                modelUsed: currentModel,
               }))
             );
           } else if (event.type === "trace") {
@@ -1287,7 +1101,7 @@ export function ChatStream({
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
                 ...msg,
-                traces: currentTraces
+                traces: currentTraces,
               }))
             );
           } else if (event.type === "approval_required") {
@@ -1302,8 +1116,8 @@ export function ChatStream({
                   args: approval.args || {},
                   riskReason: approval.riskReason || "Destructive action requires approval",
                   createdAt: approval.createdAt || Date.now(),
-                  expiresAt: approval.expiresAt || (Date.now() + 10 * 60 * 1000),
-                  status: "pending"
+                  expiresAt: approval.expiresAt || Date.now() + 10 * 60 * 1000,
+                  status: "pending",
                 };
                 if (idx >= 0) {
                   const copy = [...prev];
@@ -1325,7 +1139,8 @@ export function ChatStream({
             const finalStatus =
               event.status ||
               (event.isIncomplete ? "incomplete" : undefined) ||
-              (event.content?.includes("⚠️ [Turn paused:") || event.content?.includes("⚠️ [Turn incomplete:")
+              (event.content?.includes("⚠️ [Turn paused:") ||
+              event.content?.includes("⚠️ [Turn incomplete:")
                 ? "incomplete"
                 : undefined);
 
@@ -1351,15 +1166,17 @@ export function ChatStream({
                       thinkingDurationMs: event.thinkingDurationMs,
                       phaseTimings: event.phaseTimings,
                       roundPromptTokens: event.roundPromptTokens,
+                      roundGenerationMs: event.roundGenerationMs,
+                      thinkingSegments: event.thinkingSegments,
                       outputTokens: event.outputTokens,
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
                       tokensBeforeCompaction: finalTokensBefore,
                       tokensAfterCompaction: finalTokensAfter,
                       compactionActions: event.compactionActions,
-                      status: finalStatus
-                    }
-                  })
+                      status: finalStatus,
+                    },
+                  }),
                 }).catch((err) => console.warn("Failed to persist assistant message:", err));
               } catch {}
             }
@@ -1375,15 +1192,27 @@ export function ChatStream({
                 modelUsed: finalModel,
                 selectedModel: msg.selectedModel || activeModel,
                 durationMs: event.durationMs || durationMs,
-                thinkingDurationMs: typeof event.thinkingDurationMs === "number" ? event.thinkingDurationMs : msg.thinkingDurationMs,
+                thinkingDurationMs:
+                  typeof event.thinkingDurationMs === "number"
+                    ? event.thinkingDurationMs
+                    : msg.thinkingDurationMs,
                 phaseTimings: event.phaseTimings || msg.phaseTimings,
                 compactedThisTurn: finalCompacted || undefined,
                 tokensBeforeCompaction: finalTokensBefore,
                 tokensAfterCompaction: finalTokensAfter,
                 compactionActions: event.compactionActions || msg.compactionActions,
-                roundPromptTokens: Array.isArray(event.roundPromptTokens) ? event.roundPromptTokens : msg.roundPromptTokens,
-                outputTokens: typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
-                status: finalStatus
+                roundPromptTokens: Array.isArray(event.roundPromptTokens)
+                  ? event.roundPromptTokens
+                  : msg.roundPromptTokens,
+                roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                  ? event.roundGenerationMs
+                  : msg.roundGenerationMs,
+                thinkingSegments: Array.isArray(event.thinkingSegments)
+                  ? event.thinkingSegments
+                  : msg.thinkingSegments,
+                outputTokens:
+                  typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
+                status: finalStatus,
               }))
             );
 
@@ -1393,7 +1222,11 @@ export function ChatStream({
 
             // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
             setPendingSteers([]);
-            if (Array.isArray(event.pendingSteers) && event.pendingSteers.length > 0 && chatQueueRef.current) {
+            if (
+              Array.isArray(event.pendingSteers) &&
+              event.pendingSteers.length > 0 &&
+              chatQueueRef.current
+            ) {
               for (const s of event.pendingSteers) {
                 chatQueueRef.current.enqueue(s);
               }
@@ -1406,7 +1239,7 @@ export function ChatStream({
               const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
                 id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 role: "user",
-                content: `[Steer from user, mid-turn] ${t}`
+                content: `[Steer from user, mid-turn] ${t}`,
               }));
               setMessages((prev) => [...prev, ...steerMessages]);
             }
@@ -1414,18 +1247,24 @@ export function ChatStream({
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
                 ...msg,
-                status: "error"
+                status: "error",
               }))
             );
             // Server explicitly reported a terminal turn error (e.g. engine offline,
             // simulation error event). This is a verdict, not a disconnect: never
             // route it into the detached-turn reconciliation path.
-            const terminalErr = new Error(event.error || "Streaming error encountered");
-            (terminalErr as any).isTerminalServerError = true;
+            const terminalErr = new Error(event.error || "Streaming error encountered") as Error & {
+              isTerminalServerError?: boolean;
+            };
+            terminalErr.isTerminalServerError = true;
             throw terminalErr;
           }
-        } catch (parseErr: any) {
-          if (parseErr.message && !parseErr.message.includes("JSON.parse")) {
+        } catch (parseErr: unknown) {
+          if (
+            parseErr instanceof Error &&
+            parseErr.message &&
+            !parseErr.message.includes("JSON.parse")
+          ) {
             throw parseErr;
           }
         }
@@ -1459,8 +1298,8 @@ export function ChatStream({
           mode: agentMode,
           reasoning_effort: reasoningEffort,
           threadId: targetThreadId,
-          approvalContinuationId: approvalId
-        })
+          approvalContinuationId: approvalId,
+        }),
       });
 
       if (!res.ok) {
@@ -1469,26 +1308,27 @@ export function ChatStream({
           const errJson = await res.json();
           errMessage = errJson.error || errMessage;
         } catch {}
-        const httpErr = new Error(errMessage);
-        (httpErr as any).terminalServerError = true;
+        const httpErr = new Error(errMessage) as Error & { terminalServerError?: boolean };
+        httpErr.terminalServerError = true;
         throw httpErr;
       }
 
       await readStreamResponse(res, targetThreadId, startTime, assistantMsgId);
       setLiveTurnTraces([]);
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      const streamErr = err as Error & { isTerminalServerError?: boolean };
+      if (streamErr.name === "AbortError") {
         console.log("Approval continuation aborted by user");
         setMessages((prev) =>
           upsertAssistant(prev, (msg) => ({
             ...msg,
             status: "incomplete",
-            isStopped: true
+            isStopped: true,
           }))
         );
       } else {
         console.error("[ChatStream] Stream interrupted mid-approval:", err);
-        if (targetThreadId && err.isTerminalServerError !== true) {
+        if (targetThreadId && streamErr.isTerminalServerError !== true) {
           setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
           setReconcilingThreadId(targetThreadId);
@@ -1496,15 +1336,15 @@ export function ChatStream({
           setMessages((prev) =>
             upsertAssistant(prev, (msg) => ({
               ...msg,
-              status: "streaming"
+              status: "streaming",
             }))
           );
         } else {
-          setErrorMsg(err.message || "Failed to continue chat after host approval");
+          setErrorMsg(streamErr.message || "Failed to continue chat after host approval");
           setMessages((prev) =>
             upsertAssistant(prev, (msg) => ({
               ...msg,
-              status: "error"
+              status: "error",
             }))
           );
         }
@@ -1526,7 +1366,7 @@ export function ChatStream({
       const res = await fetch("/api/host/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId, action })
+        body: JSON.stringify({ approvalId, action }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -1534,9 +1374,7 @@ export function ChatStream({
       if (res.status === 410) {
         setHostApprovals((prev) =>
           prev.map((item) =>
-            item.id === approvalId
-              ? { ...item, status: "expired", isSubmitting: false }
-              : item
+            item.id === approvalId ? { ...item, status: "expired", isSubmitting: false } : item
           )
         );
         runApprovalContinuation(approvalId);
@@ -1551,7 +1389,7 @@ export function ChatStream({
                   ...item,
                   status: action === "approved" ? "executed" : "denied",
                   result: data.result,
-                  isSubmitting: false
+                  isSubmitting: false,
                 }
               : item
           )
@@ -1568,7 +1406,7 @@ export function ChatStream({
                   ...item,
                   status: "error",
                   error: data.error || "Host tool execution failed",
-                  isSubmitting: false
+                  isSubmitting: false,
                 }
               : item
           )
@@ -1584,20 +1422,21 @@ export function ChatStream({
                 ...item,
                 status: "error",
                 error: data.error || `Request failed with HTTP ${res.status}`,
-                isSubmitting: false
+                isSubmitting: false,
               }
             : item
         )
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
       setHostApprovals((prev) =>
         prev.map((item) =>
           item.id === approvalId
             ? {
                 ...item,
                 status: "error",
-                error: err?.message || "Failed to submit approval",
-                isSubmitting: false
+                error: message || "Failed to submit approval",
+                isSubmitting: false,
               }
             : item
         )
@@ -1606,19 +1445,21 @@ export function ChatStream({
   };
 
   const handleSend = async (textToSend?: string) => {
-    const rawPrompt = (textToSend !== undefined ? textToSend : input);
+    const rawPrompt = textToSend !== undefined ? textToSend : input;
     const prompt = rawPrompt.trim();
     const hasAttachments = attachedFiles.length > 0;
 
     const action = decideSendAction({
       running: isGeneratingOrRunning,
       hasAttachments,
-      text: prompt
+      text: prompt,
     });
 
     if (action === "blocked-attachments") {
       if (isGeneratingOrRunning && hasAttachments) {
-        setErrorMsg("Attachments cannot be queued while a turn is active. Please wait or send text only.");
+        setErrorMsg(
+          "Attachments cannot be queued while a turn is active. Please wait or send text only."
+        );
       }
       return;
     }
@@ -1638,11 +1479,14 @@ export function ChatStream({
         setIsSubmittingSteer(true);
         setErrorMsg(null);
         try {
-          const steerRes = await fetch(`/api/threads/${encodeURIComponent(currentActiveThreadId)}/steer`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: prompt, interrupt: true })
-          });
+          const steerRes = await fetch(
+            `/api/threads/${encodeURIComponent(currentActiveThreadId)}/steer`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: prompt, interrupt: true }),
+            }
+          );
           if (!steerRes.ok) {
             const errJson = await steerRes.json().catch(() => ({}));
             throw new Error(errJson.error || "Failed to deliver steer");
@@ -1650,8 +1494,9 @@ export function ChatStream({
           setPendingSteers((prev) => [...prev, prompt]);
           setInput("");
           if (textareaRef.current) textareaRef.current.style.height = "auto";
-        } catch (steerErr: any) {
-          setErrorMsg(steerErr.message || "Failed to deliver steer to turn");
+        } catch (steerErr: unknown) {
+          const message = steerErr instanceof Error ? steerErr.message : undefined;
+          setErrorMsg(message || "Failed to deliver steer to turn");
           // Requirement 4: On steer POST failure, restore text into composer - never silently eaten
           setInput(prompt);
         } finally {
@@ -1677,7 +1522,8 @@ export function ChatStream({
     // Check if this is a simulation command (/simulate <scenario> [speed])
     const simCmd = parseSimulateCommand(prompt);
     const isSimulating = Boolean(simCmd || activeSimulation);
-    const simKey = (simCmd?.scenarioKey || activeSimulation?.scenarioKey) as SimulationScenarioKey | undefined;
+    const simKey = (simCmd?.scenarioKey || activeSimulation?.scenarioKey) as
+      SimulationScenarioKey | undefined;
     const simSpeed = simCmd?.speed || activeSimulation?.speedMultiplier || 1;
 
     if (simCmd) {
@@ -1698,7 +1544,7 @@ export function ChatStream({
         const userMsg: ChatMessage = {
           id: userMsgId,
           role: "user",
-          content: prompt
+          content: prompt,
         };
 
         const taskInit = { ...simScenario.initialTask };
@@ -1707,7 +1553,7 @@ export function ChatStream({
           id: assistantMsgId,
           role: "assistant",
           content: "Started autonomous engineering run.",
-          taskId: taskInit.taskId
+          taskId: taskInit.taskId,
         };
 
         setMessages((prev) => [...prev, userMsg, assistantMsg]);
@@ -1731,7 +1577,11 @@ export function ChatStream({
           {
             onTaskUpdate: (updatedTask) => {
               if (onTaskUpdated) onTaskUpdated(updatedTask);
-              if (updatedTask.status === "completed" || updatedTask.status === "cancelled" || updatedTask.status === "failed") {
+              if (
+                updatedTask.status === "completed" ||
+                updatedTask.status === "cancelled" ||
+                updatedTask.status === "failed"
+              ) {
                 setIsLoading(false);
                 setStreamStatus(null);
               }
@@ -1746,7 +1596,7 @@ export function ChatStream({
               setIsLoading(false);
               setStreamStatus(null);
               activeSimTaskCancelRef.current = null;
-            }
+            },
           },
           abortController.signal
         );
@@ -1770,8 +1620,9 @@ export function ChatStream({
       setStreamStatus("Planning autonomous milestones with real LLM model...");
       try {
         await onLaunchTask(cleanPrompt, currentAttachments, initialScope, autoDeployOnGreen);
-      } catch (err: any) {
-        setErrorMsg(err.message || "Failed to launch builder task");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : undefined;
+        setErrorMsg(message || "Failed to launch builder task");
       } finally {
         setIsLoading(false);
         setStreamStatus(null);
@@ -1801,14 +1652,18 @@ export function ChatStream({
     const userMessage: ChatMessage = {
       id: userMsgId,
       role: "user",
-      content: prompt || (currentAttachments.length > 0 ? `Analyzed attached files: ${currentAttachments.map(a => a.name).join(", ")}` : ""),
-      attachments: currentAttachments.map(a => ({
+      content:
+        prompt ||
+        (currentAttachments.length > 0
+          ? `Analyzed attached files: ${currentAttachments.map((a) => a.name).join(", ")}`
+          : ""),
+      attachments: currentAttachments.map((a) => ({
         name: a.name,
         type: a.type,
         size: a.size,
         previewUrl: a.previewUrl,
-        isImage: a.isImage
-      }))
+        isImage: a.isImage,
+      })),
     };
 
     isFollowPinnedRef.current = true;
@@ -1829,9 +1684,9 @@ export function ChatStream({
               id: userMsgId,
               role: "user",
               content: userMessage.content,
-              timestamp: new Date().toISOString()
-            }
-          })
+              timestamp: new Date().toISOString(),
+            },
+          }),
         }).catch((err) => console.warn("Failed to persist user message:", err));
       } catch {}
     }
@@ -1855,33 +1710,35 @@ export function ChatStream({
     let turnEndedNormally = false;
 
     try {
-      const res = isSimulating && simKey
-        ? await createSimulatedChatResponse(simKey, simSpeed, abortController.signal)
-        : await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: abortController.signal,
-            body: JSON.stringify({
-              messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
-              userMessageId: userMsgId,
-              assistantMessageId: assistantMsgId,
-              model: activeModel,
-              mode: agentMode,
-              reasoning_effort: reasoningEffort,
-              threadId: activeThreadId || threadId,
-              attachments: currentAttachments.map(a => ({
-                name: a.name,
-                type: a.type,
-                size: a.size,
-                base64: a.base64
-              }))
-            })
-          });
+      const res =
+        isSimulating && simKey
+          ? await createSimulatedChatResponse(simKey, simSpeed, abortController.signal)
+          : await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: abortController.signal,
+              body: JSON.stringify({
+                messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+                userMessageId: userMsgId,
+                assistantMessageId: assistantMsgId,
+                model: activeModel,
+                mode: agentMode,
+                reasoning_effort: reasoningEffort,
+                threadId: activeThreadId || threadId,
+                attachments: currentAttachments.map((a) => ({
+                  name: a.name,
+                  type: a.type,
+                  size: a.size,
+                  base64: a.base64,
+                })),
+              }),
+            });
 
       if (!res.ok) {
         let errMessage = "Failed to orchestrate request";
         if (res.status === 413) {
-          errMessage = "Attachment is too large for upload (HTTP 413). Please choose a smaller file.";
+          errMessage =
+            "Attachment is too large for upload (HTTP 413). Please choose a smaller file.";
         } else if (res.status === 504) {
           errMessage = "Gateway timeout (HTTP 504). The model took too long to respond.";
         } else if (res.status === 502) {
@@ -1894,21 +1751,22 @@ export function ChatStream({
         }
         // HTTP-level failure is a terminal verdict (503 backend-down, 413, 504),
         // not a mid-stream disconnect: never reconcile it server-side.
-        const httpErr = new Error(errMessage);
-        (httpErr as any).isTerminalServerError = true;
+        const httpErr = new Error(errMessage) as Error & { isTerminalServerError?: boolean };
+        httpErr.isTerminalServerError = true;
         throw httpErr;
       }
 
       await readStreamResponse(res, activeThreadId || threadId, startTime, assistantMsgId);
       turnEndedNormally = true;
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      const streamErr = err as Error & { isTerminalServerError?: boolean };
+      if (streamErr.name === "AbortError") {
         console.log("Chat stream aborted by user");
         setMessages((prev) =>
           upsertAssistant(prev, (msg) => ({
             ...msg,
             status: "incomplete",
-            isStopped: true
+            isStopped: true,
           }))
         );
       } else {
@@ -1917,7 +1775,7 @@ export function ChatStream({
         // Transient reconciliation applies only to genuine client-side disconnects
         // on real threads. Terminal server errors (engine offline, HTTP 503) and
         // offline simulations must render the error banner + Retry surface instead.
-        if (currentTid && err.isTerminalServerError !== true && !isSimulating) {
+        if (currentTid && streamErr.isTerminalServerError !== true && !isSimulating) {
           // Deliverable 3: Mid-turn stream failure becomes a TRANSIENT state, never a terminal verdict.
           setDisconnectedAtMs((prev) => prev ?? Date.now());
           setIsTransientDisconnected(true);
@@ -1926,15 +1784,15 @@ export function ChatStream({
           setMessages((prev) =>
             upsertAssistant(prev, (msg) => ({
               ...msg,
-              status: "streaming"
+              status: "streaming",
             }))
           );
         } else {
-          setErrorMsg(err.message || "Failed to communicate with agent orchestrator");
+          setErrorMsg(streamErr.message || "Failed to communicate with agent orchestrator");
           setMessages((prev) =>
             upsertAssistant(prev, (msg) => ({
               ...msg,
-              status: "error"
+              status: "error",
             }))
           );
         }
@@ -1969,6 +1827,8 @@ export function ChatStream({
     handleSend(lastUserMsg.content);
   };
 
+  handleSendRef.current = handleSend;
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1977,19 +1837,22 @@ export function ChatStream({
   };
 
   const modelSafe = activeModel || "swift-15-27b-mtp";
-  const shortModelLabel = modelSafe.includes("flash-next") || modelSafe.includes("gyro")
-    ? "Flash-Next"
-    : modelSafe.includes("IQ3") || modelSafe.includes("Qwen3.8")
-    ? (modelSafe.includes("Swift-1.5") || modelSafe.includes("swift-15") ? "Swift-1.5 (IQ3_XS)" : "Swift-1.5")
-    : modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
-    ? "Swift-1.5"
-    : modelSafe.includes("swift")
-    ? "Swift-27B"
-    : modelSafe.includes("qwen")
-    ? "Qwen3.8"
-    : modelSafe.includes("gemma")
-    ? "Gemma-4"
-    : modelSafe.split(":")[0];
+  const shortModelLabel =
+    modelSafe.includes("flash-next") || modelSafe.includes("gyro")
+      ? "Flash-Next"
+      : modelSafe.includes("IQ3") || modelSafe.includes("Qwen3.8")
+        ? modelSafe.includes("Swift-1.5") || modelSafe.includes("swift-15")
+          ? "Swift-1.5 (IQ3_XS)"
+          : "Swift-1.5"
+        : modelSafe.includes("swift-15") || modelSafe.includes("swift-1.5")
+          ? "Swift-1.5"
+          : modelSafe.includes("swift")
+            ? "Swift-27B"
+            : modelSafe.includes("qwen")
+              ? "Qwen3.8"
+              : modelSafe.includes("gemma")
+                ? "Gemma-4"
+                : modelSafe.split(":")[0];
 
   const deduplicatedMessages = deduplicateStreamMessages(messages);
 
@@ -2002,7 +1865,7 @@ export function ChatStream({
 
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
   const lastLinkedTaskMsgIndex = deduplicatedMessages
-    .map((m, i) => m.taskId ? i : -1)
+    .map((m, i) => (m.taskId ? i : -1))
     .reduce((max, i) => Math.max(max, i), -1);
 
   return (
@@ -2014,1958 +1877,1091 @@ export function ChatStream({
         isDraggingOver ? "bg-emerald-50/30 dark:bg-emerald-950/20" : ""
       }`}
     >
-    <CanvasProvider scrollElRef={chatContainerRef}>
-    <div className="@container/chat flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
-      {/* Hidden File Input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        accept="image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv"
-        onChange={handleFileInputChange}
-        className="hidden"
-      />
+      <CanvasProvider scrollElRef={chatContainerRef}>
+        <div className="@container/chat flex flex-col flex-1 min-w-0 min-h-0 h-full relative">
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv"
+            onChange={handleFileInputChange}
+            className="hidden"
+          />
 
-      {/* Compaction Details & Restore Modal */}
-      {showCompactionModal && threadCompaction && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setShowCompactionModal(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Conversation Compaction"
-            data-testid="compaction-modal"
-            className="relative max-w-lg w-full rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
-                  Conversation Compaction
-                </h3>
+          {/* Compaction Details & Restore Modal */}
+          {showCompactionModal && threadCompaction && (
+            <div
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => setShowCompactionModal(false)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Conversation Compaction"
+                data-testid="compaction-modal"
+                className="relative max-w-lg w-full rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-5 shadow-2xl space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+                      Conversation Compaction
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompactionModal(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="text-xs text-slate-600 dark:text-zinc-300 space-y-2">
+                  <div className="flex justify-between font-mono text-[11px] bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800">
+                    <span>Before: ~{threadCompaction.tokensBefore} tokens</span>
+                    <span>After: ~{threadCompaction.tokensAfter} tokens</span>
+                  </div>
+                  <p className="font-semibold text-slate-800 dark:text-zinc-200">
+                    Retained Digest:
+                  </p>
+                  <pre className="max-h-56 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-black font-mono text-[11px] whitespace-pre-wrap border border-slate-200/80 dark:border-zinc-800">
+                    {threadCompaction.summary}
+                  </pre>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={handleRestoreCompaction}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors"
+                  >
+                    Restore full history
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompactionModal(false)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowCompactionModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
-            <div className="text-xs text-slate-600 dark:text-zinc-300 space-y-2">
-              <div className="flex justify-between font-mono text-[11px] bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800">
-                <span>Before: ~{threadCompaction.tokensBefore} tokens</span>
-                <span>After: ~{threadCompaction.tokensAfter} tokens</span>
-              </div>
-              <p className="font-semibold text-slate-800 dark:text-zinc-200">Retained Digest:</p>
-              <pre className="max-h-56 overflow-y-auto p-3 rounded-xl bg-slate-50 dark:bg-black font-mono text-[11px] whitespace-pre-wrap border border-slate-200/80 dark:border-zinc-800">
-                {threadCompaction.summary}
-              </pre>
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
-              <button
-                type="button"
-                onClick={handleRestoreCompaction}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 transition-colors"
-              >
-                Restore full history
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCompactionModal(false)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Image Lightbox Modal */}
-      {previewModalImage && (
-        <div
-          onClick={() => setPreviewModalImage(null)}
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
-        >
-          <div className="relative max-w-4xl max-h-[90vh]">
-            <img
-              src={previewModalImage}
-              alt="Fullscreen preview"
-              className="rounded-2xl shadow-2xl max-w-full max-h-[85vh] object-contain border border-white/10"
-            />
-            <button
+          {/* Image Lightbox Modal */}
+          {previewModalImage && (
+            <div
               onClick={() => setPreviewModalImage(null)}
-              className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/90 text-white hover:bg-slate-800 border border-white/20"
+              className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
             >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Top Bar — Frosted Header */}
-      <header className="sticky top-0 z-30 min-h-[56px] py-1.5 px-2 sm:px-4 border-b border-stone-200/80 dark:border-white/[0.08] bg-stone-50/90 dark:bg-black/85 backdrop-blur-xl flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
-          {onOpenDrawer ? (
-            <button
-              type="button"
-              onClick={onOpenDrawer}
-              className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-xl border border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28] transition-colors shrink-0"
-              title="Open navigation menu"
-              aria-label="Open navigation menu"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-          ) : onBackToList ? (
-            <button
-              type="button"
-              onClick={onBackToList}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-white/[0.08] transition-colors shrink-0"
-              title="Back to sessions"
-              aria-label="Back to sessions"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-          ) : null}
-
-          {/* Direct Projects Navigation Button - accessible on both mobile and desktop */}
-          {onOpenProjects && (
-            <button
-              type="button"
-              onClick={onOpenProjects}
-              className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28] text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0"
-              title="Open Projects"
-              aria-label="Open Projects"
-            >
-              <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden 2xl:inline">Projects</span>
-            </button>
-          )}
-
-          {/* Desktop Sessions toggle: hidden on mobile (< md:), visible md: and up */}
-          {onToggleSidebar && (
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
-                isSidebarOpen
-                  ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
-                  : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
-              }`}
-              title="Toggle Sessions Panel"
-              aria-label="Toggle Sessions Panel"
-            >
-              <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
-              <span className="hidden 2xl:inline">Sessions</span>
-            </button>
-          )}
-
-          {/* Desktop Workspace Inspector Toggle Button - hidden on mobile (< md:) */}
-          {onToggleWorkspace && (
-            <button
-              type="button"
-              onClick={onToggleWorkspace}
-              className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
-                isWorkspaceOpen
-                  ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
-                  : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
-              }`}
-              title="Toggle Workspace Panel"
-              aria-label="Toggle Workspace Panel"
-            >
-              <span className="text-sm">◨</span>
-              <span className="hidden sm:inline">Workspace</span>
-            </button>
-          )}
-
-          <h1
-            className="hidden 2xl:block text-base font-bold tracking-tight text-stone-900 dark:text-stone-50 max-w-[320px] truncate"
-            title={threadTitle || "New session"}
-          >
-            {threadTitle || "New session"}
-          </h1>
-          {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
-        </div>
-
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-          {/* Simulation Mode Badge */}
-          {activeSimulation && (
-            <div
-              data-testid="simulation-badge"
-              className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
-              title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
-              <span className="sr-only sm:not-sr-only">SIMULATION</span>
-              <span aria-hidden="true" className="sm:hidden">SIM</span>
-              <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
-                (${activeSimulation.scenarioKey})
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeSimTaskCancelRef.current) {
-                    activeSimTaskCancelRef.current();
-                    activeSimTaskCancelRef.current = null;
-                  }
-                  setActiveSimulation(null);
-                }}
-                className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
-                title="Exit simulation mode"
-                aria-label="Exit simulation mode"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <div className="relative max-w-4xl max-h-[90vh]">
+                <NextImage
+                  src={previewModalImage}
+                  alt="Fullscreen preview"
+                  width={0}
+                  height={0}
+                  sizes="100vw"
+                  unoptimized
+                  className="w-auto h-auto rounded-2xl shadow-2xl max-w-full max-h-[85vh] object-contain border border-white/10"
+                />
+                <button
+                  onClick={() => setPreviewModalImage(null)}
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/90 text-white hover:bg-slate-800 border border-white/20"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Scope Badge if available */}
-          {(threadScope || activeTask?.scope) && (
-            <span
-              className="hidden xl:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
-              title={`Task Scope: ${threadScope || activeTask?.scope}`}
-            >
-              {threadScope || activeTask?.scope}
-            </span>
-          )}
+          {/* Top Bar — Frosted Header */}
+          <header className="sticky top-0 z-30 min-h-[56px] py-1.5 px-2 sm:px-4 border-b border-stone-200/80 dark:border-white/[0.08] bg-stone-50/90 dark:bg-black/85 backdrop-blur-xl flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              {/* Mobile Hamburger menu button: opens drawer on mobile (< md:) */}
+              {onOpenDrawer ? (
+                <button
+                  type="button"
+                  onClick={onOpenDrawer}
+                  className="flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-xl border border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28] transition-colors shrink-0"
+                  title="Open navigation menu"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-6 w-6" />
+                </button>
+              ) : onBackToList ? (
+                <button
+                  type="button"
+                  onClick={onBackToList}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-xl text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-white/[0.08] transition-colors shrink-0"
+                  title="Back to sessions"
+                  aria-label="Back to sessions"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+              ) : null}
 
-          {/* Context Meter Pill - visible on both mobile and desktop */}
-          <div
-            data-testid="context-meter-pill"
-            className="flex items-center gap-2 shrink-0"
-            title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
-          >
-            <div className="flex flex-col gap-1">
-              <span className="font-mono text-[12.3px] leading-none whitespace-nowrap">
-                <span className="font-normal text-slate-700 dark:text-zinc-100">
-                  {formatContextK(displayContextTokens)}
-                </span>{" "}
-                <span className="font-normal text-zinc-400">
-                  / {Math.round(contextStats.budgetTokens / 1000)}K
-                </span>
-              </span>
-            <div
-              data-testid="context-meter-track"
-              className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-[3px] bg-slate-200 dark:bg-zinc-800 shrink-0"
-            >
-              <div
-                data-testid="context-meter-fill"
-                className="h-full rounded-[3px] transition-all bg-gradient-to-r from-[#10b981] to-[#34d399]"
-                style={{
-                  width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`,
-                  minWidth: displayContextTokens > 0 ? "4px" : "0px",
-                }}
-              />
-              <span
-                data-testid="context-meter-tick"
-                aria-hidden="true"
-                title="85K compaction trigger"
-                className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] bg-[#f87171]"
-              />
-            </div>
-            </div>
-            {threadCompaction ? (
-              <button
-                type="button"
-                onClick={() => setShowCompactionModal(true)}
-                className="min-h-[40px] min-w-[40px] -my-1.5 ml-0.5 px-2 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
-                title="View compaction summary and restore options"
+              {/* Direct Projects Navigation Button - accessible on both mobile and desktop */}
+              {onOpenProjects && (
+                <button
+                  type="button"
+                  onClick={onOpenProjects}
+                  className="panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28] text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0"
+                  title="Open Projects"
+                  aria-label="Open Projects"
+                >
+                  <FolderGit2 className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden 2xl:inline">Projects</span>
+                </button>
+              )}
+
+              {/* Desktop Sessions toggle: hidden on mobile (< md:), visible md: and up */}
+              {onToggleSidebar && (
+                <button
+                  type="button"
+                  onClick={onToggleSidebar}
+                  className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
+                    isSidebarOpen
+                      ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
+                      : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
+                  }`}
+                  title="Toggle Sessions Panel"
+                  aria-label="Toggle Sessions Panel"
+                >
+                  <PanelLeft className="h-5 w-5 sm:h-4 sm:w-4" />
+                  <span className="hidden 2xl:inline">Sessions</span>
+                </button>
+              )}
+
+              {/* Desktop Workspace Inspector Toggle Button - hidden on mobile (< md:) */}
+              {onToggleWorkspace && (
+                <button
+                  type="button"
+                  onClick={onToggleWorkspace}
+                  className={`panel-toggle-btn hidden md:flex min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center justify-center gap-1.5 shrink-0 ${
+                    isWorkspaceOpen
+                      ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
+                      : "border-stone-200 dark:border-white/[0.10] bg-white dark:bg-[#15151b] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-[#1f1f28]"
+                  }`}
+                  title="Toggle Workspace Panel"
+                  aria-label="Toggle Workspace Panel"
+                >
+                  <span className="text-sm">◨</span>
+                  <span className="hidden sm:inline">Workspace</span>
+                </button>
+              )}
+
+              <h1
+                className="hidden 2xl:block text-base font-bold tracking-tight text-stone-900 dark:text-stone-50 max-w-[320px] truncate"
+                title={threadTitle || "New session"}
               >
-                Compacted
-              </button>
-            ) : null}
-          </div>
+                {threadTitle || "New session"}
+              </h1>
+              {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
+            </div>
 
-          {/* uir-0 header diet: Engine + Host pills moved to Settings. The only
-              guest allowed in the freed slot is the host disconnect alert chip,
-              rendered ONLY while the host runner is down. */}
-          {!activeSimulation && hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
-            <button
-              type="button"
-              data-testid="host-disconnect-chip"
-              onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-              className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-dashed border-zinc-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
-              title={runnerReason || "Host runner is unreachable — open Settings"}
-              aria-label="Host disconnected — open Settings"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
-              <span className="hidden min-[420px]:inline">HOST DISCONNECTED · OPEN SETTINGS</span>
-              <span className="min-[420px]:hidden">DISCONNECTED</span>
-              <span className="sr-only">HOST DISCONNECTED</span>
-            </button>
-          )}
-
-          {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onOpenModelSheet}
-              className="min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
-              title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
-              aria-label={`Configure model: currently ${shortModelLabel}`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
-              <span className="whitespace-nowrap">{shortModelLabel}</span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-70 shrink-0" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* New Session Button - desktop only */}
-          {onNewThread && (
-            <button
-              type="button"
-              onClick={onNewThread}
-              className="hidden @md/chat:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
-              title="Start new session"
-              aria-label="Start new session"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          )}
-
-          {/* Overflow Menu Button - desktop only */}
-          <div className="hidden @md/chat:block relative">
-            <button
-              type="button"
-              onClick={() => {
-                const next = !showOverflowMenu;
-                if (next && typeof window !== "undefined") {
-                  const Evt = window.CustomEvent ?? globalThis.CustomEvent;
-                  if (Evt) {
-                    window.dispatchEvent(new Evt("ui:overlay-open", { detail: { source: "header-overflow" } }));
-                  }
-                }
-                setShowOverflowMenu(next);
-              }}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
-              title="More options"
-              aria-label="More options"
-            >
-              <MoreHorizontal className="h-5 w-5" />
-            </button>
-
-            {showOverflowMenu && (
-              <div
-                className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30"
-                onClick={() => setShowOverflowMenu(false)}
-              >
-                {onOpenModelSheet && (
-                  <button
-                    type="button"
-                    onClick={onOpenModelSheet}
-                    className="w-full text-left px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
-                  >
-                    Engine &amp; model settings
-                  </button>
-                )}
-                {onNewThread && (
-                  <button
-                    type="button"
-                    onClick={onNewThread}
-                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
-                  >
-                    New thread
-                  </button>
-                )}
-                {(activeThreadId || threadId) && (
-                  <button
-                    type="button"
-                    onClick={handleManualCompact}
-                    disabled={isCompactingManually}
-                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl disabled:opacity-50"
-                  >
-                    {isCompactingManually ? "Compacting history..." : "Compact history now"}
-                  </button>
-                )}
-                {onViewSecurityTelemetry && (
-                  <button
-                    type="button"
-                    onClick={onViewSecurityTelemetry}
-                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
-                  >
-                    Security telemetry
-                  </button>
-                )}
-                {onDeleteThread && (
+            <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+              {/* Simulation Mode Badge */}
+              {activeSimulation && (
+                <div
+                  data-testid="simulation-badge"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
+                  title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
+                  <span className="sr-only sm:not-sr-only">SIMULATION</span>
+                  <span aria-hidden="true" className="sm:hidden">
+                    SIM
+                  </span>
+                  <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
+                    (${activeSimulation.scenarioKey})
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
-                      setShowOverflowMenu(false);
-                      setShowDeleteConfirm(true);
+                      if (activeSimTaskCancelRef.current) {
+                        activeSimTaskCancelRef.current();
+                        activeSimTaskCancelRef.current = null;
+                      }
+                      setActiveSimulation(null);
                     }}
-                    className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
+                    className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
+                    title="Exit simulation mode"
+                    aria-label="Exit simulation mode"
                   >
-                    Delete session
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Scope Badge if available */}
+              {(threadScope || activeTask?.scope) && (
+                <span
+                  className="hidden xl:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
+                  title={`Task Scope: ${threadScope || activeTask?.scope}`}
+                >
+                  {threadScope || activeTask?.scope}
+                </span>
+              )}
+
+              {/* Context Meter Pill - visible on both mobile and desktop */}
+              <div
+                data-testid="context-meter-pill"
+                className="flex items-center gap-2 shrink-0"
+                title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="font-mono text-[12.3px] leading-none whitespace-nowrap">
+                    <span className="font-normal text-slate-700 dark:text-zinc-100">
+                      {formatContextK(displayContextTokens)}
+                    </span>{" "}
+                    <span className="font-normal text-zinc-400">
+                      / {Math.round(contextStats.budgetTokens / 1000)}K
+                    </span>
+                  </span>
+                  <div
+                    data-testid="context-meter-track"
+                    className="relative h-[5px] w-[128px] @lg/chat:w-[240px] rounded-[3px] bg-slate-200 dark:bg-zinc-800 shrink-0"
+                  >
+                    <div
+                      data-testid="context-meter-fill"
+                      className="h-full rounded-[3px] transition-all bg-gradient-to-r from-[#10b981] to-[#34d399]"
+                      style={{
+                        width: `${Math.min(100, Math.round((displayContextTokens / contextStats.budgetTokens) * 100))}%`,
+                        minWidth: displayContextTokens > 0 ? "4px" : "0px",
+                      }}
+                    />
+                    <span
+                      data-testid="context-meter-tick"
+                      aria-hidden="true"
+                      title="85K compaction trigger"
+                      className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] bg-[#f87171]"
+                    />
+                  </div>
+                </div>
+                {threadCompaction ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompactionModal(true)}
+                    className="min-h-[40px] min-w-[40px] -my-1.5 ml-0.5 px-2 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                    title="View compaction summary and restore options"
+                  >
+                    Compacted
+                  </button>
+                ) : null}
+              </div>
+
+              {/* uir-0 header diet: Engine + Host pills moved to Settings. The only
+              guest allowed in the freed slot is the host disconnect alert chip,
+              rendered ONLY while the host runner is down. */}
+              {!activeSimulation &&
+                hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
+                  <button
+                    type="button"
+                    data-testid="host-disconnect-chip"
+                    onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
+                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-dashed border-zinc-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
+                    title={runnerReason || "Host runner is unreachable — open Settings"}
+                    aria-label="Host disconnected — open Settings"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
+                    <span className="hidden min-[420px]:inline">
+                      HOST DISCONNECTED · OPEN SETTINGS
+                    </span>
+                    <span className="min-[420px]:hidden">DISCONNECTED</span>
+                    <span className="sr-only">HOST DISCONNECTED</span>
                   </button>
                 )}
+
+              {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={async () => {
-                    const targetThreadId = activeThreadId || threadId;
-                    if (targetThreadId) {
-                      try {
-                        await fetch("/api/threads", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "clearMessages", threadId: targetThreadId })
-                        });
-                      } catch {
-                        // Best-effort persistence when offline
-                      }
-                    }
-                    const seed = clearChatHistory(activeModel);
-                    setMessages(seed);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
+                  onClick={onOpenModelSheet}
+                  className="min-h-[44px] md:min-h-[32px] justify-center flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-[#f4f4f5] hover:bg-slate-50 dark:hover:bg-zinc-800"
+                  title={`Active model: ${activeModel || "swift-15-27b-mtp"} · Tap to configure`}
+                  aria-label={`Configure model: currently ${shortModelLabel}`}
                 >
-                  Clear messages
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="whitespace-nowrap">{shortModelLabel}</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70 shrink-0" aria-hidden="true" />
                 </button>
               </div>
-            )}
-          </div>
-        </div>
-      </header>
 
-      {/* Confirm Dialog for Permanent Session Deletion (mirrors ThreadsSidebar) */}
-      {showDeleteConfirm && onDeleteThread && (
-        <div
-          data-testid="thread-delete-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="chat-confirm-delete-title"
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => setShowDeleteConfirm(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setShowDeleteConfirm(false);
-          }}
-        >
-          <div
-            className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 shrink-0">
-                <Trash2 className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3
-                  id="chat-confirm-delete-title"
-                  className="text-base font-bold text-slate-900 dark:text-zinc-100 line-clamp-2"
+              {/* New Session Button - desktop only */}
+              {onNewThread && (
+                <button
+                  type="button"
+                  onClick={onNewThread}
+                  className="hidden @md/chat:flex min-h-[44px] min-w-[44px] items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+                  title="Start new session"
+                  aria-label="Start new session"
                 >
-                  Delete &ldquo;{threadTitle || "Untitled session"}&rdquo;?
-                </h3>
-                <p className="mt-1.5 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
-                  This action is permanent and cannot be undone.{" "}
-                  {activeTask?.taskId &&
-                  ((activeThreadId || threadId) === `thread-${activeTask.taskId}` ||
-                    (activeThreadId || threadId || "").startsWith("thread-task-"))
-                    ? "All messages and the task checkpoint for this session will be removed."
-                    : activeTask?.taskId
-                      ? "All messages for this session will be removed. The task checkpoint is retained and the task will be marked cancelled."
-                      : "All messages for this session will be removed."}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                data-testid="cancel-delete-btn"
-                onClick={() => setShowDeleteConfirm(false)}
-                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                data-testid="confirm-delete-btn"
-                onClick={() => {
-                  setShowDeleteConfirm(false);
-                  onDeleteThread();
-                }}
-                className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Conversation Thread Messages */}
-      <div
-        ref={chatContainerRef}
-        onScroll={handleContainerScroll}
-        onWheel={handleContainerWheel}
-        onTouchMove={handleContainerTouchMove}
-        data-scroll-container="true"
-        className="flex-1 min-h-0 overflow-y-auto px-4 pt-[16px] pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
-      >
-        <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
-        {deduplicatedMessages.length === 0 && !activeTask && (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
-            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
-              <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
-              Start an autonomous session
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
-              Ask questions, inspect the air-gapped sandbox, or build autonomous software artifacts.
-            </p>
-          </div>
-        )}
-
-        {deduplicatedMessages.map((m, idx) => {
-          const isUser = m.role === "user";
-          const isCopied = copiedMessageId === m.id;
-          const isThoughtOpen = expandedThoughts[m.id] !== undefined ? expandedThoughts[m.id] : true;
-          const isTaskHostMessage = idx === lastLinkedTaskMsgIndex && !!activeTask;
-          const isSupersededTaskMessage = !!m.taskId && !isTaskHostMessage;
-
-          if (isSupersededTaskMessage) {
-            return null;
-          }
-
-          return (
-            <div
-              key={m.id}
-              className={`flex flex-col ${isUser ? "items-end" : "items-start"} space-y-1.5`}
-            >
-              {/* Attached Files rendering in user message */}
-              {isUser && m.attachments && m.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 justify-end max-w-md">
-                  {m.attachments.map((att, aIdx) => (
-                    <div key={aIdx} className="relative group/att">
-                      {att.isImage && att.previewUrl ? (
-                        <div
-                          onClick={() => setPreviewModalImage(att.previewUrl || null)}
-                          className="cursor-pointer overflow-hidden rounded-2xl border border-slate-200 dark:border-zinc-700 shadow-xs"
-                        >
-                          <img
-                            src={att.previewUrl}
-                            alt={att.name}
-                            className="h-20 w-20 object-cover hover:scale-105 transition-transform"
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-medium shadow-xs">
-                          <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                          <span className="max-w-[140px] truncate">{att.name}</span>
-                          <span className="text-[10px] text-slate-400">({formatFileSize(att.size)})</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                  <Plus className="h-5 w-5" />
+                </button>
               )}
 
-              {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
-              {isUser ? (
-                <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg min-w-0">
-                  <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-[rgba(14,116,144,0.18)] dark:border-[rgba(56,189,248,0.32)] dark:text-[#e0f2fe] rounded-2xl px-4 py-3.5 shadow-xs text-sm font-normal leading-relaxed min-w-0">
-                    <div className="prose dark:prose-invert max-w-none break-words text-sm text-blue-950 dark:text-sky-100">
-                      <UserMessageContent content={m.content} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-400">
+              {/* Overflow Menu Button - desktop only */}
+              <div className="hidden @md/chat:block relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showOverflowMenu;
+                    if (next && typeof window !== "undefined") {
+                      const Evt = window.CustomEvent ?? globalThis.CustomEvent;
+                      if (Evt) {
+                        window.dispatchEvent(
+                          new Evt("ui:overlay-open", { detail: { source: "header-overflow" } })
+                        );
+                      }
+                    }
+                    setShowOverflowMenu(next);
+                  }}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+                  title="More options"
+                  aria-label="More options"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+
+                {showOverflowMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xl p-1 z-30"
+                    onClick={() => setShowOverflowMenu(false)}
+                  >
+                    {onOpenModelSheet && (
+                      <button
+                        type="button"
+                        onClick={onOpenModelSheet}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
+                      >
+                        Engine &amp; model settings
+                      </button>
+                    )}
+                    {onNewThread && (
+                      <button
+                        type="button"
+                        onClick={onNewThread}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
+                      >
+                        New thread
+                      </button>
+                    )}
+                    {(activeThreadId || threadId) && (
+                      <button
+                        type="button"
+                        onClick={handleManualCompact}
+                        disabled={isCompactingManually}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl disabled:opacity-50"
+                      >
+                        {isCompactingManually ? "Compacting history..." : "Compact history now"}
+                      </button>
+                    )}
+                    {onViewSecurityTelemetry && (
+                      <button
+                        type="button"
+                        onClick={onViewSecurityTelemetry}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
+                      >
+                        Security telemetry
+                      </button>
+                    )}
+                    {onDeleteThread && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOverflowMenu(false);
+                          setShowDeleteConfirm(true);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
+                      >
+                        Delete session
+                      </button>
+                    )}
                     <button
                       type="button"
-                      data-testid="copy-user-message-btn"
-                      onClick={() => copyToClipboard(m.content, m.id)}
-                      className="inline-flex items-center gap-1 hover:text-slate-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                      title={copiedMessageId === m.id ? "Copied" : "Copy prompt"}
-                      aria-label={copiedMessageId === m.id ? "Copied" : "Copy prompt"}
+                      onClick={async () => {
+                        const targetThreadId = activeThreadId || threadId;
+                        if (targetThreadId) {
+                          try {
+                            await fetch("/api/threads", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                action: "clearMessages",
+                                threadId: targetThreadId,
+                              }),
+                            });
+                          } catch {
+                            // Best-effort persistence when offline
+                          }
+                        }
+                        const seed = clearChatHistory(activeModel);
+                        setMessages(seed);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl"
                     >
-                      {copiedMessageId === m.id ? (
-                        <>
-                          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3 w-3" />
-                          <span>Copy</span>
-                        </>
-                      )}
+                      Clear messages
                     </button>
-                    {m.timestamp && (
-                      <span>{formatMessageTimestamp(m.timestamp)}</span>
-                    )}
                   </div>
-                </div>
-              ) : (
-                /* Assistant Message View */
-                <div className="w-full max-w-[840px] space-y-3">
-                  {((!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined) || m.status === "incomplete" || m.status === "error" || m.status === "streaming") && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {!isUser && m.compactedThisTurn && m.tokensBeforeCompaction !== undefined && m.tokensAfterCompaction !== undefined && (
-                        <div className="flex flex-col gap-1 w-fit">
-                          <div
-                            data-testid="compaction-turn-note"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-[11px] font-mono text-slate-600 dark:text-zinc-400 w-fit"
-                          >
-                            <span>
-                              History compacted: {m.tokensBeforeCompaction.toLocaleString()} → {m.tokensAfterCompaction.toLocaleString()} tokens
-                            </span>
-                          </div>
-                          {/* COMPACTION ACTIONS (compaction-pill): the chat route stores the real
-                              CompactionAction[] from fitConversationToBudget (contextBudget.ts:816-820)
-                              on the thread record; render them as capped chips under the pill line. */}
-                          {m.compactionActions && m.compactionActions.length > 0 && (() => {
-                            const CAP = 3;
-                            const shown = m.compactionActions.slice(0, CAP);
-                            const overflow = m.compactionActions.length - shown.length;
-                            return (
-                              <div data-testid="compaction-action-chips" className="flex flex-wrap items-center gap-1.5">
-                                {shown.map((action, i) => (
-                                  <span
-                                    key={`${action}-${i}`}
-                                    data-testid="compaction-action-chip"
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
-                                  >
-                                    {COMPACTION_ACTION_LABELS[action] ?? action}
-                                  </span>
-                                ))}
-                                {overflow > 0 && (
-                                  <span
-                                    data-testid="compaction-action-overflow"
-                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/70 dark:border-zinc-700 text-[10px] font-mono text-slate-500 dark:text-zinc-400"
-                                  >
-                                    +{overflow} more
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                      {m.status === "streaming" && (
-                        <div
-                          data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>Streaming</span>
-                        </div>
-                      )}
-                      {m.status === "incomplete" && (
-                        <div
-                          data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-300 dark:border-zinc-800 text-[11px] font-mono font-medium text-zinc-800 dark:text-zinc-300 w-fit"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-pulse" />
-                          <span>Incomplete</span>
-                        </div>
-                      )}
-                      {/* UI-007: recoverable-status affordance. The transient
-                          reconcile banner (ChatStream.tsx:1646-1652) only lives
-                          while actively reconciling; once reconciliation ends an
-                          'incomplete' turn must stay distinct from bare prose
-                          and expose a retry/resume control so the turn can be
-                          recovered from the UI. Presentation + affordance only:
-                          the persisted marker text and reconciliation behavior
-                          are untouched. */}
-                      {m.status === "incomplete" && !isLoading && (
-                        <button
-                          type="button"
-                          data-testid="incomplete-retry"
-                          onClick={handleRetry}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900/40 border border-zinc-400 dark:border-zinc-700 text-[11px] font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          <span>Retry turn</span>
-                        </button>
-                      )}
-                      {m.status === "error" && (
-                        <div
-                          data-testid="message-status-badge"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-50 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-[11px] font-mono font-medium text-red-800 dark:text-red-300 w-fit"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                          <span>Error</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Live Activity Header + Worker Reasoning Panel (Suppressed on task host message) */}
-                  {!isTaskHostMessage && (() => {
-                    const isStreamingThis = Boolean(
-                      m.status === "streaming" ||
-                      (isLoading && m.id === activeAssistantMsgIdRef.current)
-                    );
-                    const shouldRenderThinking = Boolean(m.thought || isStreamingThis);
-                    const showDoneChip = Boolean(
-                      !isStreamingThis &&
-                      completedTurnMsgId === m.id &&
-                      typeof m.durationMs === "number"
-                    );
-                    if (!shouldRenderThinking && !showDoneChip) return null;
-
-                    const rawThought = m.thought || "";
-
-                    // uir-1 (UI-017): activity header inputs. The phase is the
-                    // latest observed tool in words; the round comes only from
-                    // the record's per-round token array when it exists (never
-                    // fabricated mid-turn).
-                    const liveLastTrace = liveTurnTraces.length > 0 ? liveTurnTraces[liveTurnTraces.length - 1] : null;
-                    const msgLastTrace = m.traces && m.traces.length > 0 ? m.traces[m.traces.length - 1] : null;
-                    const statusTool = streamStatus
-                      ? (streamStatus.match(/^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i)?.[1] ?? null)
-                      : null;
-                    const toolForPhase = liveLastTrace?.tool || msgLastTrace?.tool || statusTool;
-                    const phaseLabel = toolForPhase
-                      ? phaseLabelForTool(toolForPhase)
-                      : (resolveTurnStatusPhase({
-                          isStreaming: true,
-                          streamStatus,
-                          hasThought: Boolean(m.thought),
-                          hasContent: Boolean(m.content)
-                        }) ?? "Starting turn…");
-                    const parsedTs = m.timestamp ? Date.parse(m.timestamp) : NaN;
-                    const startedAtMs = turnStartedAtRef.current ?? (Number.isNaN(parsedTs) ? lastActivityAtMs : parsedTs);
-                    const traceCount = Math.max(m.traces?.length ?? 0, isStreamingThis ? liveTurnTraces.length : 0);
-
-                    return (
-                      <div className="w-full space-y-2">
-                        {isStreamingThis && (
-                          <LiveActivityHeader
-                            startedAtMs={startedAtMs}
-                            lastActivityAtMs={lastActivityAtMs}
-                            round={m.roundPromptTokens?.length}
-                            traceCount={traceCount}
-                            traces={isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces}
-                            phaseLabel={phaseLabel}
-                            activityLabel={statusTool ? null : streamStatus}
-                            isStreaming={isStreamingThis}
-                          />
-                        )}
-                        {showDoneChip && (
-                          <div
-                            data-testid="turn-done-chip"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
-                          >
-                            <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
-                          </div>
-                        )}
-                        {shouldRenderThinking && (
-                          <ThinkingPanel
-                            rawThought={rawThought}
-                            isStreaming={isStreamingThis}
-                            streamStatus={isStreamingThis ? streamStatus : null}
-                            hasContent={Boolean(m.content && m.content.trim())}
-                            defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
-                            durationMs={m.thinkingDurationMs ?? m.durationMs}
-                            phaseTimings={m.phaseTimings}
-                            timestamp={m.timestamp}
-                          />
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Inline Expandable Sandbox & Telemetry Badges */}
-                  {!isUser && m.completionStamp === "completed-unverified" && (
-                    <div className="mb-2">
-                      <CompletionVerificationBadge
-                        stamp={m.completionStamp}
-                        gaps={m.verificationGaps}
-                      />
-                    </div>
-                  )}
-                  {!isUser && m.traces && m.traces.length > 0 && (() => {
-                    const hasManyTraces = m.traces.length > 3;
-                    const isTracesExpanded = !!expandedTraces[m.id];
-                    const visibleTraces = hasManyTraces && !isTracesExpanded ? m.traces.slice(0, 2) : m.traces;
-
-                    return (
-                      <div className="mt-2.5 space-y-2 w-full">
-                        {visibleTraces.map((trace, tIdx) => {
-                          const proofKey = `${m.id}-${tIdx}`;
-                          const isExpanded = !!expandedProofs[proofKey];
-                          const human = formatHumanReadableTrace(trace);
-
-                          return (
-                            <div
-                              key={tIdx}
-                              className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => toggleProof(proofKey)}
-                                aria-label={`Tool: ${trace.tool}`}
-                                className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
-                              >
-                                <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
-                                  {human.badge === "browser" && (
-                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
-                                      <Globe className="h-3.5 w-3.5" />
-                                      <span>Web</span>
-                                    </span>
-                                  )}
-                                  {human.badge === "host" && (
-                                    <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-semibold shrink-0">
-                                      <Terminal className="h-3.5 w-3.5" />
-                                      <span>Host</span>
-                                    </span>
-                                  )}
-                                  {human.badge === "workspace" && (
-                                    <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold shrink-0">
-                                      <FolderGit2 className="h-3.5 w-3.5" />
-                                      <span>Workspace</span>
-                                    </span>
-                                  )}
-                                  {human.badge === "sandbox" && (
-                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
-                                      <ShieldCheck className="h-3.5 w-3.5" />
-                                      <span>Sandbox</span>
-                                    </span>
-                                  )}
-                                  <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
-                                  <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans line-clamp-2 sm:truncate">{human.title}</span>
-                                  {human.duration && (
-                                    <>
-                                      <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
-                                      <span className="text-slate-500 dark:text-zinc-400 shrink-0">{human.duration}</span>
-                                    </>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-sans font-medium shrink-0 ml-auto">
-                                  <span className="sm:hidden">{isExpanded ? "Hide" : "Proof"}</span>
-                                  <span className="hidden sm:inline">{isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}</span>
-                                  {isExpanded ? (
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  )}
-                                </div>
-                              </button>
-
-                              {isExpanded && (
-                                <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
-                                  <pre className="p-2 rounded bg-zinc-900 text-emerald-300 overflow-x-auto whitespace-pre-wrap">
-                                    {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
-                                  </pre>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {hasManyTraces && (
-                          <button
-                            type="button"
-                            onClick={() => toggleTraces(m.id)}
-                            className="w-full py-1.5 px-3 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-colors flex items-center justify-center gap-1.5"
-                          >
-                            {isTracesExpanded ? (
-                              <>
-                                <ChevronUp className="h-3.5 w-3.5" />
-                                <span>Collapse tool steps</span>
-                              </>
-                            ) : (
-                              <>
-                                <ChevronDown className="h-3.5 w-3.5" />
-                                <span>Show all {m.traces.length} tool steps</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Inline Live Run Block if this message is the designated task host */}
-                  {isTaskHostMessage && activeTask && (
-                    <LiveRunBlock
-                      task={activeTask}
-                      liveTraces={liveTraces}
-                      onStopRun={onStopTask}
-                      onPauseRun={() => handleRunControlAction("pause")}
-                      onResumeRun={() => handleRunControlAction("resume")}
-                      onRestartRun={() => handleRunControlAction("restart")}
-                      onDeployRun={onDeployRun}
-                      isStopping={isStoppingTask}
-                    />
-                  )}
-
-                  {/* Text Markdown Content (Suppress if task host message or disconnected 'Started autonomous...') */}
-                  {!isTaskHostMessage && m.content && (!m.taskId || !m.content.includes("Started autonomous engineering run.")) && (() => {
-                    const hostDisconnect = classifyHostRunnerDisconnect(m.content);
-                    const rawRenderedContent = hostDisconnect.kind !== "none" ? hostDisconnect.remainingContent : m.content;
-                    const renderedContent =
-                      m.role === "assistant" && isMarkupOnlyToolCall(rawRenderedContent)
-                        ? TURN_TOOL_MARKUP_MARKER
-                        : rawRenderedContent;
-                    return (
-                    <>
-                      {hostDisconnect.kind !== "none" && (
-                        <div
-                          data-testid="host-runner-disconnect-status"
-                          className={`mb-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
-                            hostDisconnect.kind === "recovered"
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                              : "border-zinc-700 bg-black text-zinc-400"
-                          }`}
-                        >
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              hostDisconnect.kind === "recovered" ? "bg-emerald-500" : "bg-zinc-400"
-                            }`}
-                          />
-                          <span>{hostDisconnect.summary}</span>
-                        </div>
-                      )}
-                      {renderedContent ? (
-                      <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: ({ inline, className, children, ...props }: any) => {
-                            const match = /language-(\w+)/.exec(className || "");
-                            const codeString = String(children).replace(/\n$/, "");
-                            const isSvg = isSvgCode(codeString, match ? match[1] : undefined);
-                            if (!inline && (match || codeString.includes("\n") || isSvg)) {
-                              return (
-                                <CodeBlock
-                                  language={match ? match[1] : (isSvg ? "svg" : "bash")}
-                                  code={codeString}
-                                />
-                              );
-                            }
-                            if (inline && isSvgFilePath(codeString)) {
-                              return (
-                                <SvgFileLink href={resolveSvgUrl(codeString)} rawHref={codeString}>
-                                  {children}
-                                </SvgFileLink>
-                              );
-                            }
-                            return (
-                              <code
-                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 font-mono text-xs border border-slate-200 dark:border-zinc-700 break-all max-w-full"
-                                {...props}
-                              >
-                                {children}
-                              </code>
-                            );
-                          },
-                          p: ({ children }: any) => (
-                            <p className="mb-3 last:mb-0 leading-[1.6] text-slate-900 dark:text-zinc-100">
-                              {children}
-                            </p>
-                          ),
-                          ul: ({ children }: any) => (
-                            <ul className="list-disc pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children, start }: any) => (
-                            <ol start={start} className="list-decimal pl-5 my-3 space-y-1.5 leading-[1.6] text-slate-900 dark:text-zinc-100">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }: any) => (
-                            <li className="leading-[1.6]">
-                              {children}
-                            </li>
-                          ),
-                          blockquote: ({ children }: any) => (
-                            <blockquote className="border-l-4 border-emerald-500 bg-slate-50/80 dark:bg-zinc-900/60 pl-3.5 py-1.5 my-3 italic text-slate-700 dark:text-zinc-300 rounded-r-xl">
-                              {children}
-                            </blockquote>
-                          ),
-                          table: ({ children }: any) => (
-                            <div className="overflow-x-auto my-3 rounded-xl border border-slate-200 dark:border-zinc-800">
-                              <table className="min-w-full text-left text-xs divide-y divide-slate-200 dark:divide-zinc-800">
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          thead: ({ children }: any) => (
-                            <thead className="bg-[#f4eff4] dark:bg-[#2b2930] text-slate-900 dark:text-zinc-100 font-semibold">
-                              {children}
-                            </thead>
-                          ),
-                          tbody: ({ children }: any) => (
-                            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
-                              {children}
-                            </tbody>
-                          ),
-                          tr: ({ children }: any) => (
-                            <tr className="hover:bg-slate-50/50 dark:hover:bg-zinc-850/50 transition-colors">
-                              {children}
-                            </tr>
-                          ),
-                          th: ({ children }: any) => (
-                            <th className="px-3.5 py-2 font-semibold text-xs tracking-wider">
-                              {children}
-                            </th>
-                          ),
-                          td: ({ children }: any) => (
-                            <td className="px-3.5 py-2 text-xs leading-relaxed text-slate-800 dark:text-zinc-200">
-                              {children}
-                            </td>
-                          ),
-                          h1: ({ children }: any) => (
-                            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100 mt-4 mb-2 first:mt-0">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children }: any) => (
-                            <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-zinc-100 mt-3.5 mb-1.5">
-                              {children}
-                            </h2>
-                          ),
-                          h3: ({ children }: any) => (
-                            <h3 className="text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-100 mt-3 mb-1">
-                              {children}
-                            </h3>
-                          )
-                        }}
-                      >
-                        {wrapRawSvgInMarkdown(renderedContent)}
-                      </ReactMarkdown>
-                      {m.status === "streaming" && (
-                        <span
-                          data-testid="stream-cursor"
-                          aria-hidden="true"
-                          className="text-emerald-400 animate-pulse font-bold"
-                        >
-                          ▍
-                        </span>
-                      )}
-                    </div>
-                      ) : null}
-
-                    {/* Copy Response Action: phone-tappable button copying raw assistant markdown */}
-                    <div className="flex items-center gap-2 pt-1 text-xs">
-                      <button
-                        type="button"
-                        data-testid="copy-response-btn"
-                        onClick={() => copyToClipboard(m.content, m.id)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-colors text-xs font-medium cursor-pointer"
-                        title={isCopied ? "Copied" : "Copy response"}
-                        aria-label={isCopied ? "Copied" : "Copy response"}
-                      >
-                        {isCopied ? (
-                          <>
-                            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3.5 w-3.5" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </>
-                    );
-                  })()}
-
-                  {/* Tool Generated SVG Visual Artifacts & Code Deliverables */}
-                  {!isTaskHostMessage && (
-                    <>
-                      {(() => {
-                        if (hasCompleteInlineSvg(m.content)) return null;
-                        const messageSvgs = extractSvgsFromMessage(m);
-                        if (messageSvgs.length === 0) return null;
-                        return (
-                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose w-full">
-                            {messageSvgs.map((svg) => (
-                              <div key={svg.id} className="space-y-1.5">
-                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                                  <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
-                                    <Sparkles className="h-3.5 w-3.5" />
-                                    <span>Rendered Vector Diagram: {svg.title}</span>
-                                  </span>
-                                </div>
-                                <SvgViewer
-                                  code={svg.code}
-                                  url={svg.url}
-                                  title={svg.title}
-                                  initialTab="preview"
-                                  allowFullscreen={true}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-
-                      {(() => {
-                        const codeDeliverables = extractCodeDeliverablesFromMessage(m);
-                        if (codeDeliverables.length === 0) return null;
-                        return (
-                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4 not-prose w-full">
-                            {codeDeliverables.map((item) => (
-                              <div key={item.id} className="space-y-1.5">
-                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                                  <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
-                                    <FileCode className="h-3.5 w-3.5" />
-                                    <span>Delivered Code File: {item.title}</span>
-                                  </span>
-                                  <a
-                                    href={item.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                                  >
-                                    <span>Open Raw</span>
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                </div>
-                                <CodeBlock
-                                  language={item.language}
-                                  code={item.code}
-                                  filename={item.path}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </>
-                  )}
-
-                  {/* Generated File Cards (Download / Open) */}
-                  {!isUser && m.attachments && m.attachments.length > 0 && (
-                    <div className="flex flex-col gap-2.5 pt-1 w-full max-w-lg">
-                      {m.attachments.map((att, aIdx) => {
-                        const fileRelPath = att.previewUrl || att.name;
-                        const isHtml = att.name.toLowerCase().endsWith(".html") || att.type === "text/html";
-                        const isSvg = att.name.toLowerCase().endsWith(".svg") || att.type === "image/svg+xml";
-                        const canOpenInTab = isHtml || isSvg;
-                        const downloadUrl = `/api/files?path=${encodeURIComponent(fileRelPath)}&download=1`;
-                        const openUrl = `/api/files?path=${encodeURIComponent(fileRelPath)}`;
-
-                        return (
-                          <div
-                            key={aIdx}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 shrink-0">
-                                <FileCode className="h-5 w-5" />
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <span className="font-semibold text-sm text-slate-900 dark:text-zinc-100 truncate" title={att.name}>
-                                  {att.name}
-                                </span>
-                                <span className="text-xs text-slate-500 dark:text-zinc-400">
-                                  {formatFileSize(att.size)}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              {canOpenInTab && (
-                                <CanvasFileOpenButton name={att.name} url={openUrl} />
-                              )}
-                              {canOpenInTab && (
-                                <a
-                                  href={openUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="min-h-[44px] min-w-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-                                  title="Open in new tab"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                  <span>Open</span>
-                                </a>
-                              )}
-                              <a
-                                href={downloadUrl}
-                                download={att.name}
-                                className="min-h-[44px] min-w-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
-                                title="Download file"
-                              >
-                                <Download className="h-4 w-4" />
-                                <span>Download</span>
-                              </a>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Chat Diff Cards for File Writes & Patches */}
-                  {(() => {
-                    if (isUser) return null;
-
-                    type TurnDiffEntry = {
-                      path: string;
-                      diff: string;
-                      diffFull?: string;
-                      addedLines: number;
-                      removedLines: number;
-                      truncated?: boolean;
-                      totalDiffLines?: number;
-                      omittedLines?: number;
-                    };
-                    const normalizeDiffPath = (p: string) =>
-                      p.replace(/\\/g, "/").replace(/^\.\//, "");
-                    const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
-                      path: d.path,
-                      diff: d.diffPreview,
-                      diffFull: d.diffFull,
-                      addedLines: d.addedLines,
-                      removedLines: d.removedLines,
-                      truncated: d.diffPreview.includes("more lines")
-                    }));
-                    const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs) ? m.diffs : [];
-                    const mergedMap = new Map<string, TurnDiffEntry>();
-                    for (const d of traceDiffs) {
-                      mergedMap.set(normalizeDiffPath(d.path), d);
-                    }
-                    for (const d of serverDiffs) {
-                      const key = normalizeDiffPath(d.path);
-                      const existing = mergedMap.get(key);
-                      const isUnified = d.removedLines > 0 || /^@@\s+-\d+/m.test(d.diff);
-                      if (!existing || isUnified) {
-                        mergedMap.set(key, d);
-                      }
-                    }
-                    const fileDiffs = Array.from(mergedMap.values());
-
-                    if (fileDiffs.length === 0) return null;
-
-                    return (
-                      <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                        {/* UI-024: the canvas gets the FULL diff (diffFull ?? the
-                            stored diff for server-side turn diffs); the inline
-                            cards below keep the capped preview. */}
-                        <CanvasDiffCard
-                          diffs={fileDiffs.map((d) => ({
-                            path: d.path,
-                            diff: d.diffFull ?? d.diff,
-                            addedLines: d.addedLines,
-                            removedLines: d.removedLines
-                          }))}
-                        />
-                      </div>
-                    );
-                  })()}
-
-                  {/* Grounded File Citation Card matching Mockup 4 */}
-                  {m.traces && m.traces.some((t: any) => t.tool?.includes("file") || t.args?.path || (t.name && String(t.name).includes(".ts"))) && (
-                    <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
-                      {m.traces.filter((t: any) => t.args?.path || (t.name && String(t.name).includes(".ts"))).slice(0, 3).map((t: any, cIdx) => {
-                        const pathLabel = t.args?.path || t.name;
-                        if (!pathLabel) return null;
-                        return (
-                          <div
-                            key={cIdx}
-                            className="flex items-center justify-between w-full p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-xs text-xs font-mono text-slate-800 dark:text-zinc-200"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              <div className="min-w-0">
-                                <div className="font-semibold truncate">{displayBasename(pathLabel)}</div>
-                                <div className="text-[10px] text-zinc-400 truncate">{displayRepoPath(pathLabel)}</div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0 ml-2">
-                              <a
-                                href={resolveSvgUrl(pathLabel)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                                title="Open file"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
-                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                                title="Copy path"
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Partial output stopped indicator */}
-                  {m.isStopped && (
-                    <div className="inline-block px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400 text-xs font-mono border border-slate-200 dark:border-zinc-800">
-                      • Stopped
-                    </div>
-                  )}
-
-                  {/* Detached turn resolved notification */}
-                  {hasResolvedDetachedTurn && idx === lastAssistantIndex && (
-                    <div
-                      data-testid="turn-resolved-detached"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-medium"
-                    >
-                      <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>Turn completed server-side and reconciled</span>
-                    </div>
-                  )}
-
-                  {/* Per-message served model indicator: only display when served model differs from selected */}
-                  {(() => {
-                    if (m.id === "initial-welcome") return null;
-                    const note = getServedByNote(m.modelUsed, m.selectedModel ?? activeModel);
-                    if (!note) return null;
-                    return (
-                      <div
-                        data-testid="served-by-note"
-                        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-400 pt-0.5"
-                      >
-                        <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
-                        <span>{note}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* UI-003 / UI-011b: live tool-call trace rows for the current turn.
-            Rendered from ChatStream's own liveTurnTraces state so rows received
-            before a stream cut remain visible on the live screen. */}
-        {liveTurnTraces.length > 0 && (
-          <div className="w-full max-w-[840px]" data-testid="live-trace-rows">
-            <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-[#121215] overflow-hidden">
-              <div className="px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-200 border-b border-slate-200 dark:border-zinc-800">
-                Live tool steps ({liveTurnTraces.length})
+                )}
               </div>
-              {liveTurnTraces.length > 8 && !showAllLiveTraces && (
-                <button
-                  type="button"
-                  data-testid="earlier-calls-toggle"
-                  onClick={() => setShowAllLiveTraces(true)}
-                  className="w-full px-3.5 py-2 text-left text-xs font-mono text-slate-500 dark:text-zinc-400 bg-slate-100/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors border-b border-slate-200 dark:border-zinc-800 cursor-pointer"
-                >
-                  ▸ {liveTurnTraces.length - 8} earlier tool calls ({liveTurnTraces.length - 8} ok) — Show all
-                </button>
-              )}
-              {(showAllLiveTraces ? liveTurnTraces : liveTurnTraces.slice(-8)).map((t, i) => {
-                const readable = formatHumanReadableTrace(t);
-                return (
-                  <button
-                    key={`${t.tool}-${i}`}
-                    type="button"
-                    aria-label={`Tool: ${t.tool}`}
-                    className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-[12.8px] font-mono"
-                  >
-                    <span className="flex items-center gap-2 text-slate-700 dark:text-zinc-100">
-                      <Check size={12} className="text-emerald-400 shrink-0" />
-                      <span>{readable.title || t.tool}</span>
-                    </span>
-                    <span className="text-slate-400 dark:text-zinc-400">{readable.duration || ""}</span>
-                  </button>
-                );
-              })}
             </div>
-          </div>
-        )}
+          </header>
 
-        {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
-        {activeTask && lastLinkedTaskMsgIndex === -1 && (
-          <div className="w-full max-w-[840px]">
-            <LiveRunBlock
-              task={activeTask}
-              liveTraces={liveTraces}
-              onStopRun={onStopTask}
-              onPauseRun={() => handleRunControlAction("pause")}
-              onResumeRun={() => handleRunControlAction("resume")}
-              onRestartRun={() => handleRunControlAction("restart")}
-              onDeployRun={onDeployRun}
-              isStopping={isStoppingTask}
-            />
-          </div>
-        )}
+          {(() => {
+            const lastAssistant = [...messages]
+              .reverse()
+              .find((msg) => msg.role === "assistant" && msg.id !== "welcome");
+            const hasRunTurn = Boolean(isLoading || lastAssistant);
+            const activeTraces =
+              isLoading && liveTurnTraces.length > 0 ? liveTurnTraces : lastAssistant?.traces || [];
+            return (
+              <NowLineBar
+                hasRunTurn={hasRunTurn}
+                isStreaming={Boolean(isLoading || lastAssistant?.status === "streaming")}
+                streamStatus={streamStatus}
+                traces={activeTraces}
+                startedAtMs={turnStartedAtRef.current}
+                lastActivityAtMs={lastActivityAtMs}
+                totalDurationMs={lastAssistant?.durationMs}
+                outputTokens={lastAssistant?.outputTokens}
+                roundGenerationMs={lastAssistant?.roundGenerationMs}
+              />
+            );
+          })()}
 
-        {/* Host Mode Approvals (Cards & Receipts) */}
-        {hostApprovals.length > 0 && (
-          <div className="w-full max-w-[840px] space-y-3">
-            {hostApprovals.map((approval) => {
-              const isPending =
-                approval.status === "pending" &&
-                (!approval.expiresAt || approval.expiresAt > Date.now());
-
-              if (isPending) {
-                return (
-                  <div
-                    key={approval.id}
-                    data-testid="host-approval-card"
-                    className="w-full rounded-2xl border border-zinc-500/40 bg-white dark:bg-zinc-900 shadow-md p-4 sm:p-5 space-y-3"
-                  >
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <ShieldAlert className="h-4 w-4 text-zinc-600 dark:text-zinc-400 shrink-0" />
-                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
-                          Security Approval Required
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-[11px] font-mono font-medium text-slate-700 dark:text-zinc-300">
-                          {approval.tool}
-                        </span>
-                      </div>
-                      {approval.expiresAt && (
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
-                          Expires: {new Date(approval.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-xs text-slate-700 dark:text-zinc-300 font-medium">
-                      {approval.riskReason}
-                    </div>
-
-                    {(approval.args?.command || approval.args?.path) && (
-                      <div className="rounded-xl bg-slate-950 p-3 overflow-x-auto text-xs text-zinc-200 font-mono">
-                        <pre className="whitespace-pre-wrap break-all">
-                          <code>{approval.args?.command || approval.args?.path}</code>
-                        </pre>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                      {approval.args?.cwd && (
-                        <span className="text-slate-500 dark:text-zinc-400 font-mono">
-                          cwd: <span className="text-slate-700 dark:text-zinc-200">{approval.args.cwd}</span>
-                        </span>
-                      )}
-                      {approval.args?.recursive && (
-                        <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 font-mono font-semibold">
-                          recursive: true
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2.5 pt-1">
-                      <button
-                        type="button"
-                        data-testid="host-deny-btn"
-                        disabled={approval.isSubmitting}
-                        onClick={() => handleApprovalDecision(approval.id, "rejected")}
-                        className="min-h-[38px] px-4 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-semibold transition-colors disabled:opacity-50"
-                      >
-                        {approval.isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
-                        Deny
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="host-approve-btn"
-                        disabled={approval.isSubmitting}
-                        onClick={() => handleApprovalDecision(approval.id, "approved")}
-                        className="min-h-[38px] px-4 py-1.5 rounded-xl border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
-                      >
-                        {approval.isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
-                        Approve
-                      </button>
-                    </div>
-                  </div>
-                );
+          {/* Confirm Dialog for Permanent Session Deletion (mirrors ThreadsSidebar) */}
+          {activeCanvasDiff && (
+            <CanvasDiffSheet
+              currentDiff={activeCanvasDiff.current}
+              allDiffs={activeCanvasDiff.all}
+              onSelectDiff={(diff) =>
+                setActiveCanvasDiff((prev) => (prev ? { ...prev, current: diff } : null))
               }
-
-              return (
-                <div
-                  key={approval.id}
-                  data-testid="host-approval-receipt"
-                  className="w-full rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 p-3 sm:p-4 text-xs space-y-1.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
-                          approval.status === "executed"
-                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
-                            : approval.status === "denied"
-                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
-                            : approval.status === "expired"
-                            ? "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border border-zinc-500/20"
-                            : "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
-                        }`}
-                      >
-                        {approval.status === "executed"
-                          ? "Executed"
-                          : approval.status === "denied"
-                          ? "Denied"
-                          : approval.status === "expired"
-                          ? "Expired"
-                          : "Error"}
-                      </span>
-                      <span className="font-mono text-slate-700 dark:text-zinc-300 font-semibold">
-                        {approval.tool}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-slate-600 dark:text-zinc-400 font-mono text-[11px] truncate">
-                    {approval.args?.command || approval.args?.path}
-                  </div>
-
-                  {approval.error && (
-                    <div className="text-rose-600 dark:text-rose-400 text-[11px]">
-                      {approval.error}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Standalone turn status slot only when isLoading is true and no assistant ThinkingPanel is rendered at the tail */}
-        {isLoading && (() => {
-          const tailIdx = deduplicatedMessages.length - 1;
-          const tailMsg = tailIdx >= 0 ? deduplicatedMessages[tailIdx] : null;
-          const tailIsTaskHost = tailIdx === lastLinkedTaskMsgIndex && !!activeTask;
-          const tailRendersThinkingPanel = Boolean(tailMsg && tailMsg.role === "assistant" && !tailIsTaskHost);
-          if (tailRendersThinkingPanel) return null;
-          const phaseLabel = resolveTurnStatusPhase({
-            isStreaming: true,
-            streamStatus,
-            hasThought: false,
-            hasContent: false
-          });
-          if (!phaseLabel) return null;
-          return (
+              onClose={() => setActiveCanvasDiff(null)}
+            />
+          )}
+          {showDeleteConfirm && onDeleteThread && (
             <div
-              data-testid="turn-status-slot"
-              className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-400 w-fit"
+              data-testid="thread-delete-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="chat-confirm-delete-title"
+              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+              onClick={() => setShowDeleteConfirm(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setShowDeleteConfirm(false);
+              }}
             >
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>{phaseLabel}</span>
-            </div>
-          );
-        })()}
-
-        {isLoading && (
-          <div className="sticky bottom-2 z-20 flex justify-center pointer-events-none">
-            <div
-              data-testid="running-pill"
-              className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500 border border-transparent text-xs font-mono font-medium text-[#04120c] shadow-lg backdrop-blur-sm"
-            >
-              <span className="h-2 w-2 rounded-full bg-[#04120c] animate-pulse" />
-              <span>
-                {`RUNNING${
-                  (messages[messages.length - 1]?.roundPromptTokens?.length ?? 0) > 0
-                    ? ` · Round ${messages[messages.length - 1]?.roundPromptTokens?.length}`
-                    : ""
-                } · ${formatElapsedDuration(
-                  Math.max(0, Math.floor((Date.now() - (turnStartedAtRef.current ?? Date.now())) / 1000))
-                )}`}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* uir-1: in-thread stream banners — DISCONNECTED when the stream
-            drops mid-turn, RECOVERED when the detached turn is reconciled.
-            Both render at the interruption point so the drop and the
-            recovery stay auditable in the stream. */}
-        {(() => {
-          const banner = streamBannerKind({
-            isDisconnected: isTransientDisconnected,
-            recoveredAtMs,
-            nowMs: Date.now()
-          });
-          if (banner === "disconnected") {
-            return (
               <div
-                data-testid="turn-transient-disconnected"
-                className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
+                className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
               >
-                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>{`⚠ DISCONNECTED · Connection interrupted — Auto-retrying (${reconnectAttempt}/${RECONCILE_POLL_MAX_ATTEMPTS})`}</span>
-              </div>
-            );
-          }
-          if (banner === "recovered") {
-            return (
-              <div
-                data-testid="stream-recovered-banner"
-                className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium w-full max-w-xl"
-              >
-                <span>{`↻ RECOVERED · Reconnected after ${recoveredAfterSec}s`}</span>
-              </div>
-            );
-          }
-          return null;
-        })()}
-
-        {errorMsg && (() => {
-          const formatted = formatChatErrorMessage(errorMsg);
-          return (
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-rose-50/90 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm space-y-2.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <ShieldAlert className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
-                  <div className="space-y-1 min-w-0">
-                    <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm leading-snug">
-                      {formatted.summary}
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 shrink-0">
+                    <Trash2 className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3
+                      id="chat-confirm-delete-title"
+                      className="text-base font-bold text-slate-900 dark:text-zinc-100 line-clamp-2"
+                    >
+                      Delete &ldquo;{threadTitle || "Untitled session"}&rdquo;?
+                    </h3>
+                    <p className="mt-1.5 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
+                      This action is permanent and cannot be undone.{" "}
+                      {activeTask?.taskId &&
+                      ((activeThreadId || threadId) === `thread-${activeTask.taskId}` ||
+                        (activeThreadId || threadId || "").startsWith("thread-task-"))
+                        ? "All messages and the task checkpoint for this session will be removed."
+                        : activeTask?.taskId
+                          ? "All messages for this session will be removed. The task checkpoint is retained and the task will be marked cancelled."
+                          : "All messages for this session will be removed."}
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/80 dark:hover:bg-rose-800 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 transition-colors shrink-0 flex items-center gap-1"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  <span>Retry</span>
-                </button>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    data-testid="cancel-delete-btn"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-zinc-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="confirm-delete-btn"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      onDeleteThread();
+                    }}
+                    className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-
-              {formatted.details && (
-                <details className="text-xs text-rose-700 dark:text-rose-300">
-                  <summary className="cursor-pointer font-medium hover:underline select-none">
-                    Technical details
-                  </summary>
-                  <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
-                    {formatted.details}
-                  </pre>
-                </details>
-              )}
             </div>
-          );
-        })()}
+          )}
 
-        <div ref={scrollRef} />
-        </div>
-      </div>
-
-      {/* Floating "Jump to bottom" button (S5 Smart Autoscroll) */}
-      {isUserScrolledUp && (
-        <div className="flex justify-center py-2 z-30 pointer-events-none bg-transparent">
-          <button
-            type="button"
-            onClick={() => scrollToBottom("smooth")}
-            className="pointer-events-auto min-h-[44px] px-4 py-2.5 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-100 text-xs font-semibold shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all"
-            title="Jump to bottom"
-            aria-label="Jump to bottom"
+          {/* Conversation Thread Messages */}
+          <div
+            ref={chatContainerRef}
+            onScroll={handleContainerScroll}
+            onWheel={handleContainerWheel}
+            onTouchMove={handleContainerTouchMove}
+            data-scroll-container="true"
+            className="flex-1 min-h-0 overflow-y-auto px-4 pt-[16px] pb-4 sm:px-6 sm:pt-4 sm:pb-6 bg-white dark:bg-black relative"
           >
-            <ArrowDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Jump to bottom</span>
-          </button>
-        </div>
-      )}
-
-      {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
-      <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-black/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
-        
-        {/* CHAT-STEER: Pending Steer indicator above composer */}
-        {pendingSteers.length > 0 && (
-          <div data-testid="chat-steer-pending-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-sky-100 dark:border-sky-950/60 max-w-[840px] mx-auto">
-            <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
-              <span>Steer pending ({pendingSteers.length}):</span>
-            </span>
-            <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
-              {pendingSteers.map((st, idx) => (
-                <div
-                  key={idx}
-                  data-testid="chat-steer-pending-chip"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-[11px] font-medium text-sky-950 dark:text-sky-200 shrink-0 max-w-[280px]"
-                >
-                  <span className="truncate" title={st}>
-                    {st}
-                  </span>
-                  <span className="text-[9px] text-sky-600 dark:text-sky-400 italic shrink-0">
-                    (lands at next step)
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove steer item ${idx + 1}`}
-                    onClick={() => {
-                      setPendingSteers((prev) => prev.filter((_, i) => i !== idx));
-                    }}
-                    className="p-0.5 rounded-full hover:bg-sky-200 dark:hover:bg-sky-800 text-sky-600 dark:text-sky-400 hover:text-sky-950 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              data-testid="chat-steer-clear-all"
-              onClick={() => {
-                setPendingSteers([]);
-              }}
-              className="text-[11px] text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 underline shrink-0 px-1"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
-
-        {/* CHAT-QUEUE: Queue Chips above composer with per-item × and clear all */}
-        {queueItems.length > 0 && (
-          <div data-testid="chat-queue-deck" className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
-            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
-              <span>Queue ({queueItems.length}):</span>
-            </span>
-            <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
-              {queueItems.map((item, idx) => (
-                <div
-                  key={item.id}
-                  data-testid="chat-queue-chip"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-medium text-emerald-950 dark:text-emerald-200 shrink-0 max-w-[220px]"
-                >
-                  <span className="truncate" title={item.text}>
-                    {idx + 1}. {item.text}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove queued item ${idx + 1}`}
-                    onClick={() => {
-                      if (chatQueueRef.current) {
-                        chatQueueRef.current.remove(item.id);
-                        setQueueItems(chatQueueRef.current.items());
-                      }
-                    }}
-                    className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-600 dark:text-emerald-400 hover:text-emerald-950 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              data-testid="chat-queue-clear-all"
-              onClick={() => {
-                if (chatQueueRef.current) {
-                  chatQueueRef.current.clearAll();
-                  setQueueItems([]);
-                }
-              }}
-              className="text-[11px] text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 underline shrink-0 px-1"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
-
-        {/* Attachment Chips above input */}
-        {attachedFiles.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
-            {attachedFiles.map((att) => (
-              <div
-                key={att.id}
-                className="group relative flex items-center gap-1.5 p-1.5 pr-2.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-xs shadow-xs"
-              >
-                {att.isImage && att.previewUrl ? (
-                  <img
-                    src={att.previewUrl}
-                    alt={att.name}
-                    className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
-                  />
-                ) : (
-                  <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                )}
-                <div className="flex flex-col">
-                  <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
-                    {att.name}
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-mono">
-                    {formatFileSize(att.size)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAttachment(att.id)}
-                  className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
-                  title="Remove file"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Unified Two-Deck Composer Card */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#111116] border border-stone-200 dark:border-white/[0.11] surface-card p-3 transition-all focus-within:ring-2 focus-within:ring-emerald-500/25 focus-within:border-emerald-500"
-        >
-          {/* Top Deck: Auto-expanding Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              if (e.target.style) {
-                e.target.style.height = "auto";
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            placeholder={placeholder || "Describe the engineering task…"}
-            className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-400 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
-          />
-
-          {/* Bottom Deck: Controls Bar */}
-          <div className="flex items-center justify-between pt-2 mt-1 border-t border-stone-200/70 dark:border-white/[0.08]">
-            {/* Paperclip Button on left */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-9 w-9 rounded-full text-zinc-600 hover:text-emerald-700 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors shrink-0 flex items-center justify-center"
-              title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
-              aria-label="Attach files"
-            >
-              <Paperclip className="h-4.5 w-4.5 rotate-45" />
-            </button>
-
-            <div className="flex items-center gap-2">
-              {/* Mid-Turn Action Selector (Queue vs Steer) when turn is active */}
-              {isGeneratingOrRunning && (
-                <div
-                  role="radiogroup"
-                  aria-label="Mid-Turn Action Selector"
-                  className="inline-flex rounded-full p-0.5 bg-stone-200/70 dark:bg-[#1f1f28] text-[11px] font-medium select-none"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={midTurnAction === "queue"}
-                    onClick={() => handleSelectMidTurnAction("queue")}
-                    className={`px-2.5 py-0.5 rounded-full transition-all ${
-                      midTurnAction === "queue"
-                        ? "bg-white dark:bg-[#0e0e12] text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
-                        : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
-                    }`}
-                  >
-                    Queue
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={midTurnAction === "steer"}
-                    onClick={() => handleSelectMidTurnAction("steer")}
-                    className={`px-2.5 py-0.5 rounded-full transition-all ${
-                      midTurnAction === "steer"
-                        ? "bg-white dark:bg-[#0e0e12] text-cyan-800 dark:text-cyan-300 font-semibold shadow-xs"
-                        : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
-                    }`}
-                  >
-                    Steer
-                  </button>
+            <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
+              {deduplicatedMessages.length === 0 && !activeTask && (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
+                  <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
+                    <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
+                    Start an autonomous session
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                    Ask questions, inspect the air-gapped sandbox, or build autonomous software
+                    artifacts.
+                  </p>
                 </div>
               )}
 
-              {/* uir-0: the Chat|Build composer toggle is removed (owner ruling).
+              {deduplicatedMessages.map((m, idx) => (
+                <ChatMessageItem
+                  key={m.id}
+                  message={m}
+                  idx={idx}
+                  copiedMessageId={copiedMessageId}
+                  lastLinkedTaskMsgIndex={lastLinkedTaskMsgIndex}
+                  lastAssistantIndex={lastAssistantIndex}
+                  activeTask={activeTask}
+                  liveTraces={liveTraces}
+                  liveTurnTraces={liveTurnTraces}
+                  isLoading={isLoading}
+                  isStoppingTask={isStoppingTask}
+                  activeAssistantMsgId={activeAssistantMsgIdRef.current}
+                  completedTurnMsgId={completedTurnMsgId}
+                  streamStatus={streamStatus}
+                  turnStartedAtMs={turnStartedAtRef.current}
+                  lastActivityAtMs={lastActivityAtMs}
+                  expandedTraces={expandedTraces}
+                  expandedProofs={expandedProofs}
+                  hasResolvedDetachedTurn={hasResolvedDetachedTurn}
+                  activeModel={activeModel}
+                  onPreviewImage={setPreviewModalImage}
+                  onCopyToClipboard={copyToClipboard}
+                  onRetry={handleRetry}
+                  onToggleProof={toggleProof}
+                  onToggleTraces={toggleTraces}
+                  onStopTask={onStopTask}
+                  onRunControlAction={handleRunControlAction}
+                  onDeployRun={onDeployRun}
+                  onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
+                />
+              ))}
+
+              {/* UI-003 / UI-011b: live tool-call trace rows for the current turn.
+            Rendered from ChatStream's own liveTurnTraces state so rows received
+            before a stream cut remain visible on the live screen. */}
+              {liveTurnTraces.length > 0 && (
+                <div className="w-full max-w-[840px]" data-testid="live-trace-rows">
+                  <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-[#121215] overflow-hidden">
+                    <div className="px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-200 border-b border-slate-200 dark:border-zinc-800">
+                      Live tool steps ({liveTurnTraces.length})
+                    </div>
+                    {liveTurnTraces.length > 8 && !showAllLiveTraces && (
+                      <button
+                        type="button"
+                        data-testid="earlier-calls-toggle"
+                        onClick={() => setShowAllLiveTraces(true)}
+                        className="w-full px-3.5 py-2 text-left text-xs font-mono text-slate-500 dark:text-zinc-400 bg-slate-100/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors border-b border-slate-200 dark:border-zinc-800 cursor-pointer"
+                      >
+                        ▸ {liveTurnTraces.length - 8} earlier tool calls (
+                        {liveTurnTraces.length - 8} ok) — Show all
+                      </button>
+                    )}
+                    {(showAllLiveTraces ? liveTurnTraces : liveTurnTraces.slice(-8)).map((t, i) => {
+                      const readable = formatHumanReadableTrace(t);
+                      return (
+                        <button
+                          key={`${t.tool}-${i}`}
+                          type="button"
+                          aria-label={`Tool: ${t.tool}`}
+                          className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-[12.8px] font-mono"
+                        >
+                          <span className="flex items-center gap-2 text-slate-700 dark:text-zinc-100">
+                            <Check size={12} className="text-emerald-400 shrink-0" />
+                            <span>{readable.title || t.tool}</span>
+                          </span>
+                          <span className="text-slate-400 dark:text-zinc-400">
+                            {readable.duration || ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
+              {activeTask && lastLinkedTaskMsgIndex === -1 && (
+                <div className="w-full max-w-[840px]">
+                  <LiveRunBlock
+                    task={activeTask}
+                    liveTraces={liveTraces}
+                    onStopRun={onStopTask}
+                    onPauseRun={() => handleRunControlAction("pause")}
+                    onResumeRun={() => handleRunControlAction("resume")}
+                    onRestartRun={() => handleRunControlAction("restart")}
+                    onDeployRun={onDeployRun}
+                    isStopping={isStoppingTask}
+                  />
+                </div>
+              )}
+
+              {/* Host Mode Approvals (Cards & Receipts) */}
+              <HostApprovalsPanel approvals={hostApprovals} onDecision={handleApprovalDecision} />
+
+              {/* Standalone turn status slot only when isLoading is true and no assistant ThinkingPanel is rendered at the tail */}
+              {isLoading &&
+                (() => {
+                  const tailIdx = deduplicatedMessages.length - 1;
+                  const tailMsg = tailIdx >= 0 ? deduplicatedMessages[tailIdx] : null;
+                  const tailIsTaskHost = tailIdx === lastLinkedTaskMsgIndex && !!activeTask;
+                  const tailRendersThinkingPanel = Boolean(
+                    tailMsg && tailMsg.role === "assistant" && !tailIsTaskHost
+                  );
+                  if (tailRendersThinkingPanel) return null;
+                  const phaseLabel = resolveTurnStatusPhase({
+                    isStreaming: true,
+                    streamStatus,
+                    hasThought: false,
+                    hasContent: false,
+                  });
+                  if (!phaseLabel) return null;
+                  return (
+                    <div
+                      data-testid="turn-status-slot"
+                      className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-400 w-fit"
+                    >
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{phaseLabel}</span>
+                    </div>
+                  );
+                })()}
+
+              {isLoading && (
+                <div className="sticky bottom-2 z-20 flex justify-center pointer-events-none">
+                  <div
+                    data-testid="running-pill"
+                    className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500 border border-transparent text-xs font-mono font-medium text-[#04120c] shadow-lg backdrop-blur-sm"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-[#04120c] animate-pulse" />
+                    <span>
+                      {`RUNNING${
+                        (messages[messages.length - 1]?.roundPromptTokens?.length ?? 0) > 0
+                          ? ` · Round ${messages[messages.length - 1]?.roundPromptTokens?.length}`
+                          : ""
+                      } · ${formatElapsedDuration(
+                        Math.max(
+                          0,
+                          Math.floor((Date.now() - (turnStartedAtRef.current ?? Date.now())) / 1000)
+                        )
+                      )}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* uir-1: in-thread stream banners — DISCONNECTED when the stream
+            drops mid-turn, RECOVERED when the detached turn is reconciled.
+            Both render at the interruption point so the drop and the
+            recovery stay auditable in the stream. */}
+              {(() => {
+                const banner = streamBannerKind({
+                  isDisconnected: isTransientDisconnected,
+                  recoveredAtMs,
+                  nowMs: Date.now(),
+                });
+                if (banner === "disconnected") {
+                  return (
+                    <div
+                      data-testid="turn-transient-disconnected"
+                      className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-medium w-full max-w-xl"
+                    >
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>{`⚠ DISCONNECTED · Connection interrupted — Auto-retrying (${reconnectAttempt}/${RECONCILE_POLL_MAX_ATTEMPTS})`}</span>
+                    </div>
+                  );
+                }
+                if (banner === "recovered") {
+                  return (
+                    <div
+                      data-testid="stream-recovered-banner"
+                      className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium w-full max-w-xl"
+                    >
+                      <span>{`↻ RECOVERED · Reconnected after ${recoveredAfterSec}s`}</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {errorMsg &&
+                (() => {
+                  const formatted = formatChatErrorMessage(errorMsg);
+                  return (
+                    <div className="p-3.5 sm:p-4 rounded-2xl bg-rose-50/90 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm space-y-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <ShieldAlert className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                          <div className="space-y-1 min-w-0">
+                            <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm leading-snug">
+                              {formatted.summary}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRetry}
+                          className="px-3 py-1 rounded-lg text-xs font-semibold bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/80 dark:hover:bg-rose-800 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 transition-colors shrink-0 flex items-center gap-1"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          <span>Retry</span>
+                        </button>
+                      </div>
+
+                      {formatted.details && (
+                        <details className="text-xs text-rose-700 dark:text-rose-300">
+                          <summary className="cursor-pointer font-medium hover:underline select-none">
+                            Technical details
+                          </summary>
+                          <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                            {formatted.details}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  );
+                })()}
+
+              <div ref={scrollRef} />
+            </div>
+          </div>
+
+          {/* Floating "Jump to bottom" button */}
+          {isUserScrolledUp && (
+            <div className="flex justify-center py-2 z-30 pointer-events-none bg-transparent">
+              <button
+                type="button"
+                data-testid="live-follow-pill"
+                onClick={() => scrollToBottom("smooth")}
+                className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Jump to bottom"
+                aria-label="Jump to bottom"
+              >
+                <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{isLoading ? "Live" : "Latest"}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Docked Material 3 Single Input Bar matching Item 3, 4, 5, 6 & Mockup 1 & 4 */}
+          <div className="sticky bottom-0 z-20 p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white/95 dark:bg-black/95 border-t border-slate-200/80 dark:border-zinc-800 backdrop-blur-md">
+            {/* CHAT-STEER: Pending Steer indicator above composer */}
+            {pendingSteers.length > 0 && (
+              <div
+                data-testid="chat-steer-pending-deck"
+                className="flex items-center gap-2 pb-2 mb-2 border-b border-stone-200 dark:border-white/[0.10] max-w-[840px] mx-auto"
+              >
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 shrink-0 uppercase tracking-wider flex items-center gap-1">
+                  <span>Steer pending ({pendingSteers.length}):</span>
+                </span>
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+                  {pendingSteers.map((st, idx) => (
+                    <div
+                      key={idx}
+                      data-testid="chat-steer-pending-chip"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[11px] font-medium text-emerald-950 dark:text-emerald-200 shrink-0 max-w-[280px]"
+                    >
+                      <span className="truncate" title={st}>
+                        {st}
+                      </span>
+                      <span className="text-[9px] text-emerald-700 dark:text-emerald-300 italic shrink-0">
+                        (lands at next step)
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove steer item ${idx + 1}`}
+                        onClick={() => {
+                          setPendingSteers((prev) => prev.filter((_, i) => i !== idx));
+                        }}
+                        className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-600 dark:text-emerald-400 hover:text-emerald-950 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  data-testid="chat-steer-clear-all"
+                  onClick={() => {
+                    setPendingSteers([]);
+                  }}
+                  className="text-[11px] text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 underline shrink-0 px-1"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+
+            {/* CHAT-QUEUE: Queue Chips above composer with per-item × and clear all */}
+            {queueItems.length > 0 && (
+              <div
+                data-testid="chat-queue-deck"
+                className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto"
+              >
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
+                  <span>Queue ({queueItems.length}):</span>
+                </span>
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
+                  {queueItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      data-testid="chat-queue-chip"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-medium text-emerald-950 dark:text-emerald-200 shrink-0 max-w-[220px]"
+                    >
+                      <span className="truncate" title={item.text}>
+                        {idx + 1}. {item.text}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove queued item ${idx + 1}`}
+                        onClick={() => {
+                          if (chatQueueRef.current) {
+                            chatQueueRef.current.remove(item.id);
+                            setQueueItems(chatQueueRef.current.items());
+                          }
+                        }}
+                        className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-600 dark:text-emerald-400 hover:text-emerald-950 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  data-testid="chat-queue-clear-all"
+                  onClick={() => {
+                    if (chatQueueRef.current) {
+                      chatQueueRef.current.clearAll();
+                      setQueueItems([]);
+                    }
+                  }}
+                  className="text-[11px] text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 underline shrink-0 px-1"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+
+            {/* Attachment Chips above input */}
+            {attachedFiles.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pb-2.5 mb-2 border-b border-slate-100 dark:border-zinc-850 max-w-[840px] mx-auto">
+                {attachedFiles.map((att) => (
+                  <div
+                    key={att.id}
+                    className="group relative flex items-center gap-1.5 p-1.5 pr-2.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-xs shadow-xs"
+                  >
+                    {att.isImage && att.previewUrl ? (
+                      <NextImage
+                        src={att.previewUrl}
+                        alt={att.name}
+                        width={24}
+                        height={24}
+                        unoptimized
+                        className="h-6 w-6 rounded-lg object-cover border border-slate-200 dark:border-zinc-700"
+                      />
+                    ) : (
+                      <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    )}
+                    <div className="flex flex-col">
+                      <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
+                        {att.name}
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        {formatFileSize(att.size)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(att.id)}
+                      className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
+                      title="Remove file"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Unified Two-Deck Composer Card */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="max-w-[840px] mx-auto rounded-2xl bg-white dark:bg-[#111116] border border-stone-200 dark:border-white/[0.11] surface-card p-3 transition-all focus-within:ring-2 focus-within:ring-emerald-500/25 focus-within:border-emerald-500"
+            >
+              {/* Top Deck: Auto-expanding Textarea */}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  if (e.target.style) {
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+                  }
+                }}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                placeholder={placeholder || "Describe the engineering task…"}
+                className="w-full bg-transparent border-0 focus:outline-none focus:ring-0 text-[15px] sm:text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-400 resize-none px-1.5 py-1 leading-relaxed min-h-[46px] sm:min-h-[72px] max-h-[140px]"
+              />
+
+              {/* Bottom Deck: Controls Bar */}
+              <div className="flex items-center justify-between pt-2 mt-1 border-t border-stone-200/70 dark:border-white/[0.08]">
+                {/* Paperclip Button on left */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-9 w-9 rounded-full text-zinc-600 hover:text-emerald-700 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors shrink-0 flex items-center justify-center"
+                  title="Attach files (image/*,.pdf,.md,.txt,.drawio,.xml,.json,.csv)"
+                  aria-label="Attach files"
+                >
+                  <Paperclip className="h-4.5 w-4.5 rotate-45" />
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Mid-Turn Action Selector (Queue vs Steer) when turn is active */}
+                  {isGeneratingOrRunning && (
+                    <div
+                      role="radiogroup"
+                      aria-label="Mid-Turn Action Selector"
+                      className="inline-flex rounded-full p-0.5 bg-stone-200/70 dark:bg-[#1f1f28] text-[11px] font-medium select-none"
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={midTurnAction === "queue"}
+                        onClick={() => handleSelectMidTurnAction("queue")}
+                        className={`px-2.5 py-0.5 rounded-full transition-all ${
+                          midTurnAction === "queue"
+                            ? "bg-white dark:bg-[#0e0e12] text-emerald-700 dark:text-emerald-300 font-semibold shadow-xs"
+                            : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
+                        }`}
+                      >
+                        Queue
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={midTurnAction === "steer"}
+                        onClick={() => handleSelectMidTurnAction("steer")}
+                        className={`px-2.5 py-0.5 rounded-full transition-all ${
+                          midTurnAction === "steer"
+                            ? "bg-white dark:bg-[#0e0e12] text-emerald-800 dark:text-emerald-300 font-semibold shadow-xs"
+                            : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
+                        }`}
+                      >
+                        Steer
+                      </button>
+                    </div>
+                  )}
+
+                  {/* uir-0: the Chat|Build composer toggle is removed (owner ruling).
                   Build stays reachable via the /build prefix and the Builds view;
                   the dispatch check (composerMode === "build" || isBuildPrefix)
                   is unchanged. The auto-deploy opt-in now also appears when the
                   draft itself starts with the /build prefix. */}
-              {(composerMode === "build" || input.trim().toLowerCase().startsWith("/build ")) && (
-                <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600 dark:text-stone-400 cursor-pointer select-none px-1">
-                  <input
-                    type="checkbox"
-                    checked={autoDeployOnGreen}
-                    onChange={(e) => setAutoDeployOnGreen(e.target.checked)}
-                    className="rounded border-stone-300 dark:border-white/[0.16] text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
-                  />
-                  <span className="hidden sm:inline">Auto-Deploy on Green Gate</span>
-                  <span className="sm:hidden">Auto-Deploy</span>
-                </label>
-              )}
+                  {(composerMode === "build" ||
+                    input.trim().toLowerCase().startsWith("/build ")) && (
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600 dark:text-stone-400 cursor-pointer select-none px-1">
+                      <input
+                        type="checkbox"
+                        checked={autoDeployOnGreen}
+                        onChange={(e) => setAutoDeployOnGreen(e.target.checked)}
+                        className="rounded border-stone-300 dark:border-white/[0.16] text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                      />
+                      <span className="hidden sm:inline">Auto-Deploy on Green Gate</span>
+                      <span className="sm:hidden">Auto-Deploy</span>
+                    </label>
+                  )}
 
-              {/* Action Buttons Deck */}
-              {isGeneratingOrRunning && (
-                <button
-                  type="button"
-                  onClick={handleStop}
-                  data-testid="stop-button"
-                  className="h-10 w-10 rounded-xl bg-stone-900 dark:bg-stone-100 hover:bg-black dark:hover:bg-white text-white dark:text-stone-950 flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
-                  title="Stop generation / halt workers"
-                  aria-label="Stop generation"
-                >
-                  <Square className="h-3.5 w-3.5 fill-current stroke-none" />
-                </button>
-              )}
+                  {/* Action Buttons Deck */}
+                  {isGeneratingOrRunning && (
+                    <button
+                      type="button"
+                      onClick={handleStop}
+                      data-testid="stop-button"
+                      className="h-10 w-10 rounded-xl bg-stone-900 dark:bg-stone-100 hover:bg-black dark:hover:bg-white text-white dark:text-stone-950 flex items-center justify-center shadow-xs active:scale-95 transition-all shrink-0"
+                      title="Stop generation / halt workers"
+                      aria-label="Stop generation"
+                    >
+                      <Square className="h-3.5 w-3.5 fill-current stroke-none" />
+                    </button>
+                  )}
 
-              {/* Send Button: Always visible and enabled whenever input text is present, even during an active run */}
-              {(!isGeneratingOrRunning || input.trim().length > 0) && (
-                <button
-                  type="submit"
-                  disabled={isSubmittingSteer || (!input.trim() && attachedFiles.length === 0)}
-                  data-testid="send-button"
-                  className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
-                    isGeneratingOrRunning && midTurnAction === "steer"
-                      ? "bg-cyan-600 hover:bg-cyan-500 text-white"
-                      : "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black"
-                  }`}
-                  title={
-                    isGeneratingOrRunning
-                      ? midTurnAction === "steer"
-                        ? "Submit steer to current turn"
-                        : "Enqueue message for after turn"
-                      : "Send message"
-                  }
-                  aria-label={
-                    isGeneratingOrRunning
-                      ? midTurnAction === "steer"
-                        ? "Submit steer"
-                        : "Enqueue message"
-                      : "Send message"
-                  }
-                >
-                  <Send className="h-4 w-4 fill-current ml-0.5" />
-                </button>
-              )}
-            </div>
+                  {/* Send Button: Always visible and enabled whenever input text is present, even during an active run */}
+                  {(!isGeneratingOrRunning || input.trim().length > 0) && (
+                    <button
+                      type="submit"
+                      disabled={isSubmittingSteer || (!input.trim() && attachedFiles.length === 0)}
+                      data-testid="send-button"
+                      className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
+                        isGeneratingOrRunning && midTurnAction === "steer"
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white dark:bg-emerald-400 dark:hover:bg-emerald-300 dark:text-black"
+                          : "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black"
+                      }`}
+                      title={
+                        isGeneratingOrRunning
+                          ? midTurnAction === "steer"
+                            ? "Submit steer to current turn"
+                            : "Enqueue message for after turn"
+                          : "Send message"
+                      }
+                      aria-label={
+                        isGeneratingOrRunning
+                          ? midTurnAction === "steer"
+                            ? "Submit steer"
+                            : "Enqueue message"
+                          : "Send message"
+                      }
+                    >
+                      <Send className="h-4 w-4 fill-current ml-0.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
-    </div>
-    <ArtifactCanvasPane />
-    </CanvasProvider>
+        </div>
+        <ArtifactCanvasPane />
+      </CanvasProvider>
     </div>
   );
-}
-
-export function deduplicateStreamMessages<T extends { role: string; content: string; traces?: any[] }>(messages: T[]): T[] {
-  const out: T[] = [];
-  for (const m of messages) {
-    const prev = out[out.length - 1];
-    if (prev && m.role === "user" && prev.role === "user" && m.content === prev.content) {
-      continue;
-    }
-    if (prev && m.role === "assistant" && prev.role === "assistant") {
-      if (m.content === prev.content) {
-        continue;
-      }
-      if (prev.content.trim() && m.content.trim() && (prev.traces?.length || 0) + (m.traces?.length || 0) <= 3) {
-        const mergedTraces =
-          prev.traces || m.traces ? [...(prev.traces || []), ...(m.traces || [])] : undefined;
-        out[out.length - 1] = {
-          ...prev,
-          ...m,
-          ...(mergedTraces ? { traces: mergedTraces } : {}),
-          content: `${prev.content}\n\n${m.content}`,
-        };
-        continue;
-      }
-    }
-    out.push(m);
-  }
-  return out;
 }

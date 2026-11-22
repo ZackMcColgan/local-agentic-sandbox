@@ -83,6 +83,6 @@ export function getBridgeManifest(baseDir?: string): BridgeManifest {
   const sha = computeBridgeSourceSha256(baseDir || __dirname);
   return {
     protocolVersion: PROTOCOL_VERSION,
-    bridgeSourceSha256: sha
+    bridgeSourceSha256: sha,
   };
 }

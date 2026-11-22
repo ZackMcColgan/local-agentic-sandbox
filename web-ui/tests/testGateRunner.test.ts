@@ -17,8 +17,8 @@ const REAL_PLAYWRIGHT_REPORT_PASSING = {
     expected: 14,
     skipped: 0,
     unexpected: 0,
-    flaky: 0
-  }
+    flaky: 0,
+  },
 };
 
 describe("Test Gate — Playwright Runner Partition & Report Parsing", () => {
@@ -28,19 +28,19 @@ describe("Test Gate — Playwright Runner Partition & Report Parsing", () => {
       "tests/explorerPanel.spec.ts",
       "tests/e2e/inTurnExperience.spec.ts",
       "tests\\e2e\\invariantNet.spec.ts",
-      "tests/testGate.test.ts"
+      "tests/testGate.test.ts",
     ];
 
     const { playwrightSpecs, tsxTests } = partitionWebUiTests(mixed);
 
     assert.deepStrictEqual(playwrightSpecs, [
       "tests/e2e/inTurnExperience.spec.ts",
-      "tests\\e2e\\invariantNet.spec.ts"
+      "tests\\e2e\\invariantNet.spec.ts",
     ]);
     assert.deepStrictEqual(tsxTests, [
       "tests/toolParser.test.ts",
       "tests/explorerPanel.spec.ts",
-      "tests/testGate.test.ts"
+      "tests/testGate.test.ts",
     ]);
     assert.ok(tsxTests.includes("tests/explorerPanel.spec.ts"));
     assert.ok(!playwrightSpecs.includes("tests/explorerPanel.spec.ts"));
@@ -67,8 +67,8 @@ describe("Test Gate — Playwright Runner Partition & Report Parsing", () => {
         stats: {
           ...REAL_PLAYWRIGHT_REPORT_PASSING.stats,
           expected: 11,
-          unexpected: 3
-        }
+          unexpected: 3,
+        },
       };
       fs.writeFileSync(reportPath, JSON.stringify(withFailures), "utf8");
       const counts = parsePlaywrightReport(reportPath);

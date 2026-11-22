@@ -1,11 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
-import {
-  getHostSettings,
-  setHostSettings,
-  getHostSettingsFilePath
-} from "../lib/hostSettings";
+import { getHostSettings, setHostSettings, getHostSettingsFilePath } from "../lib/hostSettings";
 import { GET, POST } from "../app/api/settings/host/route";
 
 describe("Job Chunking Global Setting", () => {
@@ -44,7 +40,11 @@ describe("Job Chunking Global Setting", () => {
     setHostSettings({ jobChunkingEnabled: false });
     assert.equal(fs.existsSync(settingsFile), true, "Settings file must exist after update");
     const reloaded = getHostSettings();
-    assert.equal(reloaded.jobChunkingEnabled, false, "jobChunkingEnabled must be false when switched off");
+    assert.equal(
+      reloaded.jobChunkingEnabled,
+      false,
+      "jobChunkingEnabled must be false when switched off"
+    );
   });
 
   it("3. Preference persists across simulated restarts via persistent file store", () => {
@@ -69,7 +69,7 @@ describe("Job Chunking Global Setting", () => {
     const postReq = new Request("http://localhost:3000/api/settings/host", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobChunkingEnabled: false })
+      body: JSON.stringify({ jobChunkingEnabled: false }),
     });
     const postRes = await POST(postReq);
     const postBody = await postRes.json();

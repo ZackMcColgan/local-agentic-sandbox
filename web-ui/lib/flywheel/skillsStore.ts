@@ -127,9 +127,7 @@ export class FlywheelSkillsStore {
     if (all.length === 0) return [];
 
     const lowerGoal = goal.toLowerCase();
-    const goalTokens = lowerGoal
-      .split(/[^a-z0-9_-]+/)
-      .filter((t) => t.length > 2);
+    const goalTokens = lowerGoal.split(/[^a-z0-9_-]+/).filter((t) => t.length > 2);
 
     const scored = all.map((skill) => {
       let score = 0;
@@ -170,7 +168,7 @@ export class FlywheelSkillsStore {
       sourceTaskId: String(row.source_task_id),
       confidenceScore: Number(row.confidence_score),
       createdAt: String(row.created_at),
-      useCount: Number(row.use_count || 0)
+      useCount: Number(row.use_count || 0),
     };
   }
 
@@ -203,16 +201,21 @@ export function extractSkillsFromCompletedTask(task: TaskManifest): SkillPattern
         name: `SVG Vector Card (${m.title})`,
         description: `Standalone vector card pattern with viewBox coordinates and background styling`,
         domain: "svg",
-        patternTemplate: m.diffSummary?.slice(0, 500) || `<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">\n  <rect width="800" height="600" rx="24" fill="#0f172a"/>\n</svg>`,
+        patternTemplate:
+          m.diffSummary?.slice(0, 500) ||
+          `<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">\n  <rect width="800" height="600" rx="24" fill="#0f172a"/>\n</svg>`,
         sourceTaskId: task.taskId,
         confidenceScore: 0.95,
         createdAt: nowIso,
-        useCount: 0
+        useCount: 0,
       });
     }
 
     // 2. Kubernetes / Deployment pattern
-    if (m.title.toLowerCase().includes("deploy") || m.plannedFiles?.some((f) => f.includes("deployment") || f.includes("k8s"))) {
+    if (
+      m.title.toLowerCase().includes("deploy") ||
+      m.plannedFiles?.some((f) => f.includes("deployment") || f.includes("k8s"))
+    ) {
       extracted.push({
         skillId: `skill-k8s-${task.taskId}-${m.id}`,
         name: `Kubernetes Deployment & NodePort (${m.title})`,
@@ -222,7 +225,7 @@ export function extractSkillsFromCompletedTask(task: TaskManifest): SkillPattern
         sourceTaskId: task.taskId,
         confidenceScore: 0.9,
         createdAt: nowIso,
-        useCount: 0
+        useCount: 0,
       });
     }
 
@@ -237,7 +240,7 @@ export function extractSkillsFromCompletedTask(task: TaskManifest): SkillPattern
         sourceTaskId: task.taskId,
         confidenceScore: 0.92,
         createdAt: nowIso,
-        useCount: 0
+        useCount: 0,
       });
     }
   }

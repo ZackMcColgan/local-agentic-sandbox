@@ -30,10 +30,11 @@ export function computeContentHash(content: string): string {
 }
 
 /** Recovers the read target path from tool args; null when no path key exists. */
-export function extractReadPath(args: Record<string, any> | undefined): string | null {
+export function extractReadPath(args: Record<string, unknown> | undefined): string | null {
   if (!args) return null;
   for (const k of PATH_KEYS) {
-    if (typeof args[k] === "string" && args[k].trim()) return args[k].trim();
+    const val = args[k];
+    if (typeof val === "string" && val.trim()) return val.trim();
   }
   return null;
 }
@@ -45,7 +46,7 @@ export function extractReadPath(args: Record<string, any> | undefined): string |
  * content payload is recoverable (error results are never deduped).
  */
 export function extractReadContent(resultContent: string): string | null {
-  let parsed: any;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(resultContent);
   } catch {
@@ -53,11 +54,14 @@ export function extractReadContent(resultContent: string): string | null {
   }
   if (typeof parsed === "string") return parsed;
   if (parsed && typeof parsed === "object") {
-    if (typeof parsed.content === "string") return parsed.content;
-    if (Array.isArray(parsed.content)) {
-      const texts = parsed.content
-        .filter((part: any) => part && typeof part.text === "string")
-        .map((part: any) => part.text);
+    const obj = parsed as { content?: unknown };
+    if (typeof obj.content === "string") return obj.content;
+    if (Array.isArray(obj.content)) {
+      const texts = obj.content
+        .filter((part: unknown): part is { text: string } =>
+          Boolean(part && typeof (part as { text?: unknown }).text === "string")
+        )
+        .map((part) => part.text);
       if (texts.length > 0) return texts.join("\n");
     }
   }
@@ -87,7 +91,8 @@ export interface ReadDedupMeta {
  * than even a small read payload; the FULL digest rides on the audit meta
  * (ThreadMessage.readDedups), so recoverability is not weakened. */
 export function buildReadDedupStub(meta: ReadDedupMeta): string {
-  const messageRef = typeof meta.messageIndex === "number" ? ` firstReadMessage=${meta.messageIndex}` : "";
+  const messageRef =
+    typeof meta.messageIndex === "number" ? ` firstReadMessage=${meta.messageIndex}` : "";
   return `[Read dedup: path=${meta.path} contentHash=${meta.contentHash.slice(0, 16)} firstReadRound=${meta.round} firstReadTrace=${meta.traceIndex}${messageRef}. Full content in thread trace record.]`;
 }
 
@@ -105,10 +110,26 @@ export interface ReadDedupDecision {
  * messages (earlier turns) so a re-read in a later turn stubs against the
  * earlier turn's read; new reads in the current turn are recorded live.
  */
+interface DedupToolCall {
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string | Record<string, unknown>;
+  };
+}
+
+interface DedupMessage {
+  role?: string;
+  name?: string;
+  content?: unknown;
+  tool_call_id?: string;
+  tool_calls?: DedupToolCall[];
+}
+
 export class ReadDedupRegistry {
   private entries = new Map<string, ReadDedupMeta>();
 
-  constructor(priorMessages: any[] = []) {
+  constructor(priorMessages: DedupMessage[] = []) {
     let assistantCount = 0;
     let toolCount = 0;
     for (let i = 0; i < priorMessages.length; i++) {
@@ -117,7 +138,11 @@ export class ReadDedupRegistry {
         assistantCount++;
         continue;
       }
-      if (msg?.role !== "tool" || !READ_DEDUP_TOOLS.includes(msg.name)) {
+      if (
+        msg?.role !== "tool" ||
+        !msg.name ||
+        !READ_DEDUP_TOOLS.includes(msg.name as (typeof READ_DEDUP_TOOLS)[number])
+      ) {
         continue;
       }
       const traceIndex = toolCount++;
@@ -135,7 +160,7 @@ export class ReadDedupRegistry {
         round,
         traceIndex,
         messageIndex: i,
-        originalChars: typeof msg.content === "string" ? msg.content.length : 0
+        originalChars: typeof msg.content === "string" ? msg.content.length : 0,
       });
     }
   }
@@ -147,7 +172,7 @@ export class ReadDedupRegistry {
    */
   checkAndRecord(
     toolName: string,
-    args: Record<string, any>,
+    args: Record<string, unknown>,
     resultContent: string,
     round: number,
     traceIndex: number
@@ -171,13 +196,13 @@ export class ReadDedupRegistry {
       contentHash,
       round,
       traceIndex,
-      originalChars: resultContent.length
+      originalChars: resultContent.length,
     };
     this.entries.set(path, meta);
     return { deduplicated: false, meta };
   }
 
-  private parseArgs(pairedCall: any): Record<string, any> | undefined {
+  private parseArgs(pairedCall: DedupToolCall | undefined): Record<string, unknown> | undefined {
     const raw = pairedCall?.function?.arguments;
     if (typeof raw === "string") {
       try {
@@ -186,15 +211,18 @@ export class ReadDedupRegistry {
         return undefined;
       }
     }
-    if (raw && typeof raw === "object") return raw as Record<string, any>;
+    if (raw && typeof raw === "object") return raw as Record<string, unknown>;
     return undefined;
   }
 
-  private findPairedCall(messages: any[], toolCallId: any): any {
+  private findPairedCall(
+    messages: DedupMessage[],
+    toolCallId: string | undefined
+  ): DedupToolCall | undefined {
     if (!toolCallId) return undefined;
     for (const msg of messages) {
       if (msg?.role === "assistant" && Array.isArray(msg.tool_calls)) {
-        const call = msg.tool_calls.find((tc: any) => tc?.id === toolCallId);
+        const call = msg.tool_calls.find((tc) => tc?.id === toolCallId);
         if (call) return call;
       }
     }

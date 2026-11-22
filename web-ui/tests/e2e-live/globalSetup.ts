@@ -14,8 +14,9 @@ export default async function globalSetup() {
       throw new Error(`HTTP ${res.status}`);
     }
     console.log(`✔ [Preflight] Live UI is reachable at ${baseUrl}`);
-  } catch (err: any) {
-    console.error(`\n❌ [Preflight FAILED] Live UI is not reachable at ${baseUrl}: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`\n❌ [Preflight FAILED] Live UI is not reachable at ${baseUrl}: ${message}`);
     console.error("Stack is not up. Aborting test:e2e:live run.\n");
     process.exit(1);
   }
@@ -28,8 +29,9 @@ export default async function globalSetup() {
       { encoding: "utf8" }
     ).trim();
     console.log(`✔ [Preflight] Deployed web-ui container image: ${deployedImage}`);
-  } catch (err: any) {
-    console.warn(`⚠️ [Preflight] Could not query deployed image tag via kubectl: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ [Preflight] Could not query deployed image tag via kubectl: ${message}`);
   }
 
   // 3. Record web-ui Pod Baseline Restart Count
@@ -42,8 +44,9 @@ export default async function globalSetup() {
     baselineRestartCount = parseInt(out || "0", 10);
     console.log(`✔ [Preflight] Baseline web-ui pod restart count: ${baselineRestartCount}`);
     process.env.LIVE_BASELINE_RESTARTS = String(baselineRestartCount);
-  } catch (err: any) {
-    console.warn(`⚠️ [Preflight] Could not query pod restart count: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ [Preflight] Could not query pod restart count: ${message}`);
   }
 
   // 4. Verify Strata / Local LLM Engine Reachability & Slot Idle
@@ -52,15 +55,20 @@ export default async function globalSetup() {
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
-    const slots = await res.json();
-    const busySlot = slots.find((s: any) => s.is_processing);
+    const slots = (await res.json()) as Array<{ id?: number; is_processing?: boolean }>;
+    const busySlot = slots.find((s) => s.is_processing);
     if (busySlot) {
-      console.warn(`⚠️ [Preflight Notice] Strata slot ${busySlot.id} is currently busy at startup. Attempting recovery...`);
+      console.warn(
+        `⚠️ [Preflight Notice] Strata slot ${busySlot.id} is currently busy at startup. Attempting recovery...`
+      );
     } else {
       console.log("✔ [Preflight] Strata LLM engine is reachable and slot 0 is IDLE");
     }
-  } catch (err: any) {
-    console.error(`\n❌ [Preflight FAILED] Strata LLM engine (http://127.0.0.1:8080) is unreachable: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `\n❌ [Preflight FAILED] Strata LLM engine (http://127.0.0.1:8080) is unreachable: ${message}`
+    );
     console.error("LLM engine is down. Aborting test:e2e:live run.\n");
     process.exit(1);
   }
@@ -71,15 +79,18 @@ export default async function globalSetup() {
     if (res.ok) {
       const data = await res.json();
       if (data.status === "ok") {
-        console.log(`✔ [Preflight] Host runner daemon is healthy (PID ${data.pid}, SHA ${data.bridgeSourceSha256?.slice(0, 8)})`);
+        console.log(
+          `✔ [Preflight] Host runner daemon is healthy (PID ${data.pid}, SHA ${data.bridgeSourceSha256?.slice(0, 8)})`
+        );
       } else {
         console.warn(`⚠️ [Preflight] Host runner status not ok: ${JSON.stringify(data)}`);
       }
     } else {
       console.warn(`⚠️ [Preflight] Host runner returned HTTP ${res.status}`);
     }
-  } catch (err: any) {
-    console.warn(`⚠️ [Preflight] Host runner daemon not reachable on port 8765: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`⚠️ [Preflight] Host runner daemon not reachable on port 8765: ${message}`);
   }
 
   // 6. §1: Effective Playwright Runner Timeout Table

@@ -17,17 +17,23 @@ describe("B3: Search match context (matchSnippet)", () => {
         {
           id: "m1",
           role: "user",
-          content: "Please check the database migration for the quantum_flux_capacitor table in production.",
+          content:
+            "Please check the database migration for the quantum_flux_capacitor table in production.",
           timestamp: new Date().toISOString(),
         },
       ];
       store.saveThread(thread);
 
-      const summaries = await (store as any).listThreadSummaries("quantum_flux_capacitor");
-      const found = summaries.find((s: any) => s.id === thread.id);
+      const summaries = await (
+        store as unknown as {
+          listThreadSummaries: (q: string) => Promise<Array<{ id: string; matchSnippet?: string }>>;
+        }
+      ).listThreadSummaries("quantum_flux_capacitor");
+      const found = summaries.find((s) => s.id === thread.id);
       assert.ok(found, "Expected thread matching body-only query");
       assert.ok(
-        typeof found.matchSnippet === "string" && found.matchSnippet.toLowerCase().includes("quantum_flux_capacitor"),
+        typeof found.matchSnippet === "string" &&
+          found.matchSnippet.toLowerCase().includes("quantum_flux_capacitor"),
         `Expected matchSnippet containing query, got: ${found.matchSnippet}`
       );
     } finally {
@@ -36,8 +42,14 @@ describe("B3: Search match context (matchSnippet)", () => {
   });
 
   it("ThreadsSidebar.tsx and NavigationDrawer.tsx render matchSnippet highlighted under the title", () => {
-    const sidebarSrc = fs.readFileSync(path.join(webUiRoot, "components", "ThreadsSidebar.tsx"), "utf8");
-    const drawerSrc = fs.readFileSync(path.join(webUiRoot, "components", "NavigationDrawer.tsx"), "utf8");
+    const sidebarSrc = fs.readFileSync(
+      path.join(webUiRoot, "components", "ThreadsSidebar.tsx"),
+      "utf8"
+    );
+    const drawerSrc = fs.readFileSync(
+      path.join(webUiRoot, "components", "NavigationDrawer.tsx"),
+      "utf8"
+    );
     assert.ok(sidebarSrc.includes("matchSnippet"), "ThreadsSidebar.tsx must render matchSnippet");
     assert.ok(drawerSrc.includes("matchSnippet"), "NavigationDrawer.tsx must render matchSnippet");
   });

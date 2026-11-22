@@ -3,16 +3,15 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { createCriticWorker } from "../lib/subagents/workerPool.js";
-import { Milestone, AssertionContract } from "../lib/subagents/types.js";
+import { Milestone } from "../lib/subagents/types.js";
 import {
   checkOllama,
   enableOllamaMock,
   disableOllamaMock,
-  logServiceMode
+  logServiceMode,
 } from "./helpers/serviceMocks.js";
 
 describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
-
   let useRealOllama = false;
 
   before(async () => {
@@ -30,7 +29,11 @@ describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
     try {
       const targetFile = path.join(tmpDir, "service.ts");
-      fs.writeFileSync(targetFile, "export const PORT = 8080;\nexport const TIMEOUT = 5000;", "utf8");
+      fs.writeFileSync(
+        targetFile,
+        "export const PORT = 8080;\nexport const TIMEOUT = 5000;",
+        "utf8"
+      );
 
       const milestone: Milestone = {
         id: "M-CONTRACT-1",
@@ -44,27 +47,27 @@ describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
           {
             type: "file_exists",
             target: targetFile,
-            description: "Service configuration file must exist"
+            description: "Service configuration file must exist",
           },
           {
             type: "output_contains",
             target: targetFile,
             expected: "PORT = 8080",
-            description: "Must bind to port 8080"
+            description: "Must bind to port 8080",
           },
           {
             type: "no_hardcoded_values",
             target: targetFile,
             expected: "PORT = 3000",
-            description: "Must not contain default port 3000"
-          }
-        ]
+            description: "Must not contain default port 3000",
+          },
+        ],
       };
 
       const critic = createCriticWorker();
       const review = await critic.evaluateMilestoneDiff(milestone, {
         diff: `+ export const PORT = 8080;\n+ export const TIMEOUT = 5000;`,
-        filesChanged: [targetFile]
+        filesChanged: [targetFile],
       });
 
       assert.equal(review.approved, true, "All 3 assertions satisfied must approve");
@@ -93,27 +96,27 @@ describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
           {
             type: "file_exists",
             target: targetFile,
-            description: "File exists"
+            description: "File exists",
           },
           {
             type: "output_contains",
             target: targetFile,
             expected: "PORT = 8080",
-            description: "Has port"
+            description: "Has port",
           },
           {
             type: "output_contains",
             target: targetFile,
             expected: "TIMEOUT = 5000",
-            description: "Must have timeout"
-          }
-        ]
+            description: "Must have timeout",
+          },
+        ],
       };
 
       const critic = createCriticWorker();
       const review = await critic.evaluateMilestoneDiff(milestone, {
         diff: `+ export const PORT = 8080;`,
-        filesChanged: [targetFile]
+        filesChanged: [targetFile],
       });
 
       assert.equal(review.approved, false, "Failing 1 assertion must reject");
@@ -138,14 +141,14 @@ describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
       acceptanceCriteria: [
         {
           id: "AC-LEGACY-1",
-          assertion: "browser-mcp must be on egress-mesh network"
-        }
-      ]
+          assertion: "browser-mcp must be on egress-mesh network",
+        },
+      ],
     };
 
     const critic = createCriticWorker();
     const review = await critic.evaluateMilestoneDiff(milestone, {
-      diff: "+ browser-mcp attached to egress-mesh"
+      diff: "+ browser-mcp attached to egress-mesh",
     });
 
     assert.equal(review.approved, true, "Legacy check must pass with conforming criteria");
@@ -169,15 +172,15 @@ describe("Phase 2 — Item 3: Deliverable Contracts Suite", () => {
           {
             type: "file_exists",
             target: targetFile,
-            description: "Check config file exists"
-          }
-        ]
+            description: "Check config file exists",
+          },
+        ],
       };
 
       const critic = createCriticWorker();
       const review = await critic.evaluateMilestoneDiff(milestone, {
-        diff: "+ {\"active\": true}",
-        filesChanged: [targetFile]
+        diff: '+ {"active": true}',
+        filesChanged: [targetFile],
       });
 
       assert.equal(review.approved, true);

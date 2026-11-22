@@ -13,7 +13,9 @@ test.describe("Phase B1 — Saturation and overflow @chaos", () => {
     await setupStubbedEngineRoutes(page);
   });
 
-  test("Queue 20+ items with long text; Clear all works and no horizontal overflow", async ({ page }) => {
+  test("Queue 20+ items with long text; Clear all works and no horizontal overflow", async ({
+    page,
+  }) => {
     await page.route("**/api/chat", async (route) => {
       await new Promise((r) => setTimeout(r, 20000));
       await route.fulfill({
@@ -27,7 +29,9 @@ test.describe("Phase B1 — Saturation and overflow @chaos", () => {
     const composer = page.locator("textarea").first();
     await composer.fill("Stream starter");
     await composer.press("Enter");
-    await expect(page.locator('button[aria-label="Stop generating"], button[title*="Stop"]').first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator('button[aria-label="Stop generating"], button[title*="Stop"]').first()
+    ).toBeVisible({ timeout: 5000 });
 
     const queueBtn = page.locator('button[aria-label="Enqueue message"]').first();
     for (let i = 0; i < 20; i++) {
@@ -50,7 +54,9 @@ test.describe("Phase B1 — Saturation and overflow @chaos", () => {
     await expect(queueDeck).toHaveCount(0);
   });
 
-  test("Board column with 50 cards & drawer with 100+ threads: render & scroll hold", async ({ page }) => {
+  test("Board column with 50 cards & drawer with 100+ threads: render & scroll hold", async ({
+    page,
+  }) => {
     const threads = Array.from({ length: 105 }, (_, i) => ({
       id: `thr-${i}`,
       title: `Thread ${i} ${"Topic".repeat(3)}`,
@@ -102,7 +108,9 @@ test.describe("Phase B1 — Saturation and overflow @chaos", () => {
     expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
   });
 
-  test("1 MB paste into chat input & 10,000-char unbroken string: no crash, no layout break", async ({ page }) => {
+  test("1 MB paste into chat input & 10,000-char unbroken string: no crash, no layout break", async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     await page.goto("/");
     const composer = page.locator("textarea").first();

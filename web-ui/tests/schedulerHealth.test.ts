@@ -9,7 +9,10 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
   let testWorkspace: string;
 
   function setup() {
-    testWorkspace = path.resolve(process.cwd(), `temp-test-health-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    testWorkspace = path.resolve(
+      process.cwd(),
+      `temp-test-health-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    );
     process.env.WORKSPACE_DIR = testWorkspace;
     resetGlobalScheduler();
     if (!fs.existsSync(testWorkspace)) fs.mkdirSync(testWorkspace, { recursive: true });
@@ -31,7 +34,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
         pid: 12345,
         startedAt: new Date(Date.now() - 60000).toISOString(),
         lastTick: new Date(Date.now() - 30000).toISOString(),
-        active: true
+        active: true,
       };
       fs.writeFileSync(daemonHbPath, JSON.stringify(hb, null, 2), "utf8");
 
@@ -57,7 +60,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
         pid: 12345,
         startedAt: new Date(Date.now() - 600000).toISOString(),
         lastTick: new Date(Date.now() - 360000).toISOString(), // 6 minutes ago
-        active: true
+        active: true,
       };
       fs.writeFileSync(daemonHbPath, JSON.stringify(hb, null, 2), "utf8");
 
@@ -81,7 +84,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
         pid: 12345,
         startedAt: new Date(Date.now() - 60000).toISOString(),
         lastTick: new Date().toISOString(),
-        active: false
+        active: false,
       };
       fs.writeFileSync(daemonHbPath, JSON.stringify(hb, null, 2), "utf8");
 
@@ -137,7 +140,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
           pid: 54321,
           startedAt: new Date(Date.now() - 10000).toISOString(),
           lastTick: new Date().toISOString(),
-          active: true
+          active: true,
         }),
         "utf8"
       );
@@ -151,7 +154,7 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
           scheduleId: "sched-001",
           lastHeartbeat: new Date().toISOString(),
           attempt: 1,
-          active: true
+          active: true,
         }),
         "utf8"
       );
@@ -163,7 +166,12 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
         schedulesPath,
         JSON.stringify([
           { id: "s1", cronExpression: "0 2 * * *", enabled: true, nextRun: nextRunFuture },
-          { id: "s2", cronExpression: "0 3 * * *", enabled: false, nextRun: new Date(Date.now() + 7200000).toISOString() }
+          {
+            id: "s2",
+            cronExpression: "0 3 * * *",
+            enabled: false,
+            nextRun: new Date(Date.now() + 7200000).toISOString(),
+          },
         ]),
         "utf8"
       );
@@ -180,6 +188,61 @@ describe("Phase 4 Follow-up: Scheduler Health API Test Suite", () => {
       assert.equal(data.schedules.nextRun, nextRunFuture);
     } finally {
       teardown();
+    }
+  });
+
+  it("instrumentation register() does not start daemon when SCHEDULER_DAEMON_ENABLED is unset or not 'true'", async () => {
+    const { register } = await import("../instrumentation.js");
+    const prevEnv = process.env.SCHEDULER_DAEMON_ENABLED;
+    const g = globalThis as typeof globalThis & { __schedulerDaemonStarted?: boolean };
+    const prevStarted = g.__schedulerDaemonStarted;
+    try {
+      delete g.__schedulerDaemonStarted;
+      delete process.env.SCHEDULER_DAEMON_ENABLED;
+      let calls = 0;
+      const startedUnset = await register(async () => {
+        calls++;
+      });
+      assert.equal(startedUnset, false);
+      assert.equal(calls, 0);
+
+      process.env.SCHEDULER_DAEMON_ENABLED = "false";
+      const startedFalse = await register(async () => {
+        calls++;
+      });
+      assert.equal(startedFalse, false);
+      assert.equal(calls, 0);
+    } finally {
+      if (prevEnv === undefined) delete process.env.SCHEDULER_DAEMON_ENABLED;
+      else process.env.SCHEDULER_DAEMON_ENABLED = prevEnv;
+      if (prevStarted === undefined) delete g.__schedulerDaemonStarted;
+      else g.__schedulerDaemonStarted = prevStarted;
+    }
+  });
+
+  it("instrumentation register() starts daemon once when SCHEDULER_DAEMON_ENABLED === 'true'", async () => {
+    const { register } = await import("../instrumentation.js");
+    const prevEnv = process.env.SCHEDULER_DAEMON_ENABLED;
+    const g = globalThis as typeof globalThis & { __schedulerDaemonStarted?: boolean };
+    const prevStarted = g.__schedulerDaemonStarted;
+    try {
+      delete g.__schedulerDaemonStarted;
+      process.env.SCHEDULER_DAEMON_ENABLED = "true";
+      let calls = 0;
+      const first = await register(async () => {
+        calls++;
+      });
+      const second = await register(async () => {
+        calls++;
+      });
+      assert.equal(first, true);
+      assert.equal(second, false);
+      assert.equal(calls, 1);
+    } finally {
+      if (prevEnv === undefined) delete process.env.SCHEDULER_DAEMON_ENABLED;
+      else process.env.SCHEDULER_DAEMON_ENABLED = prevEnv;
+      if (prevStarted === undefined) delete g.__schedulerDaemonStarted;
+      else g.__schedulerDaemonStarted = prevStarted;
     }
   });
 });

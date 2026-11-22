@@ -3,10 +3,9 @@ import assert from "node:assert/strict";
 import {
   parseSimulateCommand,
   getScenario,
-  SIMULATION_SCENARIOS,
   createSimulatedChatResponse,
   runSimulatedTask,
-  SimulationScenarioKey
+  SimulationScenarioKey,
 } from "../lib/simulator/index";
 import type { TaskManifest } from "../lib/subagents/types";
 
@@ -49,7 +48,7 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
       "build-retry",
       "engine-stop",
       "project-task",
-      "backend-down"
+      "backend-down",
     ];
 
     for (const key of requiredKeys) {
@@ -65,7 +64,10 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
       if (scenario.mode === "build" || key === "project-task") {
         assert.ok(scenario.initialTask, `Build scenario ${key} must provide initialTask`);
         assert.ok(scenario.initialTask.taskId, `initialTask must have a taskId`);
-        assert.ok(Array.isArray(scenario.initialTask.milestones), `initialTask must have milestones`);
+        assert.ok(
+          Array.isArray(scenario.initialTask.milestones),
+          `initialTask must have milestones`
+        );
       }
     }
   });
@@ -77,15 +79,17 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
 
     // Trace 1: Failed SQLite command
     const failedTrace = traces[0].trace;
+    assert.ok(failedTrace);
     assert.strictEqual(failedTrace.tool, "execute_sandboxed_command");
-    assert.strictEqual(failedTrace.result.exitCode, 1);
-    assert.ok(failedTrace.result.stderr.includes("unable to open database file"));
+    assert.strictEqual(failedTrace.result?.exitCode, 1);
+    assert.ok(failedTrace.result?.stderr?.includes("unable to open database file"));
 
     // Trace 2: Workspace fallback
     const fallbackTrace = traces[1].trace;
+    assert.ok(fallbackTrace);
     assert.strictEqual(fallbackTrace.tool, "workspace_read_file");
-    assert.strictEqual(fallbackTrace.result.success, true);
-    assert.ok(fallbackTrace.result.content.includes("142"));
+    assert.strictEqual(fallbackTrace.result?.success, true);
+    assert.ok(fallbackTrace.result?.content?.includes("142"));
   });
 
   it("build-retry scenario includes critic rejection and iteration 2 approval", () => {
@@ -93,15 +97,11 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
     const taskUpdates = scenario.events.filter((e) => e.type === "task_update");
     assert.ok(taskUpdates.length >= 2, "Must contain at least 2 task updates");
 
-    const failedUpdate = taskUpdates.find(
-      (u) => u.task?.milestones[0].criticVerdict === "FAIL"
-    );
+    const failedUpdate = taskUpdates.find((u) => u.task?.milestones[0].criticVerdict === "FAIL");
     assert.ok(failedUpdate, "Must contain a task update with criticVerdict FAIL");
     assert.ok(failedUpdate.task?.milestones[0].criticCritique?.includes("SyntaxError"));
 
-    const passedUpdate = taskUpdates.find(
-      (u) => u.task?.milestones[0].criticVerdict === "PASS"
-    );
+    const passedUpdate = taskUpdates.find((u) => u.task?.milestones[0].criticVerdict === "PASS");
     assert.ok(passedUpdate, "Must contain a subsequent task update with criticVerdict PASS");
     assert.strictEqual(passedUpdate.task?.milestones[0].builderIterations, 2);
   });
@@ -123,10 +123,10 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
       accumulated += decoder.decode(value);
     }
 
-    assert.ok(accumulated.includes("data: {\"type\":\"meta\""));
-    assert.ok(accumulated.includes("data: {\"type\":\"status\""));
-    assert.ok(accumulated.includes("data: {\"type\":\"token\""));
-    assert.ok(accumulated.includes("data: {\"type\":\"done\""));
+    assert.ok(accumulated.includes('data: {"type":"meta"'));
+    assert.ok(accumulated.includes('data: {"type":"status"'));
+    assert.ok(accumulated.includes('data: {"type":"token"'));
+    assert.ok(accumulated.includes('data: {"type":"done"'));
   });
 
   it("createSimulatedChatResponse honors AbortSignal immediately", async () => {
@@ -157,7 +157,7 @@ describe("Simulation Mode Engine & Scenarios Suite", () => {
       "build-run",
       50, // fast
       {
-        onTaskUpdate: (task) => updates.push(task)
+        onTaskUpdate: (task) => updates.push(task),
       },
       controller.signal
     );

@@ -3,7 +3,7 @@ import {
   createOllamaGenerate,
   isFastGraphTestMode,
   stripCodeFence,
-  type GenerateFn
+  type GenerateFn,
 } from "./llmClient";
 import { FlywheelSkillsStore, formatSkillsForPlannerPrompt } from "../flywheel/skillsStore";
 import type { WorkspaceRepoMap } from "./workerPool";
@@ -41,7 +41,8 @@ export function classifyTaskComplexity(goal: string): TaskComplexity {
   const normalized = goal.trim().toLowerCase();
 
   // 1. Single artifact patterns: "create a [filetype]", "generate a [filetype]", "make me a [filetype]"
-  const artifactPattern = /\b(create|generate|make|build|write)\s+(me\s+)?(a|an)\s+(svg|html|json|csv|md|markdown|txt|png|yaml|yml)\b/i;
+  const artifactPattern =
+    /\b(create|generate|make|build|write)\s+(me\s+)?(a|an)\s+(svg|html|json|csv|md|markdown|txt|png|yaml|yml)\b/i;
   if (artifactPattern.test(normalized)) {
     return "SINGLE_ARTIFACT";
   }
@@ -63,7 +64,8 @@ export function classifyTaskComplexity(goal: string): TaskComplexity {
   }
 
   // 3. Simple script patterns: "write a python script", "create a small utility", "make a bash script"
-  const scriptPattern = /\b(single script|small utility|utility script|python script|node script|bash script|shell script|script to)\b/i;
+  const scriptPattern =
+    /\b(single script|small utility|utility script|python script|node script|bash script|shell script|script to)\b/i;
   if (scriptPattern.test(normalized)) {
     return "SIMPLE_SCRIPT";
   }
@@ -102,7 +104,7 @@ const PROSE_TECH_NAMES = new Set([
   "leaflet.js",
   "p5.js",
   "bun.js",
-  "deno.js"
+  "deno.js",
 ]);
 
 function extractCandidateFilePaths(goal: string): string[] {
@@ -130,7 +132,9 @@ function extractCandidateFilePaths(goal: string): string[] {
  * Extracts the single artifact file name or default from a SINGLE_ARTIFACT or SNIPPET goal.
  * Returns null if no real file path or explicit filetype creation target is present.
  */
-export function resolveSingleArtifactFile(goal: string): { filename: string; filetype: string } | null {
+export function resolveSingleArtifactFile(
+  goal: string
+): { filename: string; filetype: string } | null {
   const candidates = extractCandidateFilePaths(goal);
   if (candidates.length > 0) {
     // Prefer path-like matches (containing '/') over bare filenames, then longest match.
@@ -190,31 +194,59 @@ export function resolveSingleArtifactFile(goal: string): { filename: string; fil
  * Normalizes a raw milestone object, guaranteeing proper IDs, defaults,
  * and synthesizing test commands from testFile if criteria omitted command.
  */
-export function normalizeMilestone(m: any, idx: number = 0): Milestone {
+interface RawAcceptanceCriterion {
+  id?: string;
+  assertion?: string;
+  fileMatch?: string;
+  command?: string;
+}
+
+interface RawMilestoneInput {
+  id?: string;
+  title?: string;
+  description?: string;
+  status?: Milestone["status"];
+  builderIterations?: number;
+  criticRounds?: number;
+  synthetic?: boolean;
+  plannedFiles?: string[];
+  testFile?: string;
+  skipCriticOnValidSyntax?: boolean;
+  taskComplexity?: Milestone["taskComplexity"];
+  acceptanceCriteria?: RawAcceptanceCriterion[];
+  [key: string]: unknown;
+}
+
+export function normalizeMilestone(m: RawMilestoneInput, idx: number = 0): Milestone {
   const milestoneId = m.id || `M${idx + 1}`;
   const plannedFiles = Array.isArray(m.plannedFiles) ? m.plannedFiles : [];
-  const testFile = m.testFile || plannedFiles.find((f: string) => f && (f.includes(".test.") || f.includes(".spec.") || f.startsWith("tests/")));
+  const testFile =
+    m.testFile ||
+    plannedFiles.find(
+      (f: string) => f && (f.includes(".test.") || f.includes(".spec.") || f.startsWith("tests/"))
+    );
 
-  let acceptanceCriteria: AcceptanceCriterion[] = Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0
-    ? m.acceptanceCriteria.map((ac: any, acIdx: number) => {
-        let command = ac.command;
-        if (!command && testFile) {
-          command = `npx tsx --test ${testFile}`;
-        }
-        return {
-          id: ac.id || `AC-${idx + 1}-${acIdx + 1}`,
-          assertion: ac.assertion || "Criterion met",
-          fileMatch: ac.fileMatch,
-          command
-        };
-      })
-    : [
-        {
-          id: `AC-${idx + 1}-1`,
-          assertion: "Milestone completed successfully",
-          command: testFile ? `npx tsx --test ${testFile}` : undefined
-        }
-      ];
+  const acceptanceCriteria: AcceptanceCriterion[] =
+    Array.isArray(m.acceptanceCriteria) && m.acceptanceCriteria.length > 0
+      ? m.acceptanceCriteria.map((ac, acIdx: number) => {
+          let command = ac.command;
+          if (!command && testFile) {
+            command = `npx tsx --test ${testFile}`;
+          }
+          return {
+            id: ac.id || `AC-${idx + 1}-${acIdx + 1}`,
+            assertion: ac.assertion || "Criterion met",
+            fileMatch: ac.fileMatch,
+            command,
+          };
+        })
+      : [
+          {
+            id: `AC-${idx + 1}-1`,
+            assertion: "Milestone completed successfully",
+            command: testFile ? `npx tsx --test ${testFile}` : undefined,
+          },
+        ];
 
   if (testFile && !acceptanceCriteria.some((c) => Boolean(c.command))) {
     acceptanceCriteria[0].command = `npx tsx --test ${testFile}`;
@@ -232,7 +264,7 @@ export function normalizeMilestone(m: any, idx: number = 0): Milestone {
     testFile,
     skipCriticOnValidSyntax: m.skipCriticOnValidSyntax,
     taskComplexity: m.taskComplexity,
-    acceptanceCriteria
+    acceptanceCriteria,
   };
 }
 
@@ -244,7 +276,9 @@ export function normalizeMilestone(m: any, idx: number = 0): Milestone {
  * Resilient JSON repair and parser for autonomous planner responses.
  * Recovers valid milestones from truncated or slightly malformed JSON.
  */
-export function repairAndParsePlanJson(rawText: string): { milestones: any[] } | null {
+export function repairAndParsePlanJson(
+  rawText: string
+): { milestones: RawMilestoneInput[] } | null {
   if (!rawText || !rawText.trim()) return null;
   const stripped = stripCodeFence(rawText).trim();
 
@@ -267,7 +301,7 @@ export function repairAndParsePlanJson(rawText: string): { milestones: any[] } |
   // 3. Stack-based delimiter balancing
   try {
     let repaired = candidate.trim().replace(/,\s*$/, "");
-    
+
     // Balance trailing quotes if odd count
     const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
     if (quoteCount % 2 !== 0) repaired += '"';
@@ -296,9 +330,9 @@ export function repairAndParsePlanJson(rawText: string): { milestones: any[] } |
       }
       if (inString) continue;
 
-      if (ch === '{') stack.push('}');
-      else if (ch === '[') stack.push(']');
-      else if (ch === '}' || ch === ']') {
+      if (ch === "{") stack.push("}");
+      else if (ch === "[") stack.push("]");
+      else if (ch === "}" || ch === "]") {
         if (stack.length > 0 && stack[stack.length - 1] === ch) {
           stack.pop();
         }
@@ -317,7 +351,9 @@ export function repairAndParsePlanJson(rawText: string): { milestones: any[] } |
   } catch {}
 
   // 4. Regex extraction of complete milestone objects if syntax repair failed
-  const matches = [...stripped.matchAll(/\{\s*"id"\s*:\s*"(M\d+)"\s*,\s*"title"\s*:\s*"([^"]+)"[\s\S]*?\}/g)];
+  const matches = [
+    ...stripped.matchAll(/\{\s*"id"\s*:\s*"(M\d+)"\s*,\s*"title"\s*:\s*"([^"]+)"[\s\S]*?\}/g),
+  ];
   if (matches.length > 0) {
     const recovered = [];
     for (const m of matches) {
@@ -354,7 +390,7 @@ function validateRelativePlanPath(filePath: string): boolean {
 
 export function validatePlanSpecMilestones(
   milestones: Milestone[],
-  rawMilestones?: any[]
+  rawMilestones?: RawMilestoneInput[]
 ): void {
   if (!Array.isArray(milestones) || milestones.length === 0) {
     throw new Error("Invalid PlanSpec: planner produced empty milestones.");
@@ -365,11 +401,14 @@ export function validatePlanSpecMilestones(
     if (Array.isArray(m.plannedFiles)) {
       for (const f of m.plannedFiles) {
         if (typeof f !== "string" || !validateRelativePlanPath(f)) {
-          throw new Error(`Invalid PlanSpec: milestone ${m.id} has invalid relative plannedFiles path "${String(f)}".`);
+          throw new Error(
+            `Invalid PlanSpec: milestone ${m.id} has invalid relative plannedFiles path "${String(f)}".`
+          );
         }
       }
     }
-    const explicitlyEmptyAc = raw && Array.isArray(raw.acceptanceCriteria) && raw.acceptanceCriteria.length === 0;
+    const explicitlyEmptyAc =
+      raw && Array.isArray(raw.acceptanceCriteria) && raw.acceptanceCriteria.length === 0;
     if (explicitlyEmptyAc) {
       throw new Error(`Invalid PlanSpec: milestone ${m.id} has empty acceptanceCriteria.`);
     }
@@ -437,14 +476,17 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
           {
             id: "AC-1-1",
             assertion: `File "${filename}" exists, is valid (well-formed ${filetype.toUpperCase()}), and matches the request.`,
-            fileMatch: filename
-          }
-        ]
-      }
+            fileMatch: filename,
+          },
+        ],
+      },
     ];
   } else if (!isSynthetic) {
-    const generate = input.generate || createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000, scope: userScope });
-    const modelToUse = input.model || process.env.PLANNER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
+    const generate =
+      input.generate ||
+      createOllamaGenerate({ baseUrl: input.ollamaUrl, timeoutMs: 300_000, scope: userScope });
+    const modelToUse =
+      input.model || process.env.PLANNER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 
     let retrievedPatternsContext = "";
     try {
@@ -461,8 +503,9 @@ export async function generatePlanSpec(input: PlanSpecInput): Promise<PlanSpec> 
       // Best-effort retrieval; ignore if skills store unavailable
     }
 
-    const basePrompt = (userScope === "SCRIPT" || complexity === "SIMPLE_SCRIPT")
-      ? `You are an expert autonomous engineering planner. Decompose the following simple script/utility goal into 1 to 2 focused, progressive milestones with machine-checkable acceptance criteria. Be concise. No package.json, no build pipeline, no test scaffolding unless requested.
+    const basePrompt =
+      userScope === "SCRIPT" || complexity === "SIMPLE_SCRIPT"
+        ? `You are an expert autonomous engineering planner. Decompose the following simple script/utility goal into 1 to 2 focused, progressive milestones with machine-checkable acceptance criteria. Be concise. No package.json, no build pipeline, no test scaffolding unless requested.
 
 Goal: ${goal}
 Toolchain: ${toolchain}
@@ -486,7 +529,7 @@ Respond strictly in valid JSON matching this schema:
     }
   ]
 }`
-      : `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria. Be concise.
+        : `You are an expert autonomous engineering planner. Decompose the following goal into 3 to 5 verifiable, progressive milestones with machine-checkable acceptance criteria. Be concise.
 
 Goal: ${goal}
 Toolchain: ${toolchain}
@@ -513,9 +556,11 @@ Respond strictly in valid JSON matching this schema:
 
     let repoMapContext = "";
     if (input.repoMap) {
-      const formattedMap = typeof input.repoMap === "string"
-        ? input.repoMap
-        : input.repoMap.treeSummary || input.repoMap.files.map((f) => `${f.path}: ${f.exports.join(", ")}`).join("\r\n");
+      const formattedMap =
+        typeof input.repoMap === "string"
+          ? input.repoMap
+          : input.repoMap.treeSummary ||
+            input.repoMap.files.map((f) => `${f.path}: ${f.exports.join(", ")}`).join("\r\n");
       repoMapContext = `Workspace Repository Map (existing files & symbols):\r\n${formattedMap.slice(0, 10000)}\r\nTarget real existing files from this map when modifying existing functionality, or follow established folder structure for new deliverables. Provide executable acceptance test commands.`;
     }
 
@@ -525,7 +570,7 @@ Respond strictly in valid JSON matching this schema:
     const prompt = promptParts.join("\r\n\r\n");
 
     const MAX_PLAN_SPEC_ATTEMPTS = 3;
-    let rawList: any[] | undefined;
+    let rawList: RawMilestoneInput[] | undefined;
     for (let attempt = 1; attempt <= MAX_PLAN_SPEC_ATTEMPTS; attempt++) {
       const attemptPrompt =
         attempt === 1
@@ -538,14 +583,14 @@ Respond strictly in valid JSON matching this schema:
         format: "json",
         keepAlive: input.keepAlive ?? "30m",
         reasoningEffort: "balanced",
-        options: { temperature: 0.2, num_predict: 4096 }
+        options: { temperature: 0.2, num_predict: 4096 },
       });
 
       const parsed = repairAndParsePlanJson(res.text);
       if (parsed && Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
         // Respect SCRIPT cap of 2 milestones max
         rawList = userScope === "SCRIPT" ? parsed.milestones.slice(0, 2) : parsed.milestones;
-        milestones = rawList.map((m: any, idx: number) => normalizeMilestone(m, idx));
+        milestones = rawList.map((m, idx: number) => normalizeMilestone(m, idx));
         validatePlanSpecMilestones(milestones, rawList);
         break;
       }
@@ -559,136 +604,151 @@ Respond strictly in valid JSON matching this schema:
 
   if (milestones.length === 0) {
     if (!isFastGraphTestMode()) {
-      throw new Error(`Planner model failed to generate plan and FAST_GRAPH_TEST is not enabled for goal: "${goal}"`);
+      throw new Error(
+        `Planner model failed to generate plan and FAST_GRAPH_TEST is not enabled for goal: "${goal}"`
+      );
     }
-    console.warn(`[Planner] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback plan for goal: "${goal}"`);
+    console.warn(
+      `[Planner] Warning: FAST_GRAPH_TEST mode active. Engaging deterministic fallback plan for goal: "${goal}"`
+    );
     // Deterministic fallback for FAST_GRAPH_TEST mode
     if (goal.toLowerCase().includes("draw.io") || goal.toLowerCase().includes("diagram")) {
-    milestones.push({
-      id: "M1",
-      title: "Inventory Platform Topology & Container Boundaries",
-      description: "Inspect docker-compose.yml, deploy/ manifests, and ARCHITECTURE.md to catalog all services, networks, ports, and volumes.",
-      status: "pending",
-      builderIterations: 0,
-      criticRounds: 0,
-      synthetic: true,
-      plannedFiles: ["deploy/topology-catalog.json"],
-      acceptanceCriteria: [
-        {
-          id: "AC-1-1",
-          assertion: "Topology catalog contains mcp-runner, browser-mcp, web-ui, otel-collector, and llm-service boundaries",
-          fileMatch: "deploy/topology-catalog.json"
-        },
-        {
-          id: "AC-1-2",
-          assertion: "Network isolation cataloged for ai-mesh (zero egress) and egress-mesh",
-          fileMatch: "deploy/topology-catalog.json"
-        }
-      ]
-    });
+      milestones.push({
+        id: "M1",
+        title: "Inventory Platform Topology & Container Boundaries",
+        description:
+          "Inspect docker-compose.yml, deploy/ manifests, and ARCHITECTURE.md to catalog all services, networks, ports, and volumes.",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: true,
+        plannedFiles: ["deploy/topology-catalog.json"],
+        acceptanceCriteria: [
+          {
+            id: "AC-1-1",
+            assertion:
+              "Topology catalog contains mcp-runner, browser-mcp, web-ui, otel-collector, and llm-service boundaries",
+            fileMatch: "deploy/topology-catalog.json",
+          },
+          {
+            id: "AC-1-2",
+            assertion: "Network isolation cataloged for ai-mesh (zero egress) and egress-mesh",
+            fileMatch: "deploy/topology-catalog.json",
+          },
+        ],
+      });
 
-    milestones.push({
-      id: "M2",
-      title: "Generate Valid Draw.io XML Architecture Diagram",
-      description: "Synthesize complete multi-container system graph with host ROCm passthrough into docs/architecture.drawio.",
-      status: "pending",
-      builderIterations: 0,
-      criticRounds: 0,
-      synthetic: true,
-      plannedFiles: ["docs/architecture.drawio", "docs/architecture.drawio.svg"],
-      acceptanceCriteria: [
-        {
-          id: "AC-2-1",
-          assertion: "File docs/architecture.drawio exists with valid mxfile XML root and background=#ffffff",
-          fileMatch: "docs/architecture.drawio",
-          command: "node -e \"const fs = require('fs'); const content = fs.readFileSync('docs/architecture.drawio', 'utf8'); if (!content.includes('<mxfile') || !content.includes('background=\\\"#ffffff\\\"')) process.exit(1);\""
-        },
-        {
-          id: "AC-2-2",
-          assertion: "Vector diagram docs/architecture.drawio.svg exists and renders valid XML root with clean fill=none connectors",
-          fileMatch: "docs/architecture.drawio.svg",
-          command: "node -e \"const fs = require('fs'); const content = fs.readFileSync('docs/architecture.drawio.svg', 'utf8'); if (!content.includes('<svg') || content.includes('polygon-error')) process.exit(1);\""
-        }
-      ]
-    });
+      milestones.push({
+        id: "M2",
+        title: "Generate Valid Draw.io XML Architecture Diagram",
+        description:
+          "Synthesize complete multi-container system graph with host ROCm passthrough into docs/architecture.drawio.",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: true,
+        plannedFiles: ["docs/architecture.drawio", "docs/architecture.drawio.svg"],
+        acceptanceCriteria: [
+          {
+            id: "AC-2-1",
+            assertion:
+              "File docs/architecture.drawio exists with valid mxfile XML root and background=#ffffff",
+            fileMatch: "docs/architecture.drawio",
+            command:
+              "node -e \"const fs = require('fs'); const content = fs.readFileSync('docs/architecture.drawio', 'utf8'); if (!content.includes('<mxfile') || !content.includes('background=\\\"#ffffff\\\"')) process.exit(1);\"",
+          },
+          {
+            id: "AC-2-2",
+            assertion:
+              "Vector diagram docs/architecture.drawio.svg exists and renders valid XML root with clean fill=none connectors",
+            fileMatch: "docs/architecture.drawio.svg",
+            command:
+              "node -e \"const fs = require('fs'); const content = fs.readFileSync('docs/architecture.drawio.svg', 'utf8'); if (!content.includes('<svg') || content.includes('polygon-error')) process.exit(1);\"",
+          },
+        ],
+      });
 
-    milestones.push({
-      id: "M3",
-      title: "Embed Diagram in Documentation & Verify Zero Discrepancies",
-      description: "Verify README.md and ARCHITECTURE.md embed the diagram and match the latest security boundary matrix.",
-      status: "pending",
-      builderIterations: 0,
-      criticRounds: 0,
-      synthetic: true,
-      plannedFiles: ["docs/topology-matrix.md"],
-      acceptanceCriteria: [
-        {
-          id: "AC-3-1",
-          assertion: "Documentation matrix references docs/architecture.drawio.svg",
-          fileMatch: "docs/topology-matrix.md",
-          command: "node -e \"const fs = require('fs'); const r = fs.readFileSync('docs/topology-matrix.md', 'utf8'); if (!r.includes('architecture.drawio.svg')) process.exit(1);\""
-        },
-        {
-          id: "AC-3-2",
-          assertion: "Unit and component test suites exit code 0 across workspaces",
-          command: "npm test"
-        }
-      ]
-    });
-  } else {
-    // General software engineering task decomposition
-    milestones.push({
-      id: "M1",
-      title: "Reconnaissance & Failing Test Fixture",
-      description: "Analyze existing source files, define interfaces, and write failing test assertions.",
-      status: "pending",
-      builderIterations: 0,
-      criticRounds: 0,
-      synthetic: true,
-      acceptanceCriteria: [
-        {
-          id: "AC-1-1",
-          assertion: "Test suite fixture created with explicit expected assertions",
-          command: "npm test"
-        }
-      ]
-    });
+      milestones.push({
+        id: "M3",
+        title: "Embed Diagram in Documentation & Verify Zero Discrepancies",
+        description:
+          "Verify README.md and ARCHITECTURE.md embed the diagram and match the latest security boundary matrix.",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: true,
+        plannedFiles: ["docs/topology-matrix.md"],
+        acceptanceCriteria: [
+          {
+            id: "AC-3-1",
+            assertion: "Documentation matrix references docs/architecture.drawio.svg",
+            fileMatch: "docs/topology-matrix.md",
+            command:
+              "node -e \"const fs = require('fs'); const r = fs.readFileSync('docs/topology-matrix.md', 'utf8'); if (!r.includes('architecture.drawio.svg')) process.exit(1);\"",
+          },
+          {
+            id: "AC-3-2",
+            assertion: "Unit and component test suites exit code 0 across workspaces",
+            command: "npm test",
+          },
+        ],
+      });
+    } else {
+      // General software engineering task decomposition
+      milestones.push({
+        id: "M1",
+        title: "Reconnaissance & Failing Test Fixture",
+        description:
+          "Analyze existing source files, define interfaces, and write failing test assertions.",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: true,
+        acceptanceCriteria: [
+          {
+            id: "AC-1-1",
+            assertion: "Test suite fixture created with explicit expected assertions",
+            command: "npm test",
+          },
+        ],
+      });
 
-    milestones.push({
-      id: "M2",
-      title: "Core Implementation & Self-Correction Loop",
-      description: "Implement functionality and iterate until compiler and tests exit code 0.",
-      status: "pending",
-      builderIterations: 0,
-      criticRounds: 0,
-      synthetic: true,
-      acceptanceCriteria: [
-        {
-          id: "AC-2-1",
-          assertion: "Implementation passes all automated test suites with 0 errors",
-          command: "npm test"
-        }
-      ]
-    });
+      milestones.push({
+        id: "M2",
+        title: "Core Implementation & Self-Correction Loop",
+        description: "Implement functionality and iterate until compiler and tests exit code 0.",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: true,
+        acceptanceCriteria: [
+          {
+            id: "AC-2-1",
+            assertion: "Implementation passes all automated test suites with 0 errors",
+            command: "npm test",
+          },
+        ],
+      });
 
-    milestones.push({
-      id: "M3",
-      title: "Critic Verification, Hygiene & Git Commit",
-      description: "Review diff against acceptance criteria, verify zero regressions, and commit cleanly.",
-      status: "pending",
-      builderIterations: 0,
-      criticRounds: 0,
-      synthetic: true,
-      acceptanceCriteria: [
-        {
-          id: "AC-3-1",
-          assertion: "Git working tree is clean and changes committed with semantic message",
-          command: "git status --porcelain"
-        }
-      ]
-    });
+      milestones.push({
+        id: "M3",
+        title: "Critic Verification, Hygiene & Git Commit",
+        description:
+          "Review diff against acceptance criteria, verify zero regressions, and commit cleanly.",
+        status: "pending",
+        builderIterations: 0,
+        criticRounds: 0,
+        synthetic: true,
+        acceptanceCriteria: [
+          {
+            id: "AC-3-1",
+            assertion: "Git working tree is clean and changes committed with semantic message",
+            command: "git status --porcelain",
+          },
+        ],
+      });
+    }
   }
-}
 
   const spec: PlanSpec = {
     taskId,
@@ -697,7 +757,7 @@ Respond strictly in valid JSON matching this schema:
     scope: userScope,
     complexity,
     milestones,
-    toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones)
+    toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones),
   };
 
   return spec;
@@ -763,7 +823,9 @@ export function parsePlanSpec(markdown: string): PlanSpec {
 
     const criteriaIdx = lines.findIndex((l) => l.toLowerCase().includes("acceptance criteria:"));
     if (criteriaIdx === -1) {
-      throw new Error(`Milestone ${id} must declare explicit machine-checkable acceptance criteria`);
+      throw new Error(
+        `Milestone ${id} must declare explicit machine-checkable acceptance criteria`
+      );
     }
 
     const description = lines.slice(1, criteriaIdx).join("\r\n").trim();
@@ -777,7 +839,7 @@ export function parsePlanSpec(markdown: string): PlanSpec {
         const assertion = cLine.split(/\]\s*(\*\*Assertion\*\*:\s*)?/)[2]?.trim() || cLine;
         acceptanceCriteria.push({
           id: cid,
-          assertion: assertion.replace(/^\*\*Assertion\*\*:\s*/, "")
+          assertion: assertion.replace(/^\*\*Assertion\*\*:\s*/, ""),
         });
       }
     }
@@ -793,7 +855,7 @@ export function parsePlanSpec(markdown: string): PlanSpec {
       status: "pending",
       builderIterations: 0,
       criticRounds: 0,
-      acceptanceCriteria
+      acceptanceCriteria,
     });
   }
 
@@ -807,7 +869,7 @@ export function parsePlanSpec(markdown: string): PlanSpec {
     toolchain,
     complexity: classifyTaskComplexity(goal),
     milestones,
-    toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones)
+    toMarkdown: () => formatSpecMarkdown(taskId, goal, toolchain, milestones),
   };
 }
 
@@ -815,8 +877,7 @@ export const Planner = {
   generatePlan: generatePlanSpec,
   generatePlanSpec,
   parsePlanSpec,
-  classifyTaskComplexity
+  classifyTaskComplexity,
 };
 
 export { generatePlanSpec as generatePlan };
-

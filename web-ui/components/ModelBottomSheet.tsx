@@ -23,15 +23,13 @@ export function ModelBottomSheet({
   reasoningEffort,
   onReasoningChange,
   onReasoningEffortChange,
-  installedModels = []
+  installedModels = [],
 }: ModelBottomSheetProps) {
   const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting">("running");
   const [engineLoading, setEngineLoading] = useState(false);
-  const [confirmingStop, setConfirmingStop] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
 
   useEffect(() => {
-    setConfirmingStop(false);
     setEngineError(null);
   }, [isOpen]);
 
@@ -62,12 +60,11 @@ export function ModelBottomSheet({
     const action = engineStatus === "running" ? "stop" : "start";
     setEngineLoading(true);
     setEngineError(null);
-    setConfirmingStop(false);
     try {
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.success === false) {
@@ -96,7 +93,7 @@ export function ModelBottomSheet({
   const effortDescriptions: Record<"low" | "medium" | "xhigh", string> = {
     low: "Fast — minimal latency, low reasoning.",
     medium: "Balanced — good default for most tasks.",
-    xhigh: "Deep — maximum chain-of-thought exploration."
+    xhigh: "Deep — maximum chain-of-thought exploration.",
   };
 
   const modelsList = [
@@ -104,37 +101,42 @@ export function ModelBottomSheet({
       id: "qwen3.8-flash-next-gyro-gyro-s",
       displayName: "Flash-Next",
       subtext: "Gyro-S · default orchestrator & workers",
-      icon: "bot"
+      icon: "bot",
     },
     {
       id: "Swift-1.5-Qwen3.8-27B-IQ3_XS",
       displayName: "Swift-1.5",
       subtext: "27B MTP · speculative decoding profile",
-      icon: "bot"
+      icon: "bot",
     },
     {
       id: "qwen3.8:27b-q3_k_m",
       displayName: "qwen3.8",
       subtext: "27B · planner & critic",
-      icon: "bot"
+      icon: "bot",
     },
     {
       id: "gemma4:e4b",
       displayName: "gemma4:e4b",
       subtext: "Builder worker",
-      icon: "cpu"
-    }
+      icon: "cpu",
+    },
   ];
 
   // If there are other installed models, normalize by stripping :latest and deduplicate
   for (const raw of installedModels) {
     const m = raw.replace(/:latest$/, "");
-    if (!modelsList.some((item) => item.id === m || item.id === raw || item.displayName === m || item.displayName === raw)) {
+    if (
+      !modelsList.some(
+        (item) =>
+          item.id === m || item.id === raw || item.displayName === m || item.displayName === raw
+      )
+    ) {
       modelsList.push({
         id: m,
         displayName: m,
         subtext: "Installed LLM model",
-        icon: "cpu"
+        icon: "cpu",
       });
     }
   }
@@ -206,15 +208,17 @@ export function ModelBottomSheet({
                           : "bg-stone-100 dark:bg-[#1f1f28] text-stone-600 dark:text-stone-400"
                       }`}
                     >
-                      {item.icon === "bot" ? <Bot className="h-5 w-5" /> : <Cpu className="h-5 w-5" />}
+                      {item.icon === "bot" ? (
+                        <Bot className="h-5 w-5" />
+                      ) : (
+                        <Cpu className="h-5 w-5" />
+                      )}
                     </div>
                     <div>
                       <div className="text-sm font-bold text-stone-900 dark:text-stone-100">
                         {item.displayName}
                       </div>
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                        {item.subtext}
-                      </div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400">{item.subtext}</div>
                     </div>
                   </div>
 
@@ -273,9 +277,7 @@ export function ModelBottomSheet({
                   : "text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100"
               }`}
             >
-              {reasoningEffort === "medium" ? (
-                <Check className="h-3.5 w-3.5 stroke-[3]" />
-              ) : null}
+              {reasoningEffort === "medium" ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : null}
               <span>Balanced</span>
             </button>
 
@@ -303,11 +305,17 @@ export function ModelBottomSheet({
           <div className="p-3.5 rounded-2xl bg-white dark:bg-[#15151b] border border-stone-200 dark:border-white/[0.09] flex items-center justify-between">
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
-                <span className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
-                <span className="text-xs font-bold text-stone-900 dark:text-stone-100">Standalone llama.cpp Engine (Strata)</span>
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`}
+                />
+                <span className="text-xs font-bold text-stone-900 dark:text-stone-100">
+                  Strata Engine (host GPU)
+                </span>
               </div>
               <span className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
-                {engineStatus === "running" ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)" : "Stopped · 0 MB VRAM"}
+                {engineStatus === "running"
+                  ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)"
+                  : "Stopped · 0 MB VRAM"}
               </span>
             </div>
             {engineStatus !== "running" && (

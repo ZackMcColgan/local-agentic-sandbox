@@ -7,13 +7,9 @@ import path from "path";
 import {
   createExplorerWorker,
   createCriticWorker,
-  type WorkspaceRepoMap
+  type WorkspaceRepoMap,
 } from "../lib/subagents/workerPool";
-import {
-  Planner,
-  generatePlanSpec,
-  type PlanSpec
-} from "../lib/subagents/planner";
+import { Planner } from "../lib/subagents/planner";
 import type { Milestone } from "../lib/subagents/types";
 
 describe("Sprint A3 — Real ExplorerWorker Repo-Map Indexer, Multi-File Planner & Chunked Diff Critic", () => {
@@ -72,23 +68,45 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
       assert.equal(ignoredFile, undefined, "node_modules must be excluded from repo map");
 
       // Verify auth.ts and its exported symbols
-      const authFile = repoMap.files.find((f) => f.path.replace(/\\/g, "/").includes("src/auth.ts"));
+      const authFile = repoMap.files.find((f) =>
+        f.path.replace(/\\/g, "/").includes("src/auth.ts")
+      );
       assert.ok(authFile, "auth.ts must be indexed in repo map");
       assert.ok(authFile.exports.includes("loginUser"), "must extract exported function loginUser");
-      assert.ok(authFile.exports.includes("SessionManager"), "must extract exported class SessionManager");
-      assert.ok(authFile.exports.includes("UserProfile"), "must extract exported interface UserProfile");
-      assert.ok(authFile.exports.includes("DEFAULT_TIMEOUT"), "must extract exported const DEFAULT_TIMEOUT");
-      assert.equal(authFile.exports.includes("internalHelper"), false, "must not extract non-exported symbol");
+      assert.ok(
+        authFile.exports.includes("SessionManager"),
+        "must extract exported class SessionManager"
+      );
+      assert.ok(
+        authFile.exports.includes("UserProfile"),
+        "must extract exported interface UserProfile"
+      );
+      assert.ok(
+        authFile.exports.includes("DEFAULT_TIMEOUT"),
+        "must extract exported const DEFAULT_TIMEOUT"
+      );
+      assert.equal(
+        authFile.exports.includes("internalHelper"),
+        false,
+        "must not extract non-exported symbol"
+      );
 
       // Verify utils.ts
-      const utilsFile = repoMap.files.find((f) => f.path.replace(/\\/g, "/").includes("src/utils.ts"));
+      const utilsFile = repoMap.files.find((f) =>
+        f.path.replace(/\\/g, "/").includes("src/utils.ts")
+      );
       assert.ok(utilsFile, "utils.ts must be indexed in repo map");
       assert.ok(utilsFile.exports.includes("Result"), "must extract exported type Result");
-      assert.ok(utilsFile.exports.includes("formatCurrency"), "must extract exported const formatCurrency");
+      assert.ok(
+        utilsFile.exports.includes("formatCurrency"),
+        "must extract exported const formatCurrency"
+      );
 
       // Verify formatted string representation contains summary
       if (repoMap.treeSummary) {
-        assert.ok(repoMap.treeSummary.includes("src/auth.ts") || repoMap.treeSummary.includes("auth.ts"));
+        assert.ok(
+          repoMap.treeSummary.includes("src/auth.ts") || repoMap.treeSummary.includes("auth.ts")
+        );
       }
     });
   });
@@ -96,7 +114,7 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
   describe("Task 2: Inject WorkspaceRepoMap into Planner.generatePlan", () => {
     it("Planner.generatePlan is callable and accepts repoMap to target real files and test commands", async () => {
       let promptSent = "";
-      const mockGenerate = async (opts: any) => {
+      const mockGenerate = async (opts: { prompt: string }) => {
         promptSent = opts.prompt;
         return {
           text: JSON.stringify({
@@ -111,14 +129,14 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
                     id: "AC-1",
                     assertion: "SessionManager has refreshToken method",
                     fileMatch: "src/auth.ts",
-                    command: "npx tsx --test tests/auth.test.ts"
-                  }
-                ]
-              }
-            ]
+                    command: "npx tsx --test tests/auth.test.ts",
+                  },
+                ],
+              },
+            ],
           }),
           model: "swift-15-27b-mtp",
-          loadDurationMs: 0
+          loadDurationMs: 0,
         };
       };
 
@@ -127,10 +145,10 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
         files: [
           {
             path: "src/auth.ts",
-            exports: ["loginUser", "SessionManager", "UserProfile"]
-          }
+            exports: ["loginUser", "SessionManager", "UserProfile"],
+          },
         ],
-        treeSummary: "src/auth.ts: loginUser, SessionManager, UserProfile"
+        treeSummary: "src/auth.ts: loginUser, SessionManager, UserProfile",
       } as unknown as WorkspaceRepoMap;
 
       // Call Planner.generatePlan with repoMap
@@ -138,15 +156,24 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
         taskId: "task-test-planner-01",
         goal: "Refactor SessionManager in auth.ts to add token refresh",
         generate: mockGenerate,
-        repoMap: mockRepoMap
+        repoMap: mockRepoMap,
       });
 
       assert.ok(plan, "Planner.generatePlan must return PlanSpec");
-      assert.ok(promptSent.includes("src/auth.ts"), "Planner prompt must include repo map file path");
-      assert.ok(promptSent.includes("SessionManager"), "Planner prompt must include repo map symbol");
+      assert.ok(
+        promptSent.includes("src/auth.ts"),
+        "Planner prompt must include repo map file path"
+      );
+      assert.ok(
+        promptSent.includes("SessionManager"),
+        "Planner prompt must include repo map symbol"
+      );
       assert.equal(plan.milestones.length, 1);
       assert.equal(plan.milestones[0].plannedFiles?.[0], "src/auth.ts");
-      assert.equal(plan.milestones[0].acceptanceCriteria[0].command, "npx tsx --test tests/auth.test.ts");
+      assert.equal(
+        plan.milestones[0].acceptanceCriteria[0].command,
+        "npx tsx --test tests/auth.test.ts"
+      );
     });
   });
 
@@ -155,23 +182,23 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
       let numPredictPassed = 0;
       let diffLengthInPrompt = 0;
 
-      const mockGenerate = async (opts: any) => {
-        numPredictPassed = opts.options?.num_predict;
+      const mockGenerate = async (opts: { prompt: string; options?: { num_predict?: number } }) => {
+        numPredictPassed = opts.options?.num_predict ?? 0;
         diffLengthInPrompt = opts.prompt.length;
         return {
           text: JSON.stringify({
             approved: true,
             feedback: [],
-            analysis: "Changes satisfy all criteria and pass tests."
+            analysis: "Changes satisfy all criteria and pass tests.",
           }),
           model: "swift-15-27b-mtp",
-          loadDurationMs: 0
+          loadDurationMs: 0,
         };
       };
 
       const critic = createCriticWorker({
         generate: mockGenerate,
-        model: "swift-15-27b-mtp"
+        model: "swift-15-27b-mtp",
       });
 
       const longDiff = "+\n".repeat(7000); // 14,000 chars
@@ -185,24 +212,24 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
         acceptanceCriteria: [
           {
             id: "AC-1",
-            assertion: "Large diff passes inspection"
-          }
+            assertion: "Large diff passes inspection",
+          },
         ],
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
-      const result = await critic.evaluateMilestoneDiff(
-        milestone,
-        {
-          diff: longDiff,
-          testExitCode: 0,
-          filesChanged: ["large.ts"]
-        }
-      );
+      const result = await critic.evaluateMilestoneDiff(milestone, {
+        diff: longDiff,
+        testExitCode: 0,
+        filesChanged: ["large.ts"],
+      });
 
       assert.equal(numPredictPassed, 2048, "CriticWorker must pass num_predict: 2048 to model");
-      assert.ok(diffLengthInPrompt > 8000, `Critic prompt must accommodate diff > 6000 chars, got prompt length ${diffLengthInPrompt}`);
+      assert.ok(
+        diffLengthInPrompt > 8000,
+        `Critic prompt must accommodate diff > 6000 chars, got prompt length ${diffLengthInPrompt}`
+      );
       assert.equal(result.approved, true);
     });
 
@@ -210,12 +237,12 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
       const mockGenerate = async () => ({
         text: JSON.stringify({ approved: true, feedback: [] }),
         model: "swift-15-27b-mtp",
-        loadDurationMs: 0
+        loadDurationMs: 0,
       });
 
       const critic = createCriticWorker({
         generate: mockGenerate,
-        model: "swift-15-27b-mtp"
+        model: "swift-15-27b-mtp",
       });
 
       const milestone: Milestone = {
@@ -226,21 +253,18 @@ export const formatCurrency = (amount: number) => "$" + amount.toFixed(2);`
         acceptanceCriteria: [
           {
             id: "AC-FAIL",
-            assertion: "Must pass tests"
-          }
+            assertion: "Must pass tests",
+          },
         ],
         builderIterations: 0,
-        criticRounds: 0
+        criticRounds: 0,
       };
 
-      const result = await critic.evaluateMilestoneDiff(
-        milestone,
-        {
-          diff: "+ const passing = false;",
-          testExitCode: 1,
-          testOutput: "Error: Test assertion failed"
-        }
-      );
+      const result = await critic.evaluateMilestoneDiff(milestone, {
+        diff: "+ const passing = false;",
+        testExitCode: 1,
+        testOutput: "Error: Test assertion failed",
+      });
 
       assert.equal(result.approved, false, "Critic must reject when testExitCode !== 0");
       assert.ok(

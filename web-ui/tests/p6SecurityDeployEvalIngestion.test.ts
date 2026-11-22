@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { runModelEvalPack } from "../lib/eval/modelEvalPack";
 import { confinePathToRoot, isSafePublicUrl, verifyLanBridgeAuth } from "../lib/securityHardening";
 import { prepareSelfDeployPlan } from "../lib/selfDeployMachinery";
-import { toQdrantPointId, cosineSimilarity, InMemorySemanticStore } from "../lib/oracle/ingestionRoundTrip";
+import {
+  toQdrantPointId,
+  cosineSimilarity,
+  InMemorySemanticStore,
+} from "../lib/oracle/ingestionRoundTrip";
 
 describe("P6.1–P6.4: Eval pack, security hardening, shadow self-deploy, Qdrant ingestion", () => {
   it("P6.1: runModelEvalPack evaluates cases against banked pass bars", async () => {

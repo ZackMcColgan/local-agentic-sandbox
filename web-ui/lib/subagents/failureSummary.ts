@@ -6,11 +6,11 @@ export function summarizeTaskFailureReason(raw?: string): { summary: string; det
   const text = (raw || "").trim();
   if (!text) return { summary: "Task did not complete." };
   const hasGitStatus =
-    text.includes("git status --porcelain") ||
-    /^\s*[MADRCU?]{1,2}\s+\S+/m.test(text);
+    text.includes("git status --porcelain") || /^\s*[MADRCU?]{1,2}\s+\S+/m.test(text);
   if (hasGitStatus) {
     return {
-      summary: "Uncommitted workspace changes or dirty working tree blocked milestone verification.",
+      summary:
+        "Uncommitted workspace changes or dirty working tree blocked milestone verification.",
       details: text,
     };
   }

@@ -89,137 +89,147 @@ function swapFileIntoPlace(srcPath, destPath) {
   const stalePath = destPath + ".old";
   try {
     if (fs.existsSync(stalePath)) fs.rmSync(stalePath, { force: true });
-  } catch {}
+  } catch {
+    /* ignore stale binary cleanup error */
+  }
 }
 
 module.exports = { swapBinary: swapFileIntoPlace };
 
 if (require.main === module) {
-if (process.argv.includes("--get-digest")) {
-  const digest = computeSha256();
-  process.stdout.write(digest);
-  process.exit(0);
-}
-
-console.log("==========================================================");
-console.log("  Building Host Runner SEA Binary (TypeScript / Node 22)  ");
-console.log("==========================================================");
-
-// 1. Prepare directories
-if (!fs.existsSync(distDir)) {
-  fs.mkdirSync(distDir, { recursive: true });
-}
-if (!fs.existsSync(aiControlBinDir)) {
-  fs.mkdirSync(aiControlBinDir, { recursive: true });
-}
-
-// 2. Compute Bridge Source SHA-256 and write manifest.json
-console.log("[1/6] Computing bridgeSourceSha256 provenance manifest...");
-
-const sha256 = computeSha256();
-const manifestData = {
-  protocolVersion: 1,
-  bridgeSourceSha256: sha256
-};
-fs.writeFileSync(path.join(hostBridgeDir, "manifest.json"), JSON.stringify(manifestData, null, 2) + "\n", "utf8");
-console.log(`      Protocol Version: 1`);
-console.log(`      bridgeSourceSha256: ${sha256}`);
-
-// 3. Bundle TypeScript daemon into single JS bundle using esbuild
-console.log("[2/6] Bundling TypeScript daemon with esbuild...");
-let esbuild;
-try {
-  esbuild = require("esbuild");
-} catch {
-  // Try locating esbuild in web-ui or browser-mcp or root
-  const candidates = [
-    path.resolve(repoRoot, "web-ui/node_modules/esbuild"),
-    path.resolve(repoRoot, "browser-mcp/node_modules/esbuild"),
-    path.resolve(repoRoot, "node_modules/esbuild")
-  ];
-  for (const c of candidates) {
-    try {
-      esbuild = require(c);
-      break;
-    } catch {}
+  if (process.argv.includes("--get-digest")) {
+    const digest = computeSha256();
+    process.stdout.write(digest);
+    process.exit(0);
   }
-}
 
-if (!esbuild) {
-  console.error("ERROR: esbuild not found in workspaces. Installing or locating esbuild...");
-  process.exit(1);
-}
+  console.log("==========================================================");
+  console.log("  Building Host Runner SEA Binary (TypeScript / Node 22)  ");
+  console.log("==========================================================");
 
-const bundlePath = path.join(distDir, "bundle.js");
-esbuild.buildSync({
-  entryPoints: [path.join(hostBridgeDir, "daemon.ts")],
-  bundle: true,
-  platform: "node",
-  target: "node22",
-  outfile: bundlePath,
-  format: "cjs",
-  external: []
-});
-console.log(`      Bundled -> ${bundlePath}`);
+  // 1. Prepare directories
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+  }
+  if (!fs.existsSync(aiControlBinDir)) {
+    fs.mkdirSync(aiControlBinDir, { recursive: true });
+  }
 
-// 4. Generate SEA preparation blob
-console.log("[3/6] Generating Node SEA preparation blob...");
-const seaConfigPath = path.join(distDir, "sea-config.json");
-const seaBlobPath = path.join(distDir, "sea-prep.blob");
-fs.writeFileSync(
-  seaConfigPath,
-  JSON.stringify(
-    {
-      main: "bundle.js",
-      output: "sea-prep.blob",
-      disableExperimentalSEAWarning: true
-    },
-    null,
-    2
-  ),
-  "utf8"
-);
+  // 2. Compute Bridge Source SHA-256 and write manifest.json
+  console.log("[1/6] Computing bridgeSourceSha256 provenance manifest...");
 
-execSync(`"${process.execPath}" --experimental-sea-config sea-config.json`, {
-  cwd: distDir,
-  stdio: "inherit"
-});
+  const sha256 = computeSha256();
+  const manifestData = {
+    protocolVersion: 1,
+    bridgeSourceSha256: sha256,
+  };
+  fs.writeFileSync(
+    path.join(hostBridgeDir, "manifest.json"),
+    JSON.stringify(manifestData, null, 2) + "\n",
+    "utf8"
+  );
+  console.log(`      Protocol Version: 1`);
+  console.log(`      bridgeSourceSha256: ${sha256}`);
 
-// 5. Copy node.exe and inject blob via postject
-console.log("[4/6] Copying Node binary and injecting SEA resource via postject...");
-const localExePath = path.join(distDir, "host-runner.exe");
-fs.copyFileSync(process.execPath, localExePath);
+  // 3. Bundle TypeScript daemon into single JS bundle using esbuild
+  console.log("[2/6] Bundling TypeScript daemon with esbuild...");
+  let esbuild;
+  try {
+    esbuild = require("esbuild");
+  } catch {
+    // Try locating esbuild in web-ui or browser-mcp or root
+    const candidates = [
+      path.resolve(repoRoot, "web-ui/node_modules/esbuild"),
+      path.resolve(repoRoot, "browser-mcp/node_modules/esbuild"),
+      path.resolve(repoRoot, "node_modules/esbuild"),
+    ];
+    for (const c of candidates) {
+      try {
+        esbuild = require(c);
+        break;
+      } catch {
+        /* try next candidate path */
+      }
+    }
+  }
 
-const postjectCmd = `npx postject "${localExePath}" NODE_SEA_BLOB "${seaBlobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`;
-execSync(postjectCmd, {
-  cwd: distDir,
-  stdio: "inherit"
-});
+  if (!esbuild) {
+    console.error("ERROR: esbuild not found in workspaces. Installing or locating esbuild...");
+    process.exit(1);
+  }
 
-// 6. Swap compiled binary into C:\AI\ai-control\bin\host-runner.exe
-console.log(`[5/6] Deploying executable to ${aiControlBinExe}...`);
-swapFileIntoPlace(localExePath, aiControlBinExe);
-fs.writeFileSync(
-  path.join(aiControlBinDir, "manifest.json"),
-  JSON.stringify(manifestData, null, 2) + "\n",
-  "utf8"
-);
-
-// 7. Verify executable runs
-console.log("[6/6] Verifying compiled executable fail-closed and health readiness...");
-try {
-  // Test that running without secret fails closed
-  execSync(`"${aiControlBinExe}"`, {
-    env: { ...process.env, HOST_RUNNER_SHARED_SECRET: "" },
-    stdio: "pipe"
+  const bundlePath = path.join(distDir, "bundle.js");
+  esbuild.buildSync({
+    entryPoints: [path.join(hostBridgeDir, "daemon.ts")],
+    bundle: true,
+    platform: "node",
+    target: "node22",
+    outfile: bundlePath,
+    format: "cjs",
+    external: [],
   });
-  console.error("ERROR: Executable should have failed without secret!");
-  process.exit(1);
-} catch (err) {
-  // Expected to exit 1
-  console.log("      Verified: Executable fails closed when HOST_RUNNER_SHARED_SECRET is missing.");
-}
+  console.log(`      Bundled -> ${bundlePath}`);
 
-console.log("==========================================================");
-console.log("==========================================================");
+  // 4. Generate SEA preparation blob
+  console.log("[3/6] Generating Node SEA preparation blob...");
+  const seaConfigPath = path.join(distDir, "sea-config.json");
+  const seaBlobPath = path.join(distDir, "sea-prep.blob");
+  fs.writeFileSync(
+    seaConfigPath,
+    JSON.stringify(
+      {
+        main: "bundle.js",
+        output: "sea-prep.blob",
+        disableExperimentalSEAWarning: true,
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  execSync(`"${process.execPath}" --experimental-sea-config sea-config.json`, {
+    cwd: distDir,
+    stdio: "inherit",
+  });
+
+  // 5. Copy node.exe and inject blob via postject
+  console.log("[4/6] Copying Node binary and injecting SEA resource via postject...");
+  const localExePath = path.join(distDir, "host-runner.exe");
+  fs.copyFileSync(process.execPath, localExePath);
+
+  const postjectCmd = `npx postject "${localExePath}" NODE_SEA_BLOB "${seaBlobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`;
+  execSync(postjectCmd, {
+    cwd: distDir,
+    stdio: "inherit",
+  });
+
+  // 6. Swap compiled binary into C:\AI\ai-control\bin\host-runner.exe
+  console.log(`[5/6] Deploying executable to ${aiControlBinExe}...`);
+  swapFileIntoPlace(localExePath, aiControlBinExe);
+  fs.writeFileSync(
+    path.join(aiControlBinDir, "manifest.json"),
+    JSON.stringify(manifestData, null, 2) + "\n",
+    "utf8"
+  );
+
+  // 7. Verify executable runs
+  console.log("[6/6] Verifying compiled executable fail-closed and health readiness...");
+  try {
+    // Test that running without secret fails closed
+    execSync(`"${aiControlBinExe}"`, {
+      env: { ...process.env, HOST_RUNNER_SHARED_SECRET: "" },
+      stdio: "pipe",
+    });
+    console.error("ERROR: Executable should have failed without secret!");
+    process.exit(1);
+  } catch {
+    // Expected to exit 1
+    console.log(
+      "      Verified: Executable fails closed when HOST_RUNNER_SHARED_SECRET is missing."
+    );
+  }
+
+  console.log("==========================================================");
+  console.log("==========================================================");
 }

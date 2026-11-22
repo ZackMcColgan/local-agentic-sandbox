@@ -12,26 +12,26 @@
  *   npm run deploy:cluster
  */
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const { execSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
-const REPO_ROOT = path.resolve(__dirname, '..');
-const K8S_NODE = 'desktop-control-plane';
-const K8S_NAMESPACE = 'local-agentic-sandbox';
+const REPO_ROOT = path.resolve(__dirname, "..");
+const K8S_NODE = "desktop-control-plane";
+const K8S_NAMESPACE = "local-agentic-sandbox";
 
 function run(cmd, opts = {}) {
   console.log(`\x1b[36m▶ ${cmd}\x1b[0m`);
   return execSync(cmd, {
     cwd: opts.cwd || REPO_ROOT,
-    stdio: opts.stdio || 'inherit',
-    encoding: 'utf8'
+    stdio: opts.stdio || "inherit",
+    encoding: "utf8",
   });
 }
 
 function getCommitSha() {
   try {
-    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
   } catch {
     return Date.now().toString(36);
   }
@@ -46,22 +46,22 @@ async function deployService(serviceName) {
   console.log(`\x1b[32m🚀 Deploying ${serviceName} to Kubernetes [tag: ${tag}]\x1b[0m`);
   console.log(`\x1b[32m========================================================\x1b[0m\n`);
 
-  let imageName = '';
-  let dockerfile = '';
-  let deploymentName = '';
+  let imageName = "";
+  let dockerfile = "";
+  let deploymentName = "";
 
-  if (serviceName === 'web-ui') {
+  if (serviceName === "web-ui") {
     imageName = `local-agentic-sandbox-web-ui:${tag}`;
-    dockerfile = 'web-ui/Dockerfile';
-    deploymentName = 'web-ui';
-  } else if (serviceName === 'mcp-server') {
+    dockerfile = "web-ui/Dockerfile";
+    deploymentName = "web-ui";
+  } else if (serviceName === "mcp-server") {
     imageName = `local-agentic-sandbox-mcp-server:${tag}`;
-    dockerfile = 'mcp-server/Dockerfile';
-    deploymentName = 'mcp-runner';
-  } else if (serviceName === 'browser-mcp') {
+    dockerfile = "mcp-server/Dockerfile";
+    deploymentName = "mcp-runner";
+  } else if (serviceName === "browser-mcp") {
     imageName = `local-agentic-sandbox-browser-mcp:${tag}`;
-    dockerfile = 'browser-mcp/Dockerfile';
-    deploymentName = 'browser-mcp';
+    dockerfile = "browser-mcp/Dockerfile";
+    deploymentName = "browser-mcp";
   } else {
     throw new Error(`Unknown service: ${serviceName}. Supported: web-ui, mcp-server, browser-mcp`);
   }
@@ -81,13 +81,19 @@ async function deployService(serviceName) {
     run(`docker exec ${K8S_NODE} rm -f /images/image.tar`);
   } finally {
     if (fs.existsSync(tarPath)) {
-      try { fs.unlinkSync(tarPath); } catch {}
+      try {
+        fs.unlinkSync(tarPath);
+      } catch {
+        /* ignore temp tar cleanup error */
+      }
     }
   }
 
   // 3. Update Kubernetes deployment image
   console.log(`[3/4] Updating Kubernetes deployment/${deploymentName} image...`);
-  run(`kubectl set image deployment/${deploymentName} ${deploymentName}=${imageName} -n ${K8S_NAMESPACE}`);
+  run(
+    `kubectl set image deployment/${deploymentName} ${deploymentName}=${imageName} -n ${K8S_NAMESPACE}`
+  );
 
   // 4. Wait for rollout completion
   console.log(`[4/4] Awaiting deployment rollout status...`);
@@ -97,12 +103,12 @@ async function deployService(serviceName) {
 }
 
 async function main() {
-  const target = process.argv[2] || 'web-ui';
+  const target = process.argv[2] || "web-ui";
   try {
-    if (target === 'all') {
-      await deployService('mcp-server');
-      await deployService('browser-mcp');
-      await deployService('web-ui');
+    if (target === "all") {
+      await deployService("mcp-server");
+      await deployService("browser-mcp");
+      await deployService("web-ui");
     } else {
       await deployService(target);
     }

@@ -12,7 +12,11 @@ describe("P0.2 — LOW reasoning effort & DEFAULT_PRIMARY_MODEL", () => {
   it("sets defaultReasoningEffort to low on preset primary models", () => {
     for (const m of PRESET_MODEL_PROFILES) {
       if (m.supportsReasoningEffort) {
-        assert.equal(m.defaultReasoningEffort, "low", `Expected ${m.id} defaultReasoningEffort to be low`);
+        assert.equal(
+          m.defaultReasoningEffort,
+          "low",
+          `Expected ${m.id} defaultReasoningEffort to be low`
+        );
       }
     }
   });
@@ -24,12 +28,12 @@ describe("P0.2 — LOW reasoning effort & DEFAULT_PRIMARY_MODEL", () => {
         new Response(
           JSON.stringify({ response: "Hello world without think tags.", done: true }) + "\n",
           { status: 200, headers: { "Content-Type": "application/x-ndjson" } }
-        )) as typeof fetch
+        )) as typeof fetch,
     });
 
     const res = await generate({
       model: DEFAULT_PRIMARY_MODEL,
-      prompt: "hi"
+      prompt: "hi",
     });
     assert.equal(res.text.trim(), "Hello world without think tags.");
   });

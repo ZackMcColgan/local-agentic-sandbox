@@ -6,7 +6,7 @@ import {
   saveChatHistory,
   clearChatHistory,
   STORAGE_KEY,
-  TabContainerState
+  TabContainerState,
 } from "../lib/chatHistory";
 import { ChatMessage } from "../components/ChatStream";
 
@@ -36,10 +36,14 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
 
   beforeEach(() => {
     mockStorage = new MockLocalStorage();
-    (globalThis as any).window = {
-      localStorage: mockStorage
+    const g = globalThis as unknown as {
+      window: { localStorage: MockLocalStorage };
+      localStorage: MockLocalStorage;
     };
-    (globalThis as any).localStorage = mockStorage;
+    g.window = {
+      localStorage: mockStorage,
+    };
+    g.localStorage = mockStorage;
   });
 
   it("provides valid initial-welcome seed message", () => {
@@ -61,22 +65,22 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
     const userMsg1: ChatMessage = {
       id: "user-1",
       role: "user",
-      content: "What is the status of the kubernetes cluster?"
+      content: "What is the status of the kubernetes cluster?",
     };
     const assistantMsg1: ChatMessage = {
       id: "assistant-1",
       role: "assistant",
-      content: "All pods are running 1/1 in namespace local-agentic-sandbox."
+      content: "All pods are running 1/1 in namespace local-agentic-sandbox.",
     };
     const userMsg2: ChatMessage = {
       id: "user-2",
       role: "user",
-      content: "Run security verification suite."
+      content: "Run security verification suite.",
     };
     const assistantMsg2: ChatMessage = {
       id: "assistant-2",
       role: "assistant",
-      content: "Security posture verified: UID 10001, rootfs read-only."
+      content: "Security posture verified: UID 10001, rootfs read-only.",
     };
 
     container.addMessage(userMsg1);
@@ -97,7 +101,10 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
     // 5. Assert both messages (and full conversation) are still present
     const messagesAfterTabSwitch = container.getMessages();
     assert.equal(messagesAfterTabSwitch.length, 5);
-    assert.equal(messagesAfterTabSwitch[1].content, "What is the status of the kubernetes cluster?");
+    assert.equal(
+      messagesAfterTabSwitch[1].content,
+      "What is the status of the kubernetes cluster?"
+    );
     assert.equal(messagesAfterTabSwitch[3].content, "Run security verification suite.");
   });
 
@@ -106,7 +113,11 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
     const activeMessages: ChatMessage[] = [
       getInitialWelcomeMessage("gemma4:e4b"),
       { id: "msg-1", role: "user", content: "Analyze repository dependencies" },
-      { id: "msg-2", role: "assistant", content: "Dependencies analyzed: zero vulnerabilities found." }
+      {
+        id: "msg-2",
+        role: "assistant",
+        content: "Dependencies analyzed: zero vulnerabilities found.",
+      },
     ];
 
     saveChatHistory(activeMessages);
@@ -125,7 +136,7 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
   it("resets history to welcome seed when clearChatHistory is invoked", () => {
     const activeMessages: ChatMessage[] = [
       getInitialWelcomeMessage("gemma4:e4b"),
-      { id: "msg-1", role: "user", content: "Delete all files" }
+      { id: "msg-1", role: "user", content: "Delete all files" },
     ];
     saveChatHistory(activeMessages);
 
@@ -163,9 +174,9 @@ describe("Task 1 — Chat History Persistence & Tab Switching Suite", () => {
           type: "image/png",
           size: 50000,
           previewUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ...",
-          isImage: true
-        }
-      ]
+          isImage: true,
+        },
+      ],
     };
 
     saveChatHistory([messageWithHeavyAttachment]);
@@ -228,7 +239,7 @@ describe("E11: D3 render-path follow-up (UI-041 remainder)", () => {
       { id: "u1", role: "user", content: "hi", timestamp: 1 },
       { id: "a1", role: "assistant", content: "First part.", timestamp: 2 },
       { id: "a2", role: "assistant", content: "Second part.", timestamp: 3 },
-    ] as any[];
+    ] as unknown as ChatMessage[];
 
     const result = deduplicateStreamMessages(msgs);
     assert.equal(result.length, 2);
@@ -251,13 +262,13 @@ describe("E11: D3 render-path follow-up (UI-041 remainder)", () => {
         content: "Second part.",
         traces: [{ name: "t3" }, { name: "t4" }],
       },
-    ] as any[];
+    ] as unknown as ChatMessage[];
 
     const result = deduplicateStreamMessages(msgs);
     assert.equal(result.length, 2);
     assert.deepEqual(
-      result.flatMap((m) => m.traces || []).map((t) => t.name),
-      ["t1", "t2", "t3", "t4"],
+      result.flatMap((m) => m.traces || []).map((t) => (t as unknown as { name?: string }).name),
+      ["t1", "t2", "t3", "t4"]
     );
   });
 });

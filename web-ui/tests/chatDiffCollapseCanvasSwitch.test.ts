@@ -30,7 +30,10 @@ import { ArtifactCanvasPane, CanvasDiffCard } from "../components/ArtifactCanvas
 import { DiffViewer } from "../components/DiffViewer";
 
 const webUiDir = process.cwd();
-const chatStreamSrc = fs.readFileSync(path.join(webUiDir, "components/ChatStream.tsx"), "utf8");
+const chatStreamSrc =
+  fs.readFileSync(path.join(webUiDir, "components/ChatStream.tsx"), "utf8") +
+  "\n" +
+  fs.readFileSync(path.join(webUiDir, "components/chat/messageRender.tsx"), "utf8");
 const diffViewerSrc = fs.readFileSync(path.join(webUiDir, "components/DiffViewer.tsx"), "utf8");
 
 // Two 90-line file bodies, identical for the first 75 lines, first real
@@ -68,7 +71,8 @@ describe("UI-024 — extractor returns the full diff alongside the capped previe
     for (const item of items) {
       assert.ok(item.diffPreview.includes("more lines"), "preview keeps its truncation marker");
       assert.ok(
-        !item.diffPreview.includes("FILE-ONE-MARKER") && !item.diffPreview.includes("FILE-TWO-MARKER"),
+        !item.diffPreview.includes("FILE-ONE-MARKER") &&
+          !item.diffPreview.includes("FILE-TWO-MARKER"),
         "preview is capped before line 76, so it cannot contain either file's marker"
       );
     }
@@ -101,14 +105,24 @@ describe("UI-024 — extractor returns the full diff alongside the capped previe
       },
     ]);
     assert.equal(items.length, 1);
-    assert.ok(items[0].diffFull.includes("new line 30"), "patch full diff reaches past the 20-line preview cap");
-    assert.ok(items[0].diffFull.includes("old line 30"), "patch full diff includes every removed line");
+    assert.ok(
+      items[0].diffFull.includes("new line 30"),
+      "patch full diff reaches past the 20-line preview cap"
+    );
+    assert.ok(
+      items[0].diffFull.includes("old line 30"),
+      "patch full diff includes every removed line"
+    );
   });
 });
 
 describe("UI-023/UI-024 — source wiring", () => {
   it("DiffViewer accepts defaultOpen (default true) and seeds its open state from it", () => {
-    assert.match(diffViewerSrc, /defaultOpen\s*=\s*true/, "prop defaults to true so other surfaces keep opening expanded");
+    assert.match(
+      diffViewerSrc,
+      /defaultOpen\s*=\s*true/,
+      "prop defaults to true so other surfaces keep opening expanded"
+    );
     assert.match(diffViewerSrc, /useState\(defaultOpen\)/, "open state initializes from the prop");
   });
 
@@ -132,13 +146,16 @@ describe("UI-023/UI-024 — rendered UI", () => {
   let scrollRef: { current: HTMLDivElement | null };
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    (globalThis as any).window = win;
-    (globalThis as any).document = win.document;
-    (globalThis as any).localStorage = win.localStorage;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
     container = win.document.createElement("div") as unknown as HTMLDivElement;
-    (win.document.body as any).appendChild(container);
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     scrollRef = { current: null };
   });
 
@@ -179,7 +196,7 @@ describe("UI-023/UI-024 — rendered UI", () => {
         diff: "+ const UNIQUE_DIFF_LINE = 1;\n+ second line",
         modifiedFiles: ["src/weather.html"],
         defaultOpen: false,
-      } as any)
+      } as unknown as React.ComponentProps<typeof DiffViewer>)
     );
     assert.ok(container.textContent?.includes("src/weather.html"), "header shows the file path");
     assert.ok(
@@ -215,13 +232,13 @@ describe("UI-023/UI-024 — rendered UI", () => {
     // The exact hand-off ChatStream performs after the fix.
     const diffs = items.map((d) => ({
       path: d.path,
-      diff: (d as any).diffFull ?? d.diffPreview,
+      diff: (d as { diffFull?: string; diffPreview: string }).diffFull ?? d.diffPreview,
       addedLines: d.addedLines,
       removedLines: d.removedLines,
     }));
     await renderTree(
       React.createElement(
-        CanvasProvider as any,
+        CanvasProvider as unknown as React.ComponentType<Record<string, unknown>>,
         { scrollElRef: scrollRef },
         React.createElement(CanvasDiffCard, { diffs }),
         React.createElement(ArtifactCanvasPane)
@@ -233,7 +250,10 @@ describe("UI-023/UI-024 — rendered UI", () => {
     // First file is shown in full: its line-76 marker is beyond the old cap.
     assert.ok(container.textContent?.includes(PATH_A), "file A's path heads the diff");
     assert.ok(container.textContent?.includes("FILE-ONE-MARKER"), "file A's full diff renders");
-    assert.ok(!container.textContent?.includes("FILE-TWO-MARKER"), "file B's content is not shown yet");
+    assert.ok(
+      !container.textContent?.includes("FILE-TWO-MARKER"),
+      "file B's content is not shown yet"
+    );
 
     const chips = container.querySelectorAll('[data-testid="canvas-diff-chip"]');
     assert.equal(chips.length, 2, "one chip per file");
@@ -248,19 +268,31 @@ describe("UI-023/UI-024 — rendered UI", () => {
     );
 
     await click(chips[1]);
-    assert.ok(container.textContent?.includes(PATH_B), "file B's path heads the diff after switching");
-    assert.ok(container.textContent?.includes("FILE-TWO-MARKER"), "switching shows file B's own line 76");
-    assert.ok(!container.textContent?.includes("FILE-ONE-MARKER"), "file A's content is replaced, not merged");
-    assert.ok(container.textContent?.includes("shared line 90"), "the switched diff is complete to the last line");
+    assert.ok(
+      container.textContent?.includes(PATH_B),
+      "file B's path heads the diff after switching"
+    );
+    assert.ok(
+      container.textContent?.includes("FILE-TWO-MARKER"),
+      "switching shows file B's own line 76"
+    );
+    assert.ok(
+      !container.textContent?.includes("FILE-ONE-MARKER"),
+      "file A's content is replaced, not merged"
+    );
+    assert.ok(
+      container.textContent?.includes("shared line 90"),
+      "the switched diff is complete to the last line"
+    );
   });
 
   it("ChatStream consolidates to a single diff surface (CanvasDiffCard only, no duplicate DiffViewer)", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const chatStreamSrc = fs.readFileSync(
-      path.join(process.cwd(), "components", "ChatStream.tsx"),
-      "utf8"
-    );
+    const chatStreamSrc =
+      fs.readFileSync(path.join(process.cwd(), "components", "ChatStream.tsx"), "utf8") +
+      "\n" +
+      fs.readFileSync(path.join(process.cwd(), "components", "chat", "messageRender.tsx"), "utf8");
     assert.ok(chatStreamSrc.includes("<CanvasDiffCard"), "ChatStream renders CanvasDiffCard");
     assert.equal(
       chatStreamSrc.includes("<DiffViewer"),

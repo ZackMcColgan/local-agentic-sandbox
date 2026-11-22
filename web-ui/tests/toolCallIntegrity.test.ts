@@ -69,7 +69,8 @@ describe("tool-call-integrity: markup-in-content detector", () => {
   });
 
   it("leaves a normal tool round untouched when tool calls were parsed and executed", () => {
-    const markupText = '<tool_call><function=host_run_file_read>{"path":"foo.ts"}</function></tool_call>';
+    const markupText =
+      '<tool_call><function=host_run_file_read>{"path":"foo.ts"}</function></tool_call>';
     const result = evaluateMarkupRound({
       roundContent: markupText,
       executedToolCallsCount: 1,
@@ -105,7 +106,8 @@ describe("tool-call-integrity: markup-in-content detector", () => {
   it("detects tool-call markup present only in roundThinking when 0 calls executed", () => {
     const result = evaluateMarkupRound({
       roundContent: "I am checking the repository now.",
-      roundThinking: 'I should call <tool_call><function=search_docs>{"q":"aws"}</function></tool_call>',
+      roundThinking:
+        'I should call <tool_call><function=search_docs>{"q":"aws"}</function></tool_call>',
       executedToolCallsCount: 0,
       consecutiveMarkupFailures: 0,
       roundFinishReason: "stop",

@@ -8,16 +8,17 @@ import {
   executeGitVerb,
   type GitCapability,
   type MergeGrant,
-  type BridgeGitConfig
+  type BridgeGitConfig,
 } from "../../host-bridge/gitOps";
 import {
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
-  shouldAdvertiseUnattendedGitTools
+  shouldAdvertiseUnattendedGitTools,
 } from "../lib/hostMode";
 
-const CANARY_BASE = process.platform === "win32"
-  ? "C:\\AI\\host-e2e-sandbox"
-  : path.join(os.tmpdir(), "host-e2e-sandbox");
+const CANARY_BASE =
+  process.platform === "win32"
+    ? "C:\\AI\\host-e2e-sandbox"
+    : path.join(os.tmpdir(), "host-e2e-sandbox");
 const WORKING_REPO = path.join(CANARY_BASE, "working-repo");
 const BARE_REMOTE = path.join(CANARY_BASE, "remote.git");
 const CANARY_BIN = path.join(CANARY_BASE, "bin");
@@ -166,17 +167,17 @@ process.exit(1);
   const bridgeConfig: BridgeGitConfig = {
     allowUnattendedGit: true,
     gitRepoAllowlist: {
-      "canary-repo": WORKING_REPO
+      "canary-repo": WORKING_REPO,
     },
-    gitOpsLogPath: CANARY_LOG
+    gitOpsLogPath: CANARY_LOG,
   };
 
   const capability: GitCapability = {
     repo: "canary-repo",
-    branch: "feature/canary-workflow"
+    branch: "feature/canary-workflow",
   };
 
-  function setGhScenario(state: Record<string, any>) {
+  function setGhScenario(state: Record<string, unknown>) {
     fs.writeFileSync(GH_STATE_FILE, JSON.stringify(state, null, 2), "utf8");
   }
 
@@ -194,10 +195,19 @@ process.exit(1);
     // 2. write intended file
     const docPath = path.join(WORKING_REPO, "docs");
     fs.mkdirSync(docPath, { recursive: true });
-    fs.writeFileSync(path.join(docPath, "canary-proof.md"), "# Canary Proof\nGenuine unattended cycle.\n", "utf8");
+    fs.writeFileSync(
+      path.join(docPath, "canary-proof.md"),
+      "# Canary Proof\nGenuine unattended cycle.\n",
+      "utf8"
+    );
 
     // 3. add exact path
-    const addRes = await executeGitVerb("host_git_add", { paths: ["docs/canary-proof.md"] }, capability, bridgeConfig);
+    const addRes = await executeGitVerb(
+      "host_git_add",
+      { paths: ["docs/canary-proof.md"] },
+      capability,
+      bridgeConfig
+    );
     assert.equal(addRes.success, true);
     assert.deepEqual(addRes.stagedPaths, ["docs/canary-proof.md"]);
 
@@ -212,7 +222,12 @@ process.exit(1);
     assert.ok(commitRes.headSha);
 
     // 5. push
-    const pushRes = await executeGitVerb("host_git_push", { branch: "feature/canary-workflow" }, capability, bridgeConfig);
+    const pushRes = await executeGitVerb(
+      "host_git_push",
+      { branch: "feature/canary-workflow" },
+      capability,
+      bridgeConfig
+    );
     assert.equal(pushRes.success, true);
 
     // 6. Verify bare remote has branch and ONLY intended file was committed
@@ -221,15 +236,20 @@ process.exit(1);
 
     const committedFiles = execSync(`git show --name-only --oneline ${commitRes.headSha}`, {
       cwd: BARE_REMOTE,
-      encoding: "utf8"
-    }).trim().split(/\r?\n/).slice(1);
+      encoding: "utf8",
+    })
+      .trim()
+      .split(/\r?\n/)
+      .slice(1);
     assert.deepEqual(committedFiles, ["docs/canary-proof.md"]);
   });
 
   it("Case 2: pull_ff brings a new remote commit down cleanly", async () => {
     // Simulate remote commit from bare remote using a separate clone
     const cloneTemp = path.join(CANARY_BASE, "temp-clone");
-    execSync(`git clone "${BARE_REMOTE.replace(/\\/g, "/")}" "${cloneTemp.replace(/\\/g, "/")}"`, { stdio: "ignore" });
+    execSync(`git clone "${BARE_REMOTE.replace(/\\/g, "/")}" "${cloneTemp.replace(/\\/g, "/")}"`, {
+      stdio: "ignore",
+    });
     execSync("git config user.name 'Canary Runner'", { cwd: cloneTemp, stdio: "ignore" });
     execSync("git config user.email 'canary@runner.local'", { cwd: cloneTemp, stdio: "ignore" });
     execSync("git checkout feature/canary-workflow", { cwd: cloneTemp, stdio: "ignore" });
@@ -248,12 +268,24 @@ process.exit(1);
   it("Case 3: divergence -> pull_ff refuses verbatim and changes nothing", async () => {
     // Make local commit without pushing
     fs.writeFileSync(path.join(WORKING_REPO, "local-diverge.txt"), "Local content\n", "utf8");
-    await executeGitVerb("host_git_add", { paths: ["local-diverge.txt"] }, capability, bridgeConfig);
-    await executeGitVerb("host_git_commit", { message: "local diverged commit" }, capability, bridgeConfig);
+    await executeGitVerb(
+      "host_git_add",
+      { paths: ["local-diverge.txt"] },
+      capability,
+      bridgeConfig
+    );
+    await executeGitVerb(
+      "host_git_commit",
+      { message: "local diverged commit" },
+      capability,
+      bridgeConfig
+    );
 
     // Make conflicting remote commit
     const cloneTemp = path.join(CANARY_BASE, "temp-clone2");
-    execSync(`git clone "${BARE_REMOTE.replace(/\\/g, "/")}" "${cloneTemp.replace(/\\/g, "/")}"`, { stdio: "ignore" });
+    execSync(`git clone "${BARE_REMOTE.replace(/\\/g, "/")}" "${cloneTemp.replace(/\\/g, "/")}"`, {
+      stdio: "ignore",
+    });
     execSync("git config user.name 'Canary Runner'", { cwd: cloneTemp, stdio: "ignore" });
     execSync("git config user.email 'canary@runner.local'", { cwd: cloneTemp, stdio: "ignore" });
     execSync("git checkout feature/canary-workflow", { cwd: cloneTemp, stdio: "ignore" });
@@ -272,19 +304,29 @@ process.exit(1);
     assert.ok(divergePull.exitCode !== 0);
 
     // Reset local commit for subsequent tests
-    execSync("git reset --hard origin/feature/canary-workflow", { cwd: WORKING_REPO, stdio: "ignore" });
+    execSync("git reset --hard origin/feature/canary-workflow", {
+      cwd: WORKING_REPO,
+      stdio: "ignore",
+    });
   });
 
   it("Case 4: push to a protected name refused", async () => {
     for (const prot of ["develop", "main", "master"]) {
-      const res = await executeGitVerb("host_git_push", { branch: prot }, { repo: "canary-repo", branch: prot }, bridgeConfig);
+      const res = await executeGitVerb(
+        "host_git_push",
+        { branch: prot },
+        { repo: "canary-repo", branch: prot },
+        bridgeConfig
+      );
       assert.equal(res.success, false);
-      assert.match(res.error, /direct push to protected branch .* is forbidden/);
+      assert.match(res.error ?? "", /direct push to protected branch .* is forbidden/);
     }
   });
 
   it("Case 5: force-push attempt has no verb or parameter to express it", () => {
-    const pushDef = UNATTENDED_GIT_TOOLS_DEFINITIONS.find((t) => t.function.name === "host_git_push");
+    const pushDef = UNATTENDED_GIT_TOOLS_DEFINITIONS.find(
+      (t) => t.function.name === "host_git_push"
+    );
     assert.ok(pushDef);
     const props = Object.keys(pushDef.function.parameters?.properties || {});
     assert.equal(props.includes("force"), false);
@@ -294,9 +336,14 @@ process.exit(1);
 
   it("Case 6: commit with out-of-scope or runtime staged path refused", async () => {
     // Direct attempt to add runtime dir
-    const addRuntime = await executeGitVerb("host_git_add", { paths: ["Data/test.json"] }, capability, bridgeConfig);
+    const addRuntime = await executeGitVerb(
+      "host_git_add",
+      { paths: ["Data/test.json"] },
+      capability,
+      bridgeConfig
+    );
     assert.equal(addRuntime.success, false);
-    assert.match(addRuntime.error, /staging runtime directories is forbidden/);
+    assert.match(addRuntime.error ?? "", /staging runtime directories is forbidden/);
   });
 
   it("Case 7: job operating while tree carries tracked modification from someone else -> mutating verbs refuse", async () => {
@@ -305,11 +352,16 @@ process.exit(1);
 
     const pullRes = await executeGitVerb("host_git_pull_ff", {}, capability, bridgeConfig);
     assert.equal(pullRes.success, false);
-    assert.match(pullRes.error, /tracked modifications/);
+    assert.match(pullRes.error ?? "", /tracked modifications/);
 
-    const checkoutRes = await executeGitVerb("host_git_checkout", { branch: "feature/canary-workflow" }, capability, bridgeConfig);
+    const checkoutRes = await executeGitVerb(
+      "host_git_checkout",
+      { branch: "feature/canary-workflow" },
+      capability,
+      bridgeConfig
+    );
     assert.equal(checkoutRes.success, false);
-    assert.match(checkoutRes.error, /tracked modifications/);
+    assert.match(checkoutRes.error ?? "", /tracked modifications/);
 
     // Restore README.md
     execSync("git checkout -- README.md", { cwd: WORKING_REPO, stdio: "ignore" });
@@ -320,14 +372,14 @@ process.exit(1);
     const bridgeOffConfig = { ...bridgeConfig, allowUnattendedGit: false };
     const bOffRes = await executeGitVerb("host_git_status", {}, capability, bridgeOffConfig);
     assert.equal(bOffRes.success, false);
-    assert.match(bOffRes.error, /disabled in bridge configuration/);
+    assert.match(bOffRes.error ?? "", /disabled in bridge configuration/);
 
     // 2. Settings key off (web-ui admission)
-    const settingsAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY");
+    const settingsAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "READY", false);
     assert.equal(settingsAdmitted, false);
 
     // 3. Both keys off
-    const bothAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "DISABLED");
+    const bothAdmitted = shouldAdvertiseUnattendedGitTools(false, capability, "DISABLED", false);
     assert.equal(bothAdmitted, false);
   });
 
@@ -363,15 +415,26 @@ process.exit(1);
     });
 
     it("Case 11: pr_merge without a grant refused", async () => {
-      const res = await executeGitVerb("host_git_pr_merge", { prNumber: 888 }, capability, bridgeConfig);
+      const res = await executeGitVerb(
+        "host_git_pr_merge",
+        { prNumber: 888 },
+        capability,
+        bridgeConfig
+      );
       assert.equal(res.success, false);
-      assert.match(res.error, /No merge grant exists/);
+      assert.match(res.error ?? "", /No merge grant exists/);
     });
 
     it("Case 12: pr_merge with grant + scripted GREEN checks merges and consumes the grant", async () => {
       setGhScenario({ scenario: "normal" });
       const grant: MergeGrant = { prNumber: 888, consumed: false };
-      const res = await executeGitVerb("host_git_pr_merge", { prNumber: 888 }, capability, bridgeConfig, grant);
+      const res = await executeGitVerb(
+        "host_git_pr_merge",
+        { prNumber: 888 },
+        capability,
+        bridgeConfig,
+        grant
+      );
       assert.equal(res.success, true);
       assert.equal(grant.consumed, true);
       assert.ok(res.mergeSha);
@@ -381,26 +444,44 @@ process.exit(1);
       // 1. Pending check
       setGhScenario({ scenario: "pending" });
       const pendingGrant: MergeGrant = { prNumber: 888, consumed: false };
-      const pendingRes = await executeGitVerb("host_git_pr_merge", { prNumber: 888 }, capability, bridgeConfig, pendingGrant);
+      const pendingRes = await executeGitVerb(
+        "host_git_pr_merge",
+        { prNumber: 888 },
+        capability,
+        bridgeConfig,
+        pendingGrant
+      );
       assert.equal(pendingRes.success, false);
-      assert.match(pendingRes.error, /not all green/);
+      assert.match(pendingRes.error ?? "", /not all green/);
       assert.equal(pendingGrant.consumed, false);
 
       // 2. Failing check
       setGhScenario({ scenario: "failing" });
       const failingGrant: MergeGrant = { prNumber: 888, consumed: false };
-      const failingRes = await executeGitVerb("host_git_pr_merge", { prNumber: 888 }, capability, bridgeConfig, failingGrant);
+      const failingRes = await executeGitVerb(
+        "host_git_pr_merge",
+        { prNumber: 888 },
+        capability,
+        bridgeConfig,
+        failingGrant
+      );
       assert.equal(failingRes.success, false);
-      assert.match(failingRes.error, /not all green/);
+      assert.match(failingRes.error ?? "", /not all green/);
       assert.equal(failingGrant.consumed, false);
     });
 
     it("Case 14: pr_merge for main-based PR without explicit main naming refused", async () => {
       setGhScenario({ scenario: "main" });
       const mainGrant: MergeGrant = { prNumber: 888, allowMain: false, consumed: false };
-      const res = await executeGitVerb("host_git_pr_merge", { prNumber: 888 }, capability, bridgeConfig, mainGrant);
+      const res = await executeGitVerb(
+        "host_git_pr_merge",
+        { prNumber: 888 },
+        capability,
+        bridgeConfig,
+        mainGrant
+      );
       assert.equal(res.success, false);
-      assert.match(res.error, /instruction did not explicitly approve main base/);
+      assert.match(res.error ?? "", /instruction did not explicitly approve main base/);
       assert.equal(mainGrant.consumed, false);
     });
   });

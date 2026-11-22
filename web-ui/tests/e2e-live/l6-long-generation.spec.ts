@@ -1,12 +1,21 @@
 import { test, expect } from "@playwright/test";
-import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
+import {
+  checkEngineWatchdog,
+  createFreshSession,
+  sendPrompt,
+  awaitTurnCompletion,
+  DEADLINES,
+} from "./helpers";
 
 test.describe("L6: Long-Generation Stability @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
 
-  test("dispatches massive technical specification prompt, generates >16,000 chars (>4,000 tokens), and completes cleanly with zero truncation markers", async ({ page, baseURL }) => {
+  test("dispatches massive technical specification prompt, generates >16,000 chars (>4,000 tokens), and completes cleanly with zero truncation markers", async ({
+    page,
+    baseURL,
+  }) => {
     const url = baseURL || "http://192.168.50.254";
 
     // 1. Create fresh session
@@ -32,10 +41,18 @@ Elaborate with extensive code blocks and detailed prose.`;
     await sendPrompt(page, heavyPrompt);
 
     // 3. Await completion with 10-minute turn deadline (within 12m runner timeout)
-    const completedTurn = await awaitTurnCompletion(page, url, threadId, DEADLINES.HEAVY, "l6-heavy-generation");
+    const completedTurn = await awaitTurnCompletion(
+      page,
+      url,
+      threadId,
+      DEADLINES.HEAVY,
+      "l6-heavy-generation"
+    );
     const lastMsg = completedTurn.thread.messages[completedTurn.thread.messages.length - 1];
 
-    console.log(`[L6] Turn finished in ${completedTurn.durationSec}s. Output length: ${lastMsg.content?.length} characters.`);
+    console.log(
+      `[L6] Turn finished in ${completedTurn.durationSec}s. Output length: ${lastMsg.content?.length} characters.`
+    );
 
     // 4. Invariants verification
     expect(lastMsg.role).toBe("assistant");

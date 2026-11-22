@@ -5,12 +5,11 @@ import path from "path";
 import os from "os";
 import {
   loadUserProfile,
-  saveUserProfile,
   recordProfileEntry,
   extractDurablePreferences,
   formatProfileForContext,
   getUserProfilePath,
-  UserProfile
+  UserProfile,
 } from "../lib/memory/profile.js";
 
 describe("Phase C — Tier 1 User Profile Memory Suite", () => {
@@ -66,10 +65,15 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
     try {
       const sessId = "session_alpha_123";
       const beforeTime = new Date().toISOString();
-      const res = recordProfileEntry("preferred_name", "Zack", {
-        sessionId: sessId,
-        origin: "user-stated"
-      }, pPath);
+      const res = recordProfileEntry(
+        "preferred_name",
+        "Zack",
+        {
+          sessionId: sessId,
+          origin: "user-stated",
+        },
+        pPath
+      );
 
       assert.equal(res.created, true);
       assert.equal(res.updated, false);
@@ -93,10 +97,15 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
     const pPath = path.join(tempDir, "user_profile.json");
     try {
       // Initialize with an established profile
-      recordProfileEntry("preferred_name", "Zack", {
-        sessionId: "init_sess",
-        origin: "user-stated"
-      }, pPath);
+      recordProfileEntry(
+        "preferred_name",
+        "Zack",
+        {
+          sessionId: "init_sess",
+          origin: "user-stated",
+        },
+        pPath
+      );
       const initialBytes = fs.readFileSync(pPath, "utf8");
 
       // Test a series of chatter queries
@@ -105,7 +114,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
         "Tell me a joke about robots.",
         "Can you help me refactor this function?",
         "Good morning! How are you today?",
-        "npm run test"
+        "npm run test",
       ];
 
       for (const msg of chatter) {
@@ -115,7 +124,11 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
 
       // Check byte-identity of the profile file
       const afterBytes = fs.readFileSync(pPath, "utf8");
-      assert.equal(afterBytes, initialBytes, "Profile file must remain byte-identical after chatter");
+      assert.equal(
+        afterBytes,
+        initialBytes,
+        "Profile file must remain byte-identical after chatter"
+      );
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -129,17 +142,27 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       const sess2 = "sess_correction";
 
       // 1. Initial statement
-      const r1 = recordProfileEntry("preferred_name", "Zachary", {
-        sessionId: sess1,
-        origin: "user-stated"
-      }, pPath);
+      const r1 = recordProfileEntry(
+        "preferred_name",
+        "Zachary",
+        {
+          sessionId: sess1,
+          origin: "user-stated",
+        },
+        pPath
+      );
       assert.equal(r1.created, true);
 
       // 2. Correction
-      const r2 = recordProfileEntry("preferred_name", "Zack", {
-        sessionId: sess2,
-        origin: "corrected"
-      }, pPath);
+      const r2 = recordProfileEntry(
+        "preferred_name",
+        "Zack",
+        {
+          sessionId: sess2,
+          origin: "corrected",
+        },
+        pPath
+      );
       assert.equal(r2.created, false);
       assert.equal(r2.updated, true);
       assert.equal(r2.entry.value, "Zack");
@@ -171,7 +194,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
         entries: {},
         updatedAt: "2026-10-03T00:00:00.000Z",
         customSchemaField: "future_extension_data",
-        clusterPreferences: { k8s: true }
+        clusterPreferences: { k8s: true },
       };
       fs.writeFileSync(pPath, JSON.stringify(rawPayload, null, 2), "utf8");
 
@@ -204,7 +227,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
           sourceSessionId: "s1",
           timestamp: new Date().toISOString(),
           origin: "user-stated",
-          history: []
+          history: [],
         },
         preferred_language: {
           key: "preferred_language",
@@ -212,10 +235,10 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
           sourceSessionId: "s1",
           timestamp: new Date().toISOString(),
           origin: "user-stated",
-          history: []
-        }
+          history: [],
+        },
       },
-      updatedAt: ""
+      updatedAt: "",
     };
 
     const formatted = formatProfileForContext(populated);

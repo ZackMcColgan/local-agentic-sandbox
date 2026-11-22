@@ -26,7 +26,7 @@ describe("B-6: BuilderWorker surgical patch loop", () => {
         "export function helperC(): string {",
         '  return "untouched-C";',
         "}",
-        ""
+        "",
       ].join("\r\n");
       fs.writeFileSync(fullPath, original, "utf8");
 
@@ -37,11 +37,11 @@ describe("B-6: BuilderWorker surgical patch loop", () => {
           capturedPrompt = prompt;
           return {
             text: JSON.stringify({
-              patches: [{ search: "  return 1;", replace: "  return 42;" }]
+              patches: [{ search: "  return 1;", replace: "  return 42;" }],
             }),
-            model: "mock-model"
+            model: "mock-model",
           };
-        }
+        },
       });
 
       const result = await worker.executeMilestoneWork(
@@ -50,12 +50,16 @@ describe("B-6: BuilderWorker surgical patch loop", () => {
           title: "Update targetB",
           description: "Change targetB to return 42",
           acceptanceCriteria: [{ id: "ac1", assertion: "targetB returns 42" }],
-          targetFiles: [targetRel]
-        } as any,
+          targetFiles: [targetRel],
+        } as unknown as Parameters<BuilderWorker["executeMilestoneWork"]>[0],
         { repoRoot: tmpDir, targetFile: targetRel }
       );
 
-      assert.match(capturedPrompt, /patches/i, "Prompt for existing file must ask for surgical patches");
+      assert.match(
+        capturedPrompt,
+        /patches/i,
+        "Prompt for existing file must ask for surgical patches"
+      );
       assert.doesNotMatch(
         capturedPrompt,
         /generate the exact, complete, production-grade file content/i,
@@ -64,7 +68,11 @@ describe("B-6: BuilderWorker surgical patch loop", () => {
 
       const onDisk = fs.readFileSync(fullPath, "utf8");
       const expected = original.replace("  return 1;", "  return 42;");
-      assert.strictEqual(onDisk, expected, "On-disk file must be a surgical diff with untouched CRLF regions byte-identical");
+      assert.strictEqual(
+        onDisk,
+        expected,
+        "On-disk file must be a surgical diff with untouched CRLF regions byte-identical"
+      );
       assert.ok(result.diff.includes("-  return 1;"));
       assert.ok(result.diff.includes("+  return 42;"));
     } finally {

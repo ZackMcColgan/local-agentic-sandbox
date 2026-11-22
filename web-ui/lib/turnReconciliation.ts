@@ -1,15 +1,14 @@
-import { ChatMessage } from "@/components/ChatStream";
-
 /**
  * Helper for formatting caught SSE writer error with name, message, and first stack line.
  */
-export function formatSseWriterError(err: any): string {
+export function formatSseWriterError(err: unknown): string {
   if (!err) return "UnknownError";
-  const name = err.name || "Error";
-  const message = err.message || String(err);
+  const e = err as { name?: string; message?: string; stack?: string };
+  const name = e.name || "Error";
+  const message = e.message || String(err);
   let stackLine = "";
-  if (typeof err.stack === "string") {
-    const lines = err.stack.split("\n");
+  if (typeof e.stack === "string") {
+    const lines = e.stack.split("\n");
     const found = lines.find((l: string) => l.trim().startsWith("at "));
     if (found) {
       stackLine = ` | ${found.trim()}`;
@@ -22,7 +21,12 @@ export type TurnDeliveryState =
   | { state: "idle" }
   | { state: "streaming"; content: string }
   | { state: "transient_disconnected"; partialContent: string; threadId: string }
-  | { state: "resolved_reconciled"; finalContent: string; finish_reason?: string; outputTokens?: number }
+  | {
+      state: "resolved_reconciled";
+      finalContent: string;
+      finish_reason?: string;
+      outputTokens?: number;
+    }
   | { state: "aborted"; content: string }
   | { state: "error"; message: string };
 
@@ -38,7 +42,7 @@ export function transitionOnStreamDisconnect(
     return {
       state: "transient_disconnected",
       partialContent,
-      threadId
+      threadId,
     };
   }
   return currentState;
@@ -46,7 +50,12 @@ export function transitionOnStreamDisconnect(
 
 export function transitionOnDetachedTurnReconciliation(
   currentState: TurnDeliveryState,
-  persistedMessage: { content: string; status?: string; finish_reason?: string; outputTokens?: number }
+  persistedMessage: {
+    content: string;
+    status?: string;
+    finish_reason?: string;
+    outputTokens?: number;
+  }
 ): TurnDeliveryState {
   if (currentState.state === "transient_disconnected") {
     if (persistedMessage.status !== "streaming") {
@@ -54,7 +63,7 @@ export function transitionOnDetachedTurnReconciliation(
         state: "resolved_reconciled",
         finalContent: persistedMessage.content,
         finish_reason: persistedMessage.finish_reason,
-        outputTokens: persistedMessage.outputTokens
+        outputTokens: persistedMessage.outputTokens,
       };
     }
   }

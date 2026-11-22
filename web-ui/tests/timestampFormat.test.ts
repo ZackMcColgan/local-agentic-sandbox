@@ -37,15 +37,33 @@ describe("UI-042: formatMessageTimestamp", () => {
   it("FP3: ThinkingPanel renders formatted date for an older timestamp, not 'Now'", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const tpSource = fs.readFileSync(path.join(process.cwd(), "components", "ThinkingPanel.tsx"), "utf8");
-    assert.match(tpSource, /timestamp\?\s*:\s*string/, "ThinkingPanel should accept optional timestamp prop");
-    assert.match(tpSource, /formatMessageTimestamp/, "ThinkingPanel should use formatMessageTimestamp");
+    const tpSource = fs.readFileSync(
+      path.join(process.cwd(), "components", "ThinkingPanel.tsx"),
+      "utf8"
+    );
+    assert.match(
+      tpSource,
+      /timestamp\?\s*:\s*string/,
+      "ThinkingPanel should accept optional timestamp prop"
+    );
+    assert.match(
+      tpSource,
+      /formatMessageTimestamp/,
+      "ThinkingPanel should use formatMessageTimestamp"
+    );
   });
 
   it("FP3: ThreadsSidebar labels trace count as 'total traces'", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const sbSource = fs.readFileSync(path.join(process.cwd(), "components", "ThreadsSidebar.tsx"), "utf8");
-    assert.match(sbSource, /total traces/, "ThreadsSidebar should label trace counts as 'total traces'");
+    const sbSource = fs.readFileSync(
+      path.join(process.cwd(), "components", "ThreadsSidebar.tsx"),
+      "utf8"
+    );
+    assert.match(
+      sbSource,
+      /total traces/,
+      "ThreadsSidebar should label trace counts as 'total traces'"
+    );
   });
 });

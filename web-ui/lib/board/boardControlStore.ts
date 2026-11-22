@@ -1,11 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveBoardDir, BoardStore } from "./boardStore";
-import {
-  abortActiveTurn,
-  clearTurnActive,
-  activeExecutionSet,
-} from "../threads/threadStore";
+import { abortActiveTurn, clearTurnActive, activeExecutionSet } from "../threads/threadStore";
 import { cancelTask } from "../subagents/supervisor";
 import { unloadAllModels } from "../subagents/residency";
 
@@ -61,12 +57,29 @@ function defaultControlRecord(): BoardControlRecord {
   };
 }
 
-function extractThreadIdFromLink(threadLink?: string): string | null {
+export function extractThreadIdFromLink(threadLink?: string): string | null {
   if (!threadLink) return null;
   const trimmed = threadLink.trim();
   if (!trimmed) return null;
-  const parts = trimmed.split("/").filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : null;
+
+  try {
+    const parsed = new URL(trimmed, "http://localhost");
+    const queryId = parsed.searchParams.get("thread")?.trim();
+    if (queryId) {
+      return queryId;
+    }
+    const legacyMatch = /^\/threads\/([^/]+)\/?$/.exec(parsed.pathname);
+    if (legacyMatch) {
+      const legacyId = decodeURIComponent(legacyMatch[1]).trim();
+      if (legacyId) {
+        return legacyId;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export class BoardControlStore {
@@ -149,7 +162,8 @@ export class BoardControlStore {
     if (turnRegistry) {
       for (const id of turnRegistry.keys()) ids.add(id);
     }
-    const turnControllers = g.__sandboxActiveTurnAbortControllers as Map<string, unknown> | undefined;
+    const turnControllers = g.__sandboxActiveTurnAbortControllers as
+      Map<string, unknown> | undefined;
     if (turnControllers) {
       for (const id of turnControllers.keys()) ids.add(id);
     }
@@ -178,8 +192,7 @@ export class BoardControlStore {
 
     const g = globalThis as Record<string, unknown>;
     const supState = g.__supervisorGlobalState as
-      | { abortControllers?: Map<string, unknown> }
-      | undefined;
+      { abortControllers?: Map<string, unknown> } | undefined;
     if (supState?.abortControllers) {
       for (const id of supState.abortControllers.keys()) ids.add(id);
     }

@@ -32,11 +32,14 @@ describe("UI-051: BuildsView consumes /api/board", () => {
             ambiguityFlags: [],
             journal: [],
             startedAt: "2026-11-15T00:00:00.000Z",
-            updatedAt: "2026-11-15T00:00:00.000Z"
-          }
-        ]
+            updatedAt: "2026-11-15T00:00:00.000Z",
+          },
+        ],
       })
     );
-    assert.ok(html.includes("Thread-backed Board Row Alpha"), "Rendered BuildsView must display board task row");
+    assert.ok(
+      html.includes("Thread-backed Board Row Alpha"),
+      "Rendered BuildsView must display board task row"
+    );
   });
 });

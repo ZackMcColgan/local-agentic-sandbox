@@ -27,7 +27,7 @@ export interface GenerateResult {
   /** Time Ollama spent loading weights for this call (ms). >~1000ms means a cold load. */
   loadDurationMs?: number;
   totalDurationMs?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export type GenerateFn = (req: GenerateRequest) => Promise<GenerateResult>;
@@ -122,13 +122,13 @@ export function createLlmGenerate(options?: {
         return await provider.generate(req, options?.baseUrl, {
           timeoutMs: options?.timeoutMs,
           fetchImpl: options?.fetchImpl,
-          scope: options?.scope || req.scope
+          scope: options?.scope || req.scope,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         throw new ModelUnavailableError(
           req.model,
           options?.baseUrl || process.env.LLAMACPP_BASE_URL || "http://127.0.0.1:8080",
-          err?.message || String(err)
+          err instanceof Error ? err.message : String(err)
         );
       }
     };
@@ -149,15 +149,18 @@ export function createLlmGenerate(options?: {
 
     // Decouple <think> reasoning budget from code output budget:
     // Add thinking token budget (fast=1024, balanced=4096, deep=8192) ON TOP of requested num_predict
-    const requestedPredict = typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
-    const effort = (req.reasoningEffort || (req.options as any)?.reasoningEffort || "fast") as string;
+    const requestedPredict =
+      typeof req.options?.num_predict === "number" ? req.options.num_predict : 2048;
+    const effort = (req.reasoningEffort ||
+      (req.options as { reasoningEffort?: string } | undefined)?.reasoningEffort ||
+      "fast") as string;
     const thinkingBudget = getThinkingBudget(effort);
     const effectiveNumPredict = requestedPredict + thinkingBudget;
 
     const requestOptions = {
       num_ctx: numCtx,
       ...(req.options || {}),
-      num_predict: effectiveNumPredict
+      num_predict: effectiveNumPredict,
     };
 
     let res: Response;
@@ -172,16 +175,25 @@ export function createLlmGenerate(options?: {
           stream: true,
           ...(req.format ? { format: req.format } : {}),
           ...(req.keepAlive !== undefined ? { keep_alive: req.keepAlive } : {}),
-          options: requestOptions
-        })
+          options: requestOptions,
+        }),
       });
-    } catch (err: any) {
-      throw new ModelUnavailableError(req.model, endpoint, err?.name === "TimeoutError" ? `timed out after ${timeoutMs}ms` : err?.message || String(err));
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      throw new ModelUnavailableError(
+        req.model,
+        endpoint,
+        e?.name === "TimeoutError" ? `timed out after ${timeoutMs}ms` : e?.message || String(err)
+      );
     }
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new ModelUnavailableError(req.model, endpoint, `HTTP ${res.status} ${body.slice(0, 200)}`);
+      throw new ModelUnavailableError(
+        req.model,
+        endpoint,
+        `HTTP ${res.status} ${body.slice(0, 200)}`
+      );
     }
 
     let accumulatedText = "";
@@ -193,7 +205,7 @@ export function createLlmGenerate(options?: {
     let lastLogTime = Date.now();
 
     try {
-      if (res.body && typeof (res.body as any).getReader === "function") {
+      if (res.body && typeof (res.body as ReadableStream<Uint8Array>).getReader === "function") {
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
@@ -239,11 +251,21 @@ export function createLlmGenerate(options?: {
               if (now - lastLogTime >= 15000) {
                 lastLogTime = now;
                 const elapsedSec = Math.round((now - startTime) / 1000);
-                if (insideThinking || (!accumulatedText.includes("</think>") && accumulatedText.length > 0 && !accumulatedText.includes("```"))) {
-                  const sample = (thinkingText || accumulatedText).replace(/\r?\n/g, " ").trim().slice(-120);
+                if (
+                  insideThinking ||
+                  (!accumulatedText.includes("</think>") &&
+                    accumulatedText.length > 0 &&
+                    !accumulatedText.includes("```"))
+                ) {
+                  const sample = (thinkingText || accumulatedText)
+                    .replace(/\r?\n/g, " ")
+                    .trim()
+                    .slice(-120);
                   console.log(`[llm] stream thinking [${elapsedSec}s elapsed]: ...${sample}`);
                 } else {
-                  console.log(`[llm] stream generating [${elapsedSec}s elapsed, ${accumulatedText.length} chars accumulated]`);
+                  console.log(
+                    `[llm] stream generating [${elapsedSec}s elapsed, ${accumulatedText.length} chars accumulated]`
+                  );
                 }
               }
             } catch (_) {}
@@ -282,24 +304,30 @@ export function createLlmGenerate(options?: {
           }
         }
       }
-    } catch (err: any) {
-      throw new ModelUnavailableError(req.model, endpoint, `stream read error: ${err?.message || String(err)}`);
+    } catch (err: unknown) {
+      throw new ModelUnavailableError(
+        req.model,
+        endpoint,
+        `stream read error: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
 
-    let text = accumulatedText.trim();
+    const text = accumulatedText.trim();
     if (!text) {
       throw new ModelUnavailableError(req.model, endpoint, "empty response");
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[llm] generate completed in ${elapsed}ms for model ${req.model} (${text.length} chars)`);
+    console.log(
+      `[llm] generate completed in ${elapsed}ms for model ${req.model} (${text.length} chars)`
+    );
 
     return {
       text,
       thinking: thinkingText.trim() || undefined,
       model: req.model,
       loadDurationMs,
-      totalDurationMs: totalDurationMs || elapsed
+      totalDurationMs: totalDurationMs || elapsed,
     };
   };
 }

@@ -8,10 +8,14 @@ import { fileURLToPath, pathToFileURL } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
-  let bridgeModule: any;
+  let bridgeModule: {
+    STARTUP_WARNING: string;
+    DEFAULT_BIND_HOST: string;
+    createProxyServer: (port: number) => http.Server;
+  };
   let mockTargetServer: http.Server;
   let mockTargetPort: number;
-  let receivedHeaders: Record<string, any> = {};
+  let receivedHeaders: http.IncomingHttpHeaders = {};
   const bridgePath = path.resolve(__dirname, "../../scripts/lan-bridge.js");
   const hasBridgeScript = fs.existsSync(bridgePath);
 
@@ -27,7 +31,7 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
 
     await new Promise<void>((resolve) => {
       mockTargetServer.listen(0, "127.0.0.1", () => {
-        const addr = mockTargetServer.address() as any;
+        const addr = mockTargetServer.address() as { port: number };
         mockTargetPort = addr.port;
         resolve();
       });
@@ -81,7 +85,7 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
       bridgeServer.listen(0, "0.0.0.0", () => resolve());
     });
 
-    const bridgeAddr = bridgeServer.address() as any;
+    const bridgeAddr = bridgeServer.address() as { port: number };
     const bridgePort = bridgeAddr.port;
 
     try {
@@ -89,7 +93,7 @@ describe("Task 3 — LAN Bridge Behavior & Security Exposure Suite", () => {
       const res = await fetch(`http://127.0.0.1:${bridgePort}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "test query from lan" })
+        body: JSON.stringify({ message: "test query from lan" }),
       });
 
       // Assert request is NOT blocked or gated (HTTP 200 pass-through)

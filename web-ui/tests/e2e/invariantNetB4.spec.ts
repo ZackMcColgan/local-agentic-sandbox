@@ -13,7 +13,9 @@ test.describe("Phase B4 — Type confusion and hostile input", () => {
     await setupStubbedEngineRoutes(page);
   });
 
-  test("Type-confusion & injection & unicode strings in Board titles render as inert text without layout break", async ({ page }) => {
+  test("Type-confusion & injection & unicode strings in Board titles render as inert text without layout break", async ({
+    page,
+  }) => {
     const hostileCards = [
       { id: "c1", title: "12345", status: "queued" },
       { id: "c2", title: "0", status: "queued" },
@@ -27,7 +29,12 @@ test.describe("Phase B4 — Type confusion and hostile input", () => {
       { id: "c10", title: "Zalgo a\u0301\u0302\u0303\u0304\u0305\u0306", status: "queued" },
       { id: "c11", title: "\u202ERTL_OVERRIDE_TEST", status: "queued" },
       { id: "c12", title: "🚀🔥🧪", status: "queued" },
-    ].map((c) => ({ ...c, priority: "medium", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
+    ].map((c) => ({
+      ...c,
+      priority: "medium",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
 
     await page.route("**/api/board**", async (route) => {
       if (route.request().method() === "GET") {
@@ -48,7 +55,12 @@ test.describe("Phase B4 — Type confusion and hostile input", () => {
 
     await page.goto("/");
     await page.locator('button[aria-label="Open navigation menu"]').first().click();
-    await page.locator('[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board")').first().click();
+    await page
+      .locator(
+        '[data-testid="navigation-drawer"] button:has-text("Board"), div.rounded-r-3xl button:has-text("Board")'
+      )
+      .first()
+      .click();
     await page.waitForTimeout(400);
 
     expect(dialogFired).toBe(false);

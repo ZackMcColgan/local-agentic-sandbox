@@ -4,10 +4,8 @@ import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { SvgViewer } from "../components/SvgViewer.js";
-import {
-  checkDrawio,
-  logServiceMode
-} from "./helpers/serviceMocks.js";
+import type { TaskManifest } from "../lib/subagents/types.js";
+import { checkDrawio, logServiceMode } from "./helpers/serviceMocks.js";
 
 describe("SVG Viewer Component Suite", () => {
   before(() => {
@@ -21,11 +19,11 @@ describe("SVG Viewer Component Suite", () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     win = new GlobalWindow({ url: "http://localhost:3000" });
-    globalThis.window = win as any;
-    globalThis.document = win.document as any;
-    globalThis.localStorage = win.localStorage as any;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    globalThis.localStorage = win.localStorage as unknown as Storage;
 
     const div = win.document.createElement("div");
     win.document.body.appendChild(div);
@@ -55,7 +53,10 @@ describe("SVG Viewer Component Suite", () => {
     });
 
     const renderedText = container.textContent || "";
-    assert.ok(renderedText.includes("Test Vector") || renderedText.includes("SVG"), "Displays title");
+    assert.ok(
+      renderedText.includes("Test Vector") || renderedText.includes("SVG"),
+      "Displays title"
+    );
     assert.ok(renderedText.includes("Preview"), "Contains Preview tab");
     assert.ok(renderedText.includes("Code"), "Contains Code tab");
 
@@ -91,21 +92,22 @@ describe("SVG Viewer Component Suite", () => {
     let createdBlob: Blob | null = null;
     let clickedDownloadName = "";
 
-    const origCreateObjectURL = (globalThis as any).URL.createObjectURL;
-    const origRevokeObjectURL = (globalThis as any).URL.revokeObjectURL;
-    (globalThis as any).URL.createObjectURL = (blob: Blob) => {
+    const origCreateObjectURL = globalThis.URL.createObjectURL;
+    const origRevokeObjectURL = globalThis.URL.revokeObjectURL;
+    globalThis.URL.createObjectURL = (blob: Blob) => {
       createdBlob = blob;
       return "blob:mock-url";
     };
-    (globalThis as any).URL.revokeObjectURL = () => {};
+    globalThis.URL.revokeObjectURL = () => {};
 
     const origAppendChild = win.document.body.appendChild.bind(win.document.body);
-    win.document.body.appendChild = ((node: any) => {
-      if (node.tagName === "A" && node.download) {
-        clickedDownloadName = node.download;
+    win.document.body.appendChild = ((node: unknown) => {
+      const el = node as { tagName?: string; download?: string };
+      if (el.tagName === "A" && el.download) {
+        clickedDownloadName = el.download;
       }
-      return origAppendChild(node);
-    }) as any;
+      return origAppendChild(node as Parameters<typeof origAppendChild>[0]);
+    }) as typeof win.document.body.appendChild;
 
     try {
       // 1. Weather card HTML
@@ -114,13 +116,15 @@ describe("SVG Viewer Component Suite", () => {
         root!.render(
           React.createElement(SvgViewer, {
             code: `<svg><text>Weather</text></svg>`,
-            title: "weather-card.html"
+            title: "weather-card.html",
           })
         );
       });
 
       const buttons = Array.from(container.querySelectorAll("button"));
-      const dlBtn = buttons.find((b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download"));
+      const dlBtn = buttons.find(
+        (b) => b.getAttribute("title")?.includes("Download") || b.textContent?.includes("Download")
+      );
       assert.ok(dlBtn !== undefined, "Download button must exist");
 
       await act(async () => {
@@ -128,7 +132,7 @@ describe("SVG Viewer Component Suite", () => {
       });
 
       assert.equal(clickedDownloadName, "weather-card.html");
-      assert.equal((createdBlob as any)?.type, "text/html;charset=utf-8");
+      assert.equal((createdBlob as Blob | null)?.type, "text/html;charset=utf-8");
 
       // 2. chart.drawio
       root.unmount();
@@ -141,7 +145,7 @@ describe("SVG Viewer Component Suite", () => {
         root!.render(
           React.createElement(SvgViewer, {
             code: `<mxfile><diagram>Test</diagram></mxfile>`,
-            title: "chart.drawio"
+            title: "chart.drawio",
           })
         );
       });
@@ -156,7 +160,7 @@ describe("SVG Viewer Component Suite", () => {
       });
 
       assert.equal(clickedDownloadName, "chart.drawio");
-      assert.equal((createdBlob as any)?.type, "application/xml;charset=utf-8");
+      assert.equal((createdBlob as Blob | null)?.type, "application/xml;charset=utf-8");
 
       // 3. diagram.svg
       root.unmount();
@@ -169,7 +173,7 @@ describe("SVG Viewer Component Suite", () => {
         root!.render(
           React.createElement(SvgViewer, {
             code: `<svg><circle r="10"/></svg>`,
-            title: "diagram.svg"
+            title: "diagram.svg",
           })
         );
       });
@@ -182,10 +186,10 @@ describe("SVG Viewer Component Suite", () => {
       });
 
       assert.equal(clickedDownloadName, "diagram.svg");
-      assert.equal((createdBlob as any)?.type, "image/svg+xml;charset=utf-8");
+      assert.equal((createdBlob as Blob | null)?.type, "image/svg+xml;charset=utf-8");
     } finally {
-      (globalThis as any).URL.createObjectURL = origCreateObjectURL;
-      (globalThis as any).URL.revokeObjectURL = origRevokeObjectURL;
+      globalThis.URL.createObjectURL = origCreateObjectURL;
+      globalThis.URL.revokeObjectURL = origRevokeObjectURL;
       win.document.body.appendChild = origAppendChild;
     }
   });
@@ -193,24 +197,20 @@ describe("SVG Viewer Component Suite", () => {
   it("fetches and renders SVG from file URL", async () => {
     const remoteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#3b82f6"/></svg>`;
 
-    globalThis.fetch = async (url: any) => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/files?path=docs/architecture.drawio.svg")) {
-        return {
-          ok: true,
-          status: 200,
-          text: async () => remoteSvg
-        } as any;
+        return new Response(remoteSvg, { status: 200 });
       }
-      return { ok: false, status: 404 } as any;
-    };
+      return new Response("", { status: 404 });
+    }) as typeof globalThis.fetch;
 
     root = createRoot(container);
     await act(async () => {
       root!.render(
         React.createElement(SvgViewer, {
           url: "/api/files?path=docs/architecture.drawio.svg",
-          title: "architecture.drawio.svg"
+          title: "architecture.drawio.svg",
         })
       );
     });
@@ -233,8 +233,8 @@ describe("SVG Viewer Component Suite", () => {
       {
         id: "msg-1",
         role: "assistant" as const,
-        content: `Here is the architectural diagram:\n\`\`\`svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#10b981"/></svg>\n\`\`\`\nAnd here is a link to [architecture.drawio.svg](docs/architecture.drawio.svg).`
-      }
+        content: `Here is the architectural diagram:\n\`\`\`svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#10b981"/></svg>\n\`\`\`\nAnd here is a link to [architecture.drawio.svg](docs/architecture.drawio.svg).`,
+      },
     ];
 
     root = createRoot(container);
@@ -245,13 +245,16 @@ describe("SVG Viewer Component Suite", () => {
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
           messages: testMessages,
-          setMessages: () => {}
+          setMessages: () => {},
         })
       );
     });
 
     const renderedText = container.textContent || "";
-    assert.ok(renderedText.includes("Preview"), "ChatStream renders SVG Preview tab for code block");
+    assert.ok(
+      renderedText.includes("Preview"),
+      "ChatStream renders SVG Preview tab for code block"
+    );
     assert.ok(renderedText.includes("architecture.drawio.svg"), "Renders SVG file link");
 
     const svgs = container.querySelectorAll("svg");
@@ -268,7 +271,8 @@ describe("SVG Viewer Component Suite", () => {
       {
         id: "msg-tool-svg",
         role: "assistant" as const,
-        content: "There we go! The SVG has been written via the tool call to `two_tier_architecture.svg` in your workspace, featuring web and database tiers.",
+        content:
+          "There we go! The SVG has been written via the tool call to `two_tier_architecture.svg` in your workspace, featuring web and database tiers.",
         traces: [
           {
             tool: "workspace_write_file",
@@ -276,7 +280,8 @@ describe("SVG Viewer Component Suite", () => {
             timestamp: new Date().toISOString(),
             args: {
               path: "two_tier_architecture.svg",
-              content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect id="web-tier" width="90" height="50" fill="#3b82f6"/><rect id="db-tier" x="110" width="90" height="50" fill="#10b981"/></svg>'
+              content:
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect id="web-tier" width="90" height="50" fill="#3b82f6"/><rect id="db-tier" x="110" width="90" height="50" fill="#10b981"/></svg>',
             },
             result: {
               content: [
@@ -286,14 +291,14 @@ describe("SVG Viewer Component Suite", () => {
                     status: "SUCCESS",
                     path: "two_tier_architecture.svg",
                     bytes_written: 180,
-                    is_diagram: true
-                  })
-                }
-              ]
-            }
-          }
-        ]
-      }
+                    is_diagram: true,
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      },
     ];
 
     root = createRoot(container);
@@ -304,7 +309,7 @@ describe("SVG Viewer Component Suite", () => {
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
           messages: testMessages,
-          setMessages: () => {}
+          setMessages: () => {},
         })
       );
     });
@@ -327,7 +332,10 @@ describe("SVG Viewer Component Suite", () => {
     assert.ok(renderedText.includes("Code"), "Code tab present");
 
     // 4. Assert proof drawer is still collapsed by default while the SVG is fully visible
-    assert.ok(renderedText.includes("Expand Proof"), "Proof drawer remains collapsed without hiding the SVG");
+    assert.ok(
+      renderedText.includes("Expand Proof"),
+      "Proof drawer remains collapsed without hiding the SVG"
+    );
   });
 
   it("SvgViewer converts Draw.io XML into rendered vector shapes and provides external diagram link", async () => {
@@ -347,14 +355,21 @@ describe("SVG Viewer Component Suite", () => {
 
     root = createRoot(container);
     await act(async () => {
-      root!.render(React.createElement(SvgViewer, { code: drawioXml, title: "two_tier_aws.drawio.svg" }));
+      root!.render(
+        React.createElement(SvgViewer, { code: drawioXml, title: "two_tier_aws.drawio.svg" })
+      );
     });
 
     const renderedText = container.textContent || "";
-    assert.ok(renderedText.includes("two_tier_aws.drawio.svg") || renderedText.includes("Draw.io"), "Displays title or Draw.io badge");
+    assert.ok(
+      renderedText.includes("two_tier_aws.drawio.svg") || renderedText.includes("Draw.io"),
+      "Displays title or Draw.io badge"
+    );
 
     // Must render SVG DOM element containing converted shapes (not an empty canvas!)
-    const svgElem = container.querySelector("svg.drawio-svg") || container.querySelector(".drawio-node")?.closest("svg");
+    const svgElem =
+      container.querySelector("svg.drawio-svg") ||
+      container.querySelector(".drawio-node")?.closest("svg");
     assert.ok(svgElem, "Must contain rendered SVG DOM element");
     if (!svgElem) {
       assert.fail("Must contain rendered SVG DOM element");
@@ -363,7 +378,10 @@ describe("SVG Viewer Component Suite", () => {
 
     // Assert Diagrams.net action button exists
     const buttons = Array.from(container.querySelectorAll("button, a"));
-    const drawioBtn = buttons.find((b) => b.getAttribute("title")?.includes("Diagrams.net") || b.textContent?.includes("Diagrams.net"));
+    const drawioBtn = buttons.find(
+      (b) =>
+        b.getAttribute("title")?.includes("Diagrams.net") || b.textContent?.includes("Diagrams.net")
+    );
     assert.ok(drawioBtn !== undefined, "Diagrams.net action button must be available");
   });
 
@@ -374,7 +392,8 @@ describe("SVG Viewer Component Suite", () => {
       {
         id: "msg-drawio-trace",
         role: "assistant" as const,
-        content: "I have created the architecture diagram and saved it to two_tier_aws_architecture.drawio.svg.",
+        content:
+          "I have created the architecture diagram and saved it to two_tier_aws_architecture.drawio.svg.",
         traces: [
           {
             tool: "workspace_write_file",
@@ -382,14 +401,19 @@ describe("SVG Viewer Component Suite", () => {
             timestamp: new Date().toISOString(),
             args: {
               path: "two_tier_aws_architecture.drawio.svg",
-              content: `<mxfile host="app.diagrams.net"><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="ec2" value="App Server" vertex="1" parent="1"><mxGeometry x="10" y="10" width="100" height="50" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>`
+              content: `<mxfile host="app.diagrams.net"><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="ec2" value="App Server" vertex="1" parent="1"><mxGeometry x="10" y="10" width="100" height="50" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>`,
             },
             result: {
-              content: [{ type: "text", text: '{"status":"SUCCESS","path":"two_tier_aws_architecture.drawio.svg"}' }]
-            }
-          }
-        ]
-      }
+              content: [
+                {
+                  type: "text",
+                  text: '{"status":"SUCCESS","path":"two_tier_aws_architecture.drawio.svg"}',
+                },
+              ],
+            },
+          },
+        ],
+      },
     ];
 
     root = createRoot(container);
@@ -400,7 +424,7 @@ describe("SVG Viewer Component Suite", () => {
           activeModel: "qwen3.8:27b-q3_k_m",
           reasoningEffort: "medium",
           messages: testMessages,
-          setMessages: () => {}
+          setMessages: () => {},
         })
       );
     });
@@ -411,7 +435,9 @@ describe("SVG Viewer Component Suite", () => {
       "Must render inline vector diagram for drawio.svg"
     );
 
-    const svgElem = container.querySelector("svg.drawio-svg") || container.querySelector(".drawio-node")?.closest("svg");
+    const svgElem =
+      container.querySelector("svg.drawio-svg") ||
+      container.querySelector(".drawio-node")?.closest("svg");
     assert.ok(svgElem, "Must render SVG DOM element for Draw.io file");
     if (!svgElem) {
       assert.fail("Must render SVG DOM element for Draw.io file");
@@ -439,13 +465,17 @@ describe("SVG Viewer Component Suite", () => {
         React.createElement(CodeBlock, {
           code: sampleWeatherHtml,
           language: "html",
-          filename: "spanish-fort-weather.html"
+          filename: "spanish-fort-weather.html",
         })
       );
     });
 
     const htmlText = container.textContent || "";
-    assert.equal(htmlText.includes("Vector Graphic"), false, "HTML document must NOT produce 'Vector Graphic' SvgViewer");
+    assert.equal(
+      htmlText.includes("Vector Graphic"),
+      false,
+      "HTML document must NOT produce 'Vector Graphic' SvgViewer"
+    );
     const iframeElem = container.querySelector("iframe");
     assert.ok(iframeElem !== null, "HTML document must route to sandboxed HTML iframe preview");
 
@@ -460,14 +490,21 @@ describe("SVG Viewer Component Suite", () => {
         React.createElement(CodeBlock, {
           code: sampleWeatherHtml,
           language: "xml",
-          filename: "spanish-fort-weather.html"
+          filename: "spanish-fort-weather.html",
         })
       );
     });
 
     const xmlHtmlText = container.textContent || "";
-    assert.equal(xmlHtmlText.includes("Vector Graphic"), false, "HTML doc labeled as xml must NOT produce SvgViewer");
-    assert.ok(container.querySelector("iframe") !== null, "HTML doc labeled as xml must route to iframe preview");
+    assert.equal(
+      xmlHtmlText.includes("Vector Graphic"),
+      false,
+      "HTML doc labeled as xml must NOT produce SvgViewer"
+    );
+    assert.ok(
+      container.querySelector("iframe") !== null,
+      "HTML doc labeled as xml must route to iframe preview"
+    );
 
     // Clean up container for next render
     root.unmount();
@@ -480,20 +517,26 @@ describe("SVG Viewer Component Suite", () => {
         React.createElement(CodeBlock, {
           code: `<svg viewBox="0 0 100 100"><rect width="100" height="100"/></svg>`,
           language: "svg",
-          filename: "chart.svg"
+          filename: "chart.svg",
         })
       );
     });
 
     const svgText = container.textContent || "";
-    assert.ok(svgText.includes("chart.svg") || svgText.includes("Vector Graphic"), "Bare SVG must render SvgViewer title");
-    assert.ok(container.querySelector("svg") !== null, "Bare SVG must render SVG element in SvgViewer");
+    assert.ok(
+      svgText.includes("chart.svg") || svgText.includes("Vector Graphic"),
+      "Bare SVG must render SvgViewer title"
+    );
+    assert.ok(
+      container.querySelector("svg") !== null,
+      "Bare SVG must render SVG element in SvgViewer"
+    );
   });
 
   it("LiveRunBlock renders sandboxed HTML iframe preview for .html deliverables, and SvgViewer for .svg", async () => {
     const { LiveRunBlock } = await import("../components/LiveRunBlock.js");
 
-    const htmlTask: any = {
+    const htmlTask = {
       id: "task-html-1",
       title: "Weather Report Generator",
       status: "completed",
@@ -502,16 +545,16 @@ describe("SVG Viewer Component Suite", () => {
           id: "m-1",
           name: "Write HTML",
           status: "completed",
-          plannedFiles: ["spanish-fort-weather.html"]
-        }
-      ]
-    };
+          plannedFiles: ["spanish-fort-weather.html"],
+        },
+      ],
+    } as unknown as TaskManifest;
 
     root = createRoot(container);
     await act(async () => {
       root!.render(
         React.createElement(LiveRunBlock, {
-          task: htmlTask
+          task: htmlTask,
         })
       );
     });
@@ -522,14 +565,18 @@ describe("SVG Viewer Component Suite", () => {
       iframe?.getAttribute("src")?.includes("/api/files?path=spanish-fort-weather.html"),
       "iframe src must point to /api/files?path=spanish-fort-weather.html"
     );
-    assert.equal(iframe?.getAttribute("sandbox"), "allow-scripts", "iframe must have sandbox='allow-scripts'");
+    assert.equal(
+      iframe?.getAttribute("sandbox"),
+      "allow-scripts",
+      "iframe must have sandbox='allow-scripts'"
+    );
 
     // Clean up container
     root.unmount();
     root = null;
 
     // Test SVG deliverable continues to render SvgViewer
-    const svgTask: any = {
+    const svgTask = {
       id: "task-svg-1",
       title: "Chart Generator",
       status: "completed",
@@ -538,24 +585,24 @@ describe("SVG Viewer Component Suite", () => {
           id: "m-1",
           name: "Write SVG",
           status: "completed",
-          plannedFiles: ["architecture.svg"]
-        }
-      ]
-    };
+          plannedFiles: ["architecture.svg"],
+        },
+      ],
+    } as unknown as TaskManifest;
 
     root = createRoot(container);
     await act(async () => {
       root!.render(
         React.createElement(LiveRunBlock, {
-          task: svgTask
+          task: svgTask,
         })
       );
     });
 
     assert.equal(container.querySelector("iframe"), null, "SVG deliverable must not render iframe");
-    assert.ok(container.textContent?.includes("architecture.svg"), "SVG deliverable renders SvgViewer title");
+    assert.ok(
+      container.textContent?.includes("architecture.svg"),
+      "SVG deliverable renders SvgViewer title"
+    );
   });
 });
-
-
-

@@ -1,14 +1,23 @@
 import { test, expect } from "@playwright/test";
 import fs from "fs";
 import path from "path";
-import { checkEngineWatchdog, createFreshSession, sendPrompt, awaitTurnCompletion, DEADLINES } from "./helpers";
+import {
+  checkEngineWatchdog,
+  createFreshSession,
+  sendPrompt,
+  awaitTurnCompletion,
+  DEADLINES,
+} from "./helpers";
 
 test.describe("L5: Multi-Slice Host Job @smoke @full", () => {
   test.beforeEach(async () => {
     await checkEngineWatchdog();
   });
 
-  test("dispatches single prompt to write 3 host files, reads back via host tools, and verifies bytes on disk", async ({ page, baseURL }) => {
+  test("dispatches single prompt to write 3 host files, reads back via host tools, and verifies bytes on disk", async ({
+    page,
+    baseURL,
+  }) => {
     const url = baseURL || "http://192.168.50.254";
 
     const scratchDir = "C:\\AI\\scratch";
@@ -18,9 +27,15 @@ test.describe("L5: Multi-Slice Host Job @smoke @full", () => {
     const alphaPath = path.join(scratchDir, "alpha.txt");
     const betaPath = path.join(scratchDir, "beta.json");
     const gammaPath = path.join(scratchDir, "gamma.ps1");
-    try { fs.unlinkSync(alphaPath); } catch {}
-    try { fs.unlinkSync(betaPath); } catch {}
-    try { fs.unlinkSync(gammaPath); } catch {}
+    try {
+      fs.unlinkSync(alphaPath);
+    } catch {}
+    try {
+      fs.unlinkSync(betaPath);
+    } catch {}
+    try {
+      fs.unlinkSync(gammaPath);
+    } catch {}
 
     // 1. Create fresh session
     const threadId = await createFreshSession(page, url, "L5 Host Multi-Slice");
