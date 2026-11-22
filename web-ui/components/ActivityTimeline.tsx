@@ -262,7 +262,7 @@ function TimelineRowView({
                   className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 cursor-pointer"
                 >
                   <FileDiff className="h-3 w-3" />
-                  <span>Open in canvas</span>
+                  <span>Open</span>
                 </button>
               </div>
             )}
