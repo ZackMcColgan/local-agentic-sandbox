@@ -396,7 +396,7 @@ export function BoardView({
             <div className="mt-3.5 rounded-[14px] border-[1.5px] border-dashed border-[#26262b] p-4 text-center text-[12.5px] leading-relaxed text-zinc-400">
               One job at a time.
               <br />
-              The next item starts itself when this one lands.
+              When board control is running, the next queued item starts when this one lands.
             </div>
           )}
           {byStatus[activeCol.status].length === 0 && activeCol.status !== "working" && (
