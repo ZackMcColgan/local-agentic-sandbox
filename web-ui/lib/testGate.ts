@@ -65,6 +65,10 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    match: (p) => p.includes("lib/activityTimeline") || p.includes("activityTimeline.test.ts"),
+    tests: ["tests/activityTimeline.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
     tests: ["tests/repoMap.test.ts"],
   },
