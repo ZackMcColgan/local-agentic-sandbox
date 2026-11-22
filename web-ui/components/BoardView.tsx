@@ -106,7 +106,7 @@ export function BoardView({
     const isLive = item.status === "working";
     const isDone = item.status === "done";
     const dotColor = isLive
-      ? "bg-cyan-400 animate-pulse"
+      ? "bg-emerald-400 animate-pulse"
       : isDone
         ? "bg-emerald-400"
         : "bg-stone-500";
@@ -120,7 +120,7 @@ export function BoardView({
         key={item.id}
         className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] surface-card p-3.5 transition-all ${
           isLive
-            ? "shadow-[0_0_0_1px_rgba(34,211,238,0.6)_inset] border-cyan-500/40"
+            ? "shadow-[0_0_0_1px_rgba(52,211,153,0.6)_inset] border-emerald-500/40"
             : "hover:border-white/[0.18]"
         }`}
       >
@@ -143,8 +143,8 @@ export function BoardView({
         </div>
 
         {item.evidence?.liveLine && (
-          <div className="flex items-center gap-1.5 pt-2 text-[12px] text-cyan-300">
-            <span className="text-cyan-400">●</span>
+          <div className="flex items-center gap-1.5 pt-2 text-[12px] text-emerald-300">
+            <span className="text-emerald-400">●</span>
             <span>{item.evidence.liveLine}</span>
           </div>
         )}
@@ -254,18 +254,18 @@ export function BoardView({
           data-testid="board-control-pill"
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
             controlState === "running"
-              ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300"
+              ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
               : controlState === "paused"
-                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                ? "border-white/[0.16] bg-[#1f1f28] text-stone-200"
                 : "border-white/[0.12] bg-[#15151b] text-stone-300"
           }`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
               controlState === "running"
-                ? "bg-cyan-400 animate-pulse"
+                ? "bg-emerald-400 animate-pulse"
                 : controlState === "paused"
-                  ? "bg-emerald-400"
+                  ? "bg-stone-300"
                   : "bg-stone-400"
             }`}
           />
