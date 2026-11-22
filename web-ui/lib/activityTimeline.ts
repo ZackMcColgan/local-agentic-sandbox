@@ -1,0 +1,393 @@
+/**
+ * Pure row model for the activity timeline.
+ *
+ * Transforms raw tool traces into verb-first timeline rows, folds consecutive
+ * completed read/search rows into expandable groups, and extracts inline error
+ * summaries and write diff metadata without side effects.
+ */
+
+export type TimelineToolKind = "read" | "search" | "write" | "shell" | "web" | "subagent" | "other";
+
+export type TimelineRowStatus = "running" | "success" | "error";
+
+export interface TimelineWriteDiff {
+  filePath: string;
+  addedLines: number;
+  removedLines: number;
+  diffText?: string;
+}
+
+export interface TimelineTraceInput {
+  tool: string;
+  args?: Record<string, unknown>;
+  result?: unknown;
+  durationMs?: number;
+  timestamp?: string;
+  tier?: string;
+  status?: "running" | "complete" | "error" | "success";
+  isError?: boolean;
+}
+
+export interface TimelineRow {
+  id: string;
+  kind: TimelineToolKind;
+  status: TimelineRowStatus;
+  verb: string;
+  target: string;
+  label: string;
+  durationMs?: number;
+  errorSummary?: string;
+  writeDiff?: TimelineWriteDiff;
+  children?: TimelineRow[];
+  isGroup?: boolean;
+  rawTraceIndex?: number;
+}
+
+const MAX_TARGET_LEN = 64;
+const MAX_ERROR_LEN = 140;
+
+function truncate(text: string, maxLen: number): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  return `${cleaned.slice(0, maxLen - 1)}…`;
+}
+
+function basename(filePath: string): string {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || filePath;
+}
+
+function readStringArg(args: Record<string, unknown> | undefined, keys: string[]): string {
+  if (!args) return "";
+  for (const key of keys) {
+    const val = args[key];
+    if (typeof val === "string" && val.trim()) return val.trim();
+  }
+  return "";
+}
+
+/**
+ * Classifies a tool name into a canonical timeline kind.
+ */
+export function classifyToolKind(tool: string): TimelineToolKind {
+  const t = (tool || "").toLowerCase();
+  if (!t) return "other";
+
+  if (
+    t.includes("subagent") ||
+    t.includes("delegate") ||
+    t.startsWith("spawn_") ||
+    t.includes("invoke_agent")
+  ) {
+    return "subagent";
+  }
+
+  if (
+    t === "file" ||
+    t.includes("read_file") ||
+    t.includes("readfile") ||
+    t === "read" ||
+    t.includes("view_file") ||
+    t.includes("cat_file")
+  ) {
+    return "read";
+  }
+
+  if (
+    t.includes("search") ||
+    t.includes("grep") ||
+    t.includes("find_files") ||
+    t.includes("list_dir") ||
+    t.includes("glob")
+  ) {
+    return "search";
+  }
+
+  if (
+    t.includes("write") ||
+    t.includes("edit") ||
+    t.includes("patch") ||
+    t.includes("create_file") ||
+    t.includes("delete_path") ||
+    t.includes("replace_in_file")
+  ) {
+    return "write";
+  }
+
+  if (
+    t.includes("command") ||
+    t.includes("powershell") ||
+    t.includes("bash") ||
+    t.includes("shell") ||
+    t.includes("python") ||
+    t.includes("exec") ||
+    t.includes("git_")
+  ) {
+    return "shell";
+  }
+
+  if (t.includes("fetch") || t.includes("browser") || t.includes("http") || t.includes("url")) {
+    return "web";
+  }
+
+  return "other";
+}
+
+function verbForKind(kind: TimelineToolKind, tool: string, isRunning: boolean): string {
+  const lower = (tool || "").toLowerCase();
+  if (lower.includes("delete")) {
+    return isRunning ? "Deleting" : "Deleted";
+  }
+  if (lower.includes("list_dir")) {
+    return isRunning ? "Listing" : "Listed";
+  }
+  switch (kind) {
+    case "read":
+      return isRunning ? "Reading" : "Read";
+    case "search":
+      return isRunning ? "Searching" : "Searched";
+    case "write":
+      return isRunning ? "Writing" : "Wrote";
+    case "shell":
+      return isRunning ? "Running" : "Ran";
+    case "web":
+      return isRunning ? "Fetching" : "Fetched";
+    case "subagent":
+      return isRunning ? "Delegating" : "Delegated";
+    default:
+      return isRunning ? "Running" : "Ran";
+  }
+}
+
+function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): string {
+  const args = trace.args;
+  if (kind === "read" || kind === "write") {
+    const p = readStringArg(args, ["path", "filePath", "file_path", "target"]);
+    return p ? truncate(basename(p), MAX_TARGET_LEN) : "file";
+  }
+  if (kind === "search") {
+    const q = readStringArg(args, ["query", "pattern", "q", "path", "dir"]);
+    return q ? truncate(q, MAX_TARGET_LEN) : "codebase";
+  }
+  if (kind === "shell") {
+    const cmd = readStringArg(args, ["command", "cmd", "script"]);
+    return cmd ? truncate(cmd, MAX_TARGET_LEN) : trace.tool.replace(/_/g, " ");
+  }
+  if (kind === "web") {
+    const url = readStringArg(args, ["url", "uri", "query"]);
+    return url ? truncate(url, MAX_TARGET_LEN) : "web page";
+  }
+  if (kind === "subagent") {
+    const task = readStringArg(args, ["task", "prompt", "role", "goal"]);
+    return task ? truncate(task, MAX_TARGET_LEN) : "subagent";
+  }
+  return truncate((trace.tool || "action").replace(/_/g, " "), MAX_TARGET_LEN);
+}
+
+/**
+ * Extracts a concise single-line error summary from a trace result if it indicates failure.
+ */
+export function extractTraceError(result: unknown, isError?: boolean): string | undefined {
+  if (typeof result === "string") {
+    if (isError || /^(error|failed|enoent|eacces|exit code [1-9])/i.test(result.trim())) {
+      return truncate(result, MAX_ERROR_LEN);
+    }
+    return undefined;
+  }
+
+  if (result && typeof result === "object") {
+    const obj = result as Record<string, unknown>;
+    if (typeof obj.error === "string" && obj.error.trim()) {
+      return truncate(obj.error, MAX_ERROR_LEN);
+    }
+    if (obj.isError === true || obj.ok === false || obj.success === false) {
+      const msg =
+        (typeof obj.message === "string" && obj.message) ||
+        (typeof obj.stderr === "string" && obj.stderr) ||
+        (typeof obj.output === "string" && obj.output) ||
+        "Tool execution failed";
+      return truncate(msg, MAX_ERROR_LEN);
+    }
+    if (typeof obj.exitCode === "number" && obj.exitCode !== 0) {
+      const detail =
+        (typeof obj.stderr === "string" && obj.stderr.trim()) ||
+        (typeof obj.stdout === "string" && obj.stdout.trim()) ||
+        `Exit code ${obj.exitCode}`;
+      return truncate(detail, MAX_ERROR_LEN);
+    }
+  }
+
+  if (isError) {
+    return "Action failed";
+  }
+  return undefined;
+}
+
+function countDiffLines(diffText: string): { addedLines: number; removedLines: number } {
+  let addedLines = 0;
+  let removedLines = 0;
+  for (const line of diffText.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
+    else if (line.startsWith("-") && !line.startsWith("---")) removedLines++;
+  }
+  return { addedLines, removedLines };
+}
+
+/**
+ * Extracts file path, +/− line stats, and optional unified diff text from a write trace.
+ */
+export function extractWriteDiffFromTrace(
+  trace: TimelineTraceInput
+): TimelineWriteDiff | undefined {
+  const kind = classifyToolKind(trace.tool);
+  if (kind !== "write") return undefined;
+
+  const filePath = readStringArg(trace.args, ["path", "filePath", "file_path", "target"]);
+  if (!filePath) return undefined;
+
+  let diffText: string | undefined;
+  let addedLines: number | undefined;
+  let removedLines: number | undefined;
+
+  if (trace.result && typeof trace.result === "object") {
+    const obj = trace.result as Record<string, unknown>;
+    if (typeof obj.diff === "string" && obj.diff.trim()) {
+      diffText = obj.diff;
+    } else if (typeof obj.unifiedDiff === "string" && obj.unifiedDiff.trim()) {
+      diffText = obj.unifiedDiff;
+    }
+    if (typeof obj.addedLines === "number" && Number.isFinite(obj.addedLines)) {
+      addedLines = obj.addedLines;
+    }
+    if (typeof obj.removedLines === "number" && Number.isFinite(obj.removedLines)) {
+      removedLines = obj.removedLines;
+    }
+  }
+
+  if (diffText && (addedLines === undefined || removedLines === undefined)) {
+    const counted = countDiffLines(diffText);
+    addedLines = addedLines ?? counted.addedLines;
+    removedLines = removedLines ?? counted.removedLines;
+  }
+
+  if (addedLines === undefined && removedLines === undefined) {
+    const content = readStringArg(trace.args, ["content", "newContent", "replacement"]);
+    if (content) {
+      addedLines = content.split("\n").length;
+      removedLines = 0;
+    }
+  }
+
+  return {
+    filePath,
+    addedLines: addedLines ?? 0,
+    removedLines: removedLines ?? 0,
+    ...(diffText ? { diffText } : {}),
+  };
+}
+
+/**
+ * Maps a single trace item into a TimelineRow.
+ */
+export function traceToTimelineRow(
+  trace: TimelineTraceInput,
+  index: number,
+  nowMs?: number
+): TimelineRow {
+  const kind = classifyToolKind(trace.tool);
+  const isRunning = trace.status === "running";
+  const errorSummary = isRunning ? undefined : extractTraceError(trace.result, trace.isError);
+  const status: TimelineRowStatus = isRunning
+    ? "running"
+    : errorSummary || trace.status === "error"
+      ? "error"
+      : "success";
+
+  const verb = verbForKind(kind, trace.tool, isRunning);
+  const target = targetForTrace(kind, trace);
+  const label = isRunning ? `${verb} ${target}…` : `${verb} ${target}`;
+
+  let durationMs = trace.durationMs;
+  if (isRunning && durationMs === undefined && trace.timestamp && nowMs !== undefined) {
+    const startMs = Date.parse(trace.timestamp);
+    if (Number.isFinite(startMs) && nowMs >= startMs) {
+      durationMs = nowMs - startMs;
+    }
+  }
+
+  const writeDiff = extractWriteDiffFromTrace(trace);
+
+  return {
+    id: `trace-${index}`,
+    kind,
+    status,
+    verb,
+    target,
+    label,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(errorSummary ? { errorSummary } : {}),
+    ...(writeDiff ? { writeDiff } : {}),
+    rawTraceIndex: index,
+  };
+}
+
+/**
+ * Folds consecutive completed `read` or `search` rows into a single expandable group row.
+ */
+export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
+  const result: TimelineRow[] = [];
+  let i = 0;
+
+  while (i < rows.length) {
+    const current = rows[i];
+    const foldable =
+      current.status === "success" && (current.kind === "read" || current.kind === "search");
+
+    if (!foldable) {
+      result.push(current);
+      i++;
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < rows.length && rows[j].status === "success" && rows[j].kind === current.kind) {
+      j++;
+    }
+
+    const count = j - i;
+    if (count === 1) {
+      result.push(current);
+    } else {
+      const children = rows.slice(i, j);
+      const totalDurationMs = children.reduce((sum, r) => sum + (r.durationMs || 0), 0);
+      const isRead = current.kind === "read";
+      const label = isRead ? `Read ${count} files` : `Searched ${count} queries`;
+      result.push({
+        id: `group-${current.kind}-${i}-${j - 1}`,
+        kind: current.kind,
+        status: "success",
+        verb: isRead ? "Read" : "Searched",
+        target: isRead ? `${count} files` : `${count} queries`,
+        label,
+        durationMs: totalDurationMs > 0 ? totalDurationMs : undefined,
+        children,
+        isGroup: true,
+      });
+    }
+    i = j;
+  }
+
+  return result;
+}
+
+/**
+ * End-to-end pure transform from raw traces to folded timeline rows.
+ */
+export function buildActivityTimeline(
+  traces: TimelineTraceInput[] | undefined,
+  nowMs?: number
+): TimelineRow[] {
+  if (!Array.isArray(traces) || traces.length === 0) return [];
+  const rows = traces.map((t, idx) => traceToTimelineRow(t, idx, nowMs));
+  return foldTimelineRows(rows);
+}

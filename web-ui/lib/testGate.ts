@@ -65,6 +65,37 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    match: (p) => p.includes("lib/activityTimeline") || p.includes("activityTimeline.test.ts"),
+    tests: ["tests/activityTimeline.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("components/ActivityTimeline") || p.includes("activityTimelineRender.test.ts"),
+    tests: ["tests/activityTimelineRender.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/turnSpeed") ||
+      p.includes("components/NowLineBar") ||
+      p.includes("turnSpeed.test.ts"),
+    tests: ["tests/turnSpeed.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/autoFollow") || p.includes("autoFollow.test.ts"),
+    tests: ["tests/autoFollow.test.ts"],
+  },
+  {
+    match: (p) => p.includes("components/CanvasDiffSheet") || p.includes("canvasDiffSheet.test.ts"),
+    tests: ["tests/canvasDiffSheet.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/stintDerivation") ||
+      p.includes("components/StintCard") ||
+      p.includes("stintDerivation.test.ts"),
+    tests: ["tests/stintDerivation.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
     tests: ["tests/repoMap.test.ts"],
   },

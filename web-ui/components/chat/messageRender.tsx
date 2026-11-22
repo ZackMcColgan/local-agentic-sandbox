@@ -25,7 +25,6 @@ import { ExecutionTraceItem } from "../ExecutionTrace";
 import { CompletionVerificationBadge } from "../CompletionVerificationBadge";
 import { SvgViewer, SvgFileLink } from "../SvgViewer";
 import { LiveRunBlock } from "../LiveRunBlock";
-import { ThinkingPanel } from "../ThinkingPanel";
 import { LiveActivityHeader } from "../LiveActivityHeader";
 import { phaseLabelForTool } from "../../lib/liveActivity";
 import { CodeBlock } from "../ArtifactRenderers";
@@ -53,6 +52,9 @@ import { resolveTurnStatusPhase } from "../../lib/chatStatus";
 import { TaskManifest } from "../../lib/subagents/types";
 import { formatFileSize } from "../../lib/chat/attachments";
 import { CompactionPill } from "./compactionPill";
+import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
+import { StintCard } from "../StintCard";
+import type { TimelineWriteDiff } from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
@@ -146,6 +148,7 @@ export interface ChatMessageItemProps {
   onStopTask?: () => Promise<void> | void;
   onRunControlAction: (action: "pause" | "resume" | "restart") => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
+  onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }
 
 export function ChatMessageItem({
@@ -176,6 +179,7 @@ export function ChatMessageItem({
   onStopTask,
   onRunControlAction,
   onDeployRun,
+  onOpenCanvasDiff,
 }: ChatMessageItemProps) {
   const isUser = m.role === "user";
   const isCopied = copiedMessageId === m.id;
@@ -321,24 +325,23 @@ export function ChatMessageItem({
             </div>
           )}
 
-          {/* Live Activity Header + Worker Reasoning Panel (Suppressed on task host message) */}
+          {/* Activity Timeline + Thinking Preview for ALL non-task-host turns */}
           {!isTaskHostMessage &&
             (() => {
               const isStreamingThis = Boolean(
                 m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
               );
-              const shouldRenderThinking = Boolean(m.thought || isStreamingThis);
+              const turnTraces =
+                isStreamingThis && (!m.traces || m.traces.length === 0)
+                  ? liveTurnTraces
+                  : m.traces || [];
+              const hasThought = Boolean(m.thought && m.thought.trim());
               const showDoneChip = Boolean(
                 !isStreamingThis && completedTurnMsgId === m.id && typeof m.durationMs === "number"
               );
-              if (!shouldRenderThinking && !showDoneChip) return null;
+              if (!hasThought && !isStreamingThis && !showDoneChip && turnTraces.length === 0)
+                return null;
 
-              const rawThought = m.thought || "";
-
-              // uir-1 (UI-017): activity header inputs. The phase is the
-              // latest observed tool in words; the round comes only from
-              // the record's per-round token array when it exists (never
-              // fabricated mid-turn).
               const liveLastTrace =
                 liveTurnTraces.length > 0 ? liveTurnTraces[liveTurnTraces.length - 1] : null;
               const msgLastTrace =
@@ -389,17 +392,16 @@ export function ChatMessageItem({
                       <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
                     </div>
                   )}
-                  {shouldRenderThinking && (
-                    <ThinkingPanel
-                      rawThought={rawThought}
+                  {(hasThought || isStreamingThis) && (
+                    <ThinkingPreviewBlock
+                      thought={m.thought}
                       isStreaming={isStreamingThis}
-                      streamStatus={isStreamingThis ? streamStatus : null}
                       hasContent={Boolean(m.content && m.content.trim())}
-                      defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                       durationMs={m.thinkingDurationMs ?? m.durationMs}
-                      phaseTimings={m.phaseTimings}
-                      timestamp={m.timestamp}
                     />
+                  )}
+                  {turnTraces.length > 0 && (
+                    <ActivityTimeline traces={turnTraces} onOpenCanvasDiff={onOpenCanvasDiff} />
                   )}
                 </div>
               );
@@ -977,6 +979,21 @@ export function ChatMessageItem({
                     );
                   })}
               </div>
+            )}
+
+          {/* Stint card on completed turns */}
+          {!isTaskHostMessage &&
+            m.id !== "initial-welcome" &&
+            m.id !== "welcome" &&
+            m.status !== "streaming" &&
+            !(isLoading && m.id === activeAssistantMsgId) && (
+              <StintCard
+                durationMs={m.durationMs}
+                outputTokens={m.outputTokens}
+                roundPromptTokens={m.roundPromptTokens}
+                roundGenerationMs={m.roundGenerationMs}
+                traces={m.traces}
+              />
             )}
 
           {/* Partial output stopped indicator */}
