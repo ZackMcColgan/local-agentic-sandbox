@@ -65,7 +65,13 @@ import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
 import { evaluateMarkupRound, evaluateZeroTraceTripwire } from "@/lib/toolCallIntegrity";
 import { verifyEvidenceLinkedSummary } from "@/lib/evidenceLinkedSummaries";
 import { buildVerificationAdapters } from "@/lib/subagents/supervisor";
-import { ReadDedupRegistry, type ReadDedupMeta } from "@/lib/readDedup";
+import { ReadDedupRegistry, isMultiReadResult, type ReadDedupMeta } from "@/lib/readDedup";
+import {
+  TOOL_FANOUT_CAP,
+  isReadOnlyFanoutTool,
+  partitionToolCallBatches,
+  executeWithConcurrencyLimit,
+} from "@/lib/chat/toolFanout";
 import { searchOracleCodebase } from "@/lib/oracle/ingestion";
 import {
   DESCRIBE_TOOL_NAME,
@@ -1304,8 +1310,14 @@ export async function runChatTurn(
 
       let searchBlocked = false;
 
-      for (const toolCall of toolCalls) {
-        if (turnAbortController.signal.aborted) break;
+      type ParsedToolCallEntry = {
+        toolCall: LlmToolCall;
+        toolName: string;
+        toolArgs: Record<string, unknown>;
+        malformedArgsError: string | null;
+      };
+
+      const parsedToolCalls: ParsedToolCallEntry[] = toolCalls.map((toolCall) => {
         const toolName = toolCall.function.name;
         let toolArgs: Record<string, unknown> = {};
         let malformedArgsError: string | null = null;
@@ -1321,6 +1333,342 @@ export async function runChatTurn(
         } else if (toolCall.function.arguments && typeof toolCall.function.arguments === "object") {
           toolArgs = { ...toolCall.function.arguments };
         }
+        return { toolCall, toolName, toolArgs, malformedArgsError };
+      });
+
+      const classifyExecutionError = (res: unknown): boolean => {
+        try {
+          const resultStr = JSON.stringify(res);
+          if (
+            resultStr.includes('"status":"EXECUTION_ERROR"') ||
+            resultStr.includes('"exit_code":1') ||
+            Boolean((res as { isError?: boolean } | null)?.isError)
+          ) {
+            return true;
+          }
+        } catch {}
+        return false;
+      };
+
+      const commitExecutedToolResult = async (params: {
+        toolName: string;
+        toolArgs: Record<string, unknown>;
+        target: { client: Client | null; tier: "sandbox" | "browser" | "workspace" | "host" };
+        result: unknown;
+        durationMs: number;
+        timestamp: string;
+        isExecutionError: boolean;
+      }): Promise<void> => {
+        const { toolName, toolArgs, target, durationMs, timestamp, isExecutionError } = params;
+        let result = params.result;
+
+        if (isExecutionError) {
+          consecutiveFailures++;
+        } else {
+          consecutiveFailures = 0;
+        }
+
+        const traceItem: TraceItem = {
+          tool: toolName,
+          args: toolArgs,
+          result,
+          durationMs,
+          timestamp,
+          model: turnState.activeModel,
+          tier: target.tier,
+          round,
+        };
+        if (
+          toolName === "workspace_write_file" &&
+          !isExecutionError &&
+          toolArgs?.path &&
+          typeof toolArgs.path === "string"
+        ) {
+          recordTurnOutputWrite(turnCreatedFiles, toolArgs.path, activeThreadId, threadsDir);
+        }
+
+        traces.push(traceItem);
+
+        await sendEvent({
+          type: "trace",
+          trace: traceItem,
+        });
+
+        const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
+        // TOKEN ECONOMICS (d): within-thread read dedup. A read whose
+        // path + content hash matches an earlier read in this thread is
+        // answered with a short stub referencing the earlier trace/round; a
+        // changed file re-reads full and re-anchors the registry. Multi-read
+        // results flow through per-file dedup individually so only unchanged
+        // file sections are stubbed. The full result stays recoverable in the
+        // trace record (audit copy pushed above), and every stub is logged on
+        // the turn's readDedups field.
+        // The pinned clamp-bypass expression below stays byte-identical
+        // (chatFilePaging Pin 1 compliance); dedup swaps `result` itself.
+        if (isFileReadTool && !isExecutionError) {
+          if (isMultiReadResult(result)) {
+            const multiDedup = readDedupRegistry.checkAndRecordMultiRead(
+              toolName,
+              result,
+              round,
+              traces.length - 1
+            );
+            if (multiDedup.dedupedMetas.length > 0) {
+              result = multiDedup.result;
+              for (const meta of multiDedup.dedupedMetas) {
+                turnReadDedups.push({ ...meta, reReadRound: round });
+              }
+            }
+          } else {
+            const dedupDecision = readDedupRegistry.checkAndRecord(
+              toolName,
+              toolArgs,
+              JSON.stringify(result),
+              round,
+              traces.length - 1
+            );
+            if (dedupDecision.deduplicated && dedupDecision.stub && dedupDecision.meta) {
+              result = { status: "DEDUP_STUB", stub: dedupDecision.stub };
+              turnReadDedups.push({ ...dedupDecision.meta, reReadRound: round });
+            }
+          }
+        }
+        conversationMessages.push({
+          role: "tool",
+          name: toolName,
+          content: isFileReadTool
+            ? JSON.stringify(result)
+            : clampToolOutput(JSON.stringify(result)),
+        });
+
+        if (
+          toolName === "workspace_write_file" &&
+          !isExecutionError &&
+          typeof toolArgs?.content === "string" &&
+          /<svg[\s>][\s\S]*?<\/svg>/i.test(toolArgs.content)
+        ) {
+          mergeSystemDirective(
+            conversationMessages,
+            "[DELIVERABLE SAVED]: You have already saved the complete SVG diagram via workspace_write_file, and the UI automatically renders it inline for the user. Now respond with a concise 2-3 sentence summary of the diagram's contents and do NOT call more tools or repeat the <svg> markup in your text response."
+          );
+        }
+
+        if (isWebResearchTool(toolName, target.tier)) {
+          if (isArtifactRequest && !isExecutionError) {
+            webResearchCalls = MAX_WEB_RESEARCH_CALLS;
+            mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, false));
+          } else if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
+            webBudgetNoticeAdded = true;
+            mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
+          }
+        }
+
+        // Auto-Escalation Check: If 2 consecutive failures, ensure turnState.activeModel escalates to Primary model
+        if (
+          mode === "auto" &&
+          consecutiveFailures >= 2 &&
+          turnState.activeModel !== DEFAULT_PRIMARY_MODEL
+        ) {
+          console.log(
+            "[Auto-Escalation] 2 consecutive failures detected. Escalating to Primary model..."
+          );
+          turnState.activeModel = DEFAULT_PRIMARY_MODEL;
+          effectiveReasoningEffort = resolveEffectiveReasoningEffort(
+            turnState.activeModel,
+            requestedReasoning
+          );
+          await sendEvent({
+            type: "status",
+            status: "Auto-escalating to Pro Reasoning Model...",
+          });
+          await sendEvent({
+            type: "meta",
+            model: turnState.activeModel,
+            reasoning_effort: effectiveReasoningEffort,
+          });
+          mergeSystemDirective(
+            conversationMessages,
+            "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
+          );
+        }
+      };
+
+      const batches = partitionToolCallBatches(parsedToolCalls, (entry) => {
+        if (entry.malformedArgsError) return false;
+        if (!isReadOnlyFanoutTool(entry.toolName)) return false;
+        // Unregistered/prohibited tools (e.g. host tools withheld in prohibited
+        // contexts) must stay barriers so prohibition errors fire in exact order.
+        if (entry.toolName !== DESCRIBE_TOOL_NAME && !toolClientMap.has(entry.toolName)) {
+          return false;
+        }
+        return true;
+      });
+
+      for (const batch of batches) {
+        if (turnAbortController.signal.aborted || searchBlocked) break;
+
+        if (batch.kind === "parallel") {
+          if (batch.items.length === 1) {
+            const only = batch.items[0].item;
+            if (only.toolName !== DESCRIBE_TOOL_NAME) {
+              await sendEvent({
+                type: "status",
+                status: `Executing tool ${only.toolName}...`,
+              });
+            }
+          } else {
+            await sendEvent({
+              type: "status",
+              status: `Executing ${batch.items.length} read-only tools in parallel...`,
+            });
+          }
+
+          type ParallelOutcome =
+            | {
+                kind: "skipped_abort";
+              }
+            | {
+                kind: "describe";
+                toolArgs: Record<string, unknown>;
+                toolDesc: ReturnType<typeof describeTool>;
+                timestamp: string;
+              }
+            | {
+                kind: "executed";
+                toolName: string;
+                toolArgs: Record<string, unknown>;
+                target: {
+                  client: Client | null;
+                  tier: "sandbox" | "browser" | "workspace" | "host";
+                };
+                result: unknown;
+                durationMs: number;
+                timestamp: string;
+                isExecutionError: boolean;
+              };
+
+          const outcomes = await executeWithConcurrencyLimit<
+            { index: number; item: ParsedToolCallEntry },
+            ParallelOutcome
+          >(batch.items, TOOL_FANOUT_CAP, async ({ item: entry }) => {
+            if (turnAbortController.signal.aborted) {
+              return { kind: "skipped_abort" };
+            }
+            const { toolName, toolArgs } = entry;
+
+            if (toolName === "workspace_read_file") {
+              if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
+                const candidate =
+                  toolArgs.file ||
+                  toolArgs.filepath ||
+                  toolArgs.filename ||
+                  toolArgs.target ||
+                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                if (typeof candidate === "string" && candidate.trim()) {
+                  toolArgs.path = candidate.trim();
+                }
+              }
+            }
+
+            if (toolName === DESCRIBE_TOOL_NAME) {
+              const targetTool = String(toolArgs.tool_name || toolArgs.name || "");
+              const toolDesc = describeTool(targetTool, toolRegistry);
+              return {
+                kind: "describe",
+                toolArgs,
+                toolDesc,
+                timestamp: new Date().toISOString(),
+              };
+            }
+
+            const target = toolClientMap.get(toolName)!;
+            const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan?.spanId, {
+              tool: toolName,
+              tier: target.tier,
+            });
+            const startTime = performance.now();
+            let result: unknown = null;
+
+            if (target.tier === "host") {
+              try {
+                result = await executeHostTool(
+                  toolName,
+                  toolArgs,
+                  undefined,
+                  threadData?.gitCapability,
+                  threadData?.mergeGrant
+                );
+              } catch (hostErr: unknown) {
+                const hostMsg = hostErr instanceof Error ? hostErr.message : undefined;
+                result = {
+                  success: false,
+                  error: hostMsg || "Host execution error",
+                  isError: true,
+                };
+              }
+            } else if (target.client) {
+              try {
+                result = await target.client.callTool({
+                  name: toolName,
+                  arguments: toolArgs,
+                });
+              } catch (mcpErr: unknown) {
+                const mcpMsg = mcpErr instanceof Error ? mcpErr.message : undefined;
+                result = {
+                  success: false,
+                  error: mcpMsg || "Tool execution error",
+                  isError: true,
+                };
+              }
+            }
+
+            const durationMs = Math.round(performance.now() - startTime);
+            const isExecutionError = classifyExecutionError(result);
+            toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
+
+            return {
+              kind: "executed",
+              toolName,
+              toolArgs,
+              target,
+              result,
+              durationMs,
+              timestamp: new Date().toISOString(),
+              isExecutionError,
+            };
+          });
+
+          // Commit parallel results strictly in EMISSION order regardless of completion order.
+          for (const outcome of outcomes) {
+            if (outcome.kind === "skipped_abort") continue;
+            if (outcome.kind === "describe") {
+              conversationMessages.push({
+                role: "tool",
+                name: DESCRIBE_TOOL_NAME,
+                content: JSON.stringify(outcome.toolDesc),
+              });
+              await sendEvent({
+                type: "trace",
+                trace: {
+                  tool: DESCRIBE_TOOL_NAME,
+                  args: outcome.toolArgs,
+                  result: outcome.toolDesc,
+                  durationMs: 1,
+                  timestamp: outcome.timestamp,
+                  model: turnState.activeModel,
+                  tier: "workspace",
+                },
+              });
+              continue;
+            }
+            await commitExecutedToolResult(outcome);
+          }
+
+          continue;
+        }
+
+        // BARRIER execution: runs alone in exact original order.
+        const { toolCall, toolName, toolArgs, malformedArgsError } = batch.item;
 
         if (malformedArgsError) {
           const errPayload = JSON.stringify({ error: malformedArgsError });
@@ -1431,18 +1779,6 @@ export async function runChatTurn(
             const trimmedUrl = toolArgs.url.trim();
             toolArgs.url = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`;
           }
-        } else if (toolName === "workspace_read_file") {
-          if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
-            const candidate =
-              toolArgs.file ||
-              toolArgs.filepath ||
-              toolArgs.filename ||
-              toolArgs.target ||
-              Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-            if (typeof candidate === "string" && candidate.trim()) {
-              toolArgs.path = candidate.trim();
-            }
-          }
         } else if (toolName === "workspace_run_command") {
           if (
             !toolArgs.command ||
@@ -1470,29 +1806,6 @@ export async function runChatTurn(
               toolArgs.code = candidate.trim();
             }
           }
-        }
-
-        if (toolName === DESCRIBE_TOOL_NAME) {
-          const targetTool = String(toolArgs.tool_name || toolArgs.name || "");
-          const toolDesc = describeTool(targetTool, toolRegistry);
-          conversationMessages.push({
-            role: "tool",
-            name: DESCRIBE_TOOL_NAME,
-            content: JSON.stringify(toolDesc),
-          });
-          await sendEvent({
-            type: "trace",
-            trace: {
-              tool: DESCRIBE_TOOL_NAME,
-              args: toolArgs,
-              result: toolDesc,
-              durationMs: 1,
-              timestamp: new Date().toISOString(),
-              model: turnState.activeModel,
-              tier: "workspace",
-            },
-          });
-          continue;
         }
 
         const target = toolClientMap.get(toolName);
@@ -1621,137 +1934,22 @@ export async function runChatTurn(
           });
         }
         const durationMs = Math.round(performance.now() - startTime);
-
-        // Track test / command failure for auto-escalation
-        let isExecutionError = false;
-        try {
-          const resultStr = JSON.stringify(result);
-          if (
-            resultStr.includes('"status":"EXECUTION_ERROR"') ||
-            resultStr.includes('"exit_code":1') ||
-            Boolean((result as { isError?: boolean } | null)?.isError)
-          ) {
-            isExecutionError = true;
-          }
-        } catch {}
+        const isExecutionError = classifyExecutionError(result);
 
         if (bashSpan) {
           bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
         }
         toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
 
-        if (isExecutionError) {
-          consecutiveFailures++;
-        } else {
-          consecutiveFailures = 0;
-        }
-
-        const traceItem: TraceItem = {
-          tool: toolName,
-          args: toolArgs,
+        await commitExecutedToolResult({
+          toolName,
+          toolArgs,
+          target,
           result,
           durationMs,
           timestamp: new Date().toISOString(),
-          model: turnState.activeModel,
-          tier: target.tier,
-          round,
-        };
-        if (
-          toolName === "workspace_write_file" &&
-          !isExecutionError &&
-          toolArgs?.path &&
-          typeof toolArgs.path === "string"
-        ) {
-          recordTurnOutputWrite(turnCreatedFiles, toolArgs.path, activeThreadId, threadsDir);
-        }
-
-        traces.push(traceItem);
-
-        await sendEvent({
-          type: "trace",
-          trace: traceItem,
+          isExecutionError,
         });
-
-        const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
-        // TOKEN ECONOMICS (d): within-thread read dedup. A read whose
-        // path + content hash matches an earlier read in this thread is
-        // answered with a short stub referencing the earlier trace/round; a
-        // changed file re-reads full and re-anchors the registry. The full
-        // result stays recoverable in the trace record (audit copy pushed
-        // above), and every stub is logged on the turn's readDedups field.
-        // The pinned clamp-bypass expression below stays byte-identical
-        // (chatFilePaging Pin 1 compliance); dedup swaps `result` itself.
-        if (isFileReadTool && !isExecutionError) {
-          const dedupDecision = readDedupRegistry.checkAndRecord(
-            toolName,
-            toolArgs,
-            JSON.stringify(result),
-            round,
-            traces.length - 1
-          );
-          if (dedupDecision.deduplicated && dedupDecision.stub && dedupDecision.meta) {
-            result = { status: "DEDUP_STUB", stub: dedupDecision.stub };
-            turnReadDedups.push({ ...dedupDecision.meta, reReadRound: round });
-          }
-        }
-        conversationMessages.push({
-          role: "tool",
-          name: toolName,
-          content: isFileReadTool
-            ? JSON.stringify(result)
-            : clampToolOutput(JSON.stringify(result)),
-        });
-
-        if (
-          toolName === "workspace_write_file" &&
-          !isExecutionError &&
-          typeof toolArgs?.content === "string" &&
-          /<svg[\s>][\s\S]*?<\/svg>/i.test(toolArgs.content)
-        ) {
-          mergeSystemDirective(
-            conversationMessages,
-            "[DELIVERABLE SAVED]: You have already saved the complete SVG diagram via workspace_write_file, and the UI automatically renders it inline for the user. Now respond with a concise 2-3 sentence summary of the diagram's contents and do NOT call more tools or repeat the <svg> markup in your text response."
-          );
-        }
-
-        if (isWebResearchTool(toolName, target.tier)) {
-          if (isArtifactRequest && !isExecutionError) {
-            webResearchCalls = MAX_WEB_RESEARCH_CALLS;
-            mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, false));
-          } else if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
-            webBudgetNoticeAdded = true;
-            mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
-          }
-        }
-
-        // Auto-Escalation Check: If 2 consecutive failures, ensure turnState.activeModel escalates to Primary model
-        if (
-          mode === "auto" &&
-          consecutiveFailures >= 2 &&
-          turnState.activeModel !== DEFAULT_PRIMARY_MODEL
-        ) {
-          console.log(
-            "[Auto-Escalation] 2 consecutive failures detected. Escalating to Primary model..."
-          );
-          turnState.activeModel = DEFAULT_PRIMARY_MODEL;
-          effectiveReasoningEffort = resolveEffectiveReasoningEffort(
-            turnState.activeModel,
-            requestedReasoning
-          );
-          await sendEvent({
-            type: "status",
-            status: "Auto-escalating to Pro Reasoning Model...",
-          });
-          await sendEvent({
-            type: "meta",
-            model: turnState.activeModel,
-            reasoning_effort: effectiveReasoningEffort,
-          });
-          mergeSystemDirective(
-            conversationMessages,
-            "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
-          );
-        }
       }
 
       // TURN-LIVENESS: round boundary is a discrete progress event — persist the
