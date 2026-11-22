@@ -43,6 +43,8 @@ export interface TimelineRow {
   verb: string;
   target: string;
   label: string;
+  subline?: string;
+  workingDir?: string;
   durationMs?: number;
   errorSummary?: string;
   writeDiff?: TimelineWriteDiff;
@@ -151,6 +153,12 @@ function verbForKind(kind: TimelineToolKind, tool: string, isRunning: boolean): 
   if (lower.includes("list_dir")) {
     return isRunning ? "Listing" : "Listed";
   }
+  if (
+    kind === "write" &&
+    (lower.includes("edit") || lower.includes("patch") || lower.includes("replace"))
+  ) {
+    return isRunning ? "Editing" : "Edited";
+  }
   switch (kind) {
     case "read":
       return isRunning ? "Reading" : "Read";
@@ -170,12 +178,74 @@ function verbForKind(kind: TimelineToolKind, tool: string, isRunning: boolean): 
 }
 
 const LEADING_SHELL_BOILERPLATE_RE =
-  /^\s*(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:'[^']*'|"[^"]*")|Set-Location\s+(?:'[^']*'|"[^"]*"));\s*/i;
+  /^\s*(?:\$(?:env:)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:'[^']*'|"[^"]*"|[^\s;&]+)\s*;\s*|(?:Set-Location|cd)(?:\s+\/d)?\s+(?:'[^']*'|"[^"]*"|[^\s;&]+)\s*(?:;|&&|&)\s*|Write-Host\s+(?:'[^']*'|"[^"]*")\s*;\s*)/i;
+
+const LEADING_DIR_CAPTURE_RE =
+  /^\s*(?:Set-Location|cd)(?:\s+\/d)?\s+(?:'([^']*)'|"([^"]*)"|([^\s;&]+))\s*(?:;|&&|&)/i;
 
 /**
- * Strips leading PowerShell preamble assignments and Set-Location segments
- * so shell row labels show the operative command. Falls back to the original
- * command if stripping empties it.
+ * Elides a single absolute Windows or Unix path to its last two segments
+ * (e.g. "C:\Users\...\components\SettingsView.tsx" -> "...\components\SettingsView.tsx").
+ */
+export function elidePathToTail(rawPath: string): string {
+  const trimmed = rawPath.trim();
+  if (!trimmed) return trimmed;
+  if (/^[A-Za-z]:\\/.test(trimmed)) {
+    const parts = trimmed.slice(3).split(/\\+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `...\\${parts[parts.length - 2]}\\${parts[parts.length - 1]}`;
+    }
+    if (parts.length === 1) {
+      return `...\\${parts[0]}`;
+    }
+    return trimmed;
+  }
+  if (trimmed.startsWith("/")) {
+    const parts = trimmed.split(/\/+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `.../${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Elides any remaining absolute Windows or deep Unix paths inside a shell command
+ * to their last two segments so labels stay readable.
+ */
+export function elideAbsolutePaths(command: string): string {
+  let out = command.replace(/[A-Za-z]:\\[^\s'"]+/g, (match) => elidePathToTail(match));
+  out = out.replace(/(?<![A-Za-z0-9:/])\/(?:[^\s/'"]+\/){2,}[^\s/'"]+/g, (match) =>
+    elidePathToTail(match)
+  );
+  return out;
+}
+
+function extractWorkingDirFromCommand(
+  command: string,
+  args?: Record<string, unknown>
+): string | undefined {
+  const explicit = readStringArg(args, ["cwd", "workdir", "workingDirectory", "dir"]);
+  if (explicit) return elidePathToTail(explicit);
+  let remaining = command.trim();
+  let foundDir: string | undefined;
+  while (remaining.length > 0) {
+    const dirMatch = remaining.match(LEADING_DIR_CAPTURE_RE);
+    if (dirMatch) {
+      foundDir = dirMatch[1] || dirMatch[2] || dirMatch[3] || foundDir;
+    }
+    const next = remaining.replace(LEADING_SHELL_BOILERPLATE_RE, "");
+    if (next === remaining) break;
+    remaining = next.trim();
+  }
+  return foundDir ? elidePathToTail(foundDir) : undefined;
+}
+
+/**
+ * Strips leading PowerShell preamble assignments, $env: assignments,
+ * Set-Location / cd chains, and Write-Host echo framing so shell row labels
+ * show the operative command. Falls back to the original command if stripping
+ * empties it.
  */
 export function stripShellBoilerplate(command: string): string {
   let remaining = command.trim();
@@ -200,7 +270,7 @@ function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): stri
   if (kind === "shell") {
     const cmd = readStringArg(args, ["command", "cmd", "script"]);
     return cmd
-      ? truncate(stripShellBoilerplate(cmd), MAX_TARGET_LEN)
+      ? truncate(elideAbsolutePaths(stripShellBoilerplate(cmd)), MAX_TARGET_LEN)
       : trace.tool.replace(/_/g, " ");
   }
   if (kind === "web") {
@@ -366,6 +436,13 @@ export function traceToTimelineRow(
   }
 
   const writeDiff = extractWriteDiffFromTrace(trace);
+  const workingDir =
+    kind === "shell"
+      ? extractWorkingDirFromCommand(
+          readStringArg(trace.args, ["command", "cmd", "script"]),
+          trace.args
+        )
+      : undefined;
 
   return {
     id: `trace-${index}`,
@@ -374,6 +451,7 @@ export function traceToTimelineRow(
     verb,
     target,
     label,
+    ...(workingDir ? { workingDir } : {}),
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(errorSummary ? { errorSummary } : {}),
     ...(writeDiff ? { writeDiff } : {}),
@@ -381,9 +459,44 @@ export function traceToTimelineRow(
   };
 }
 
+function formatGroupDuration(durationMs: number): string | undefined {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return undefined;
+  if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
+  return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function deriveGroupSubline(
+  kind: TimelineToolKind,
+  status: TimelineRowStatus,
+  children: TimelineRow[],
+  totalDurationMs: number
+): string | undefined {
+  const durationLabel = formatGroupDuration(totalDurationMs);
+  if (status === "error") {
+    return durationLabel;
+  }
+  if (kind === "read" || kind === "search") {
+    const names = children.slice(0, 2).map((c) => c.target);
+    const base = names.join(", ");
+    if (children.length > 2) {
+      return `${base} +${children.length - 2} more`;
+    }
+    return base || undefined;
+  }
+  if (kind === "shell") {
+    const dirs = Array.from(
+      new Set(children.map((c) => c.workingDir).filter((d): d is string => Boolean(d)))
+    );
+    const sharedDir = dirs.length === 1 ? dirs[0] : undefined;
+    const parts = [sharedDir, durationLabel].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+  }
+  return durationLabel;
+}
+
 /**
- * Folds consecutive completed `read`, `search` (2+), or `shell` (3+) rows into
- * a single expandable group row.
+ * Folds consecutive completed `read` (2+), `search` (2+), or `shell` (3+) rows,
+ * as well as consecutive failed `shell` (3+) rows, into expandable group cards.
  */
 export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   const result: TimelineRow[] = [];
@@ -391,18 +504,19 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
 
   while (i < rows.length) {
     const current = rows[i];
-    const foldable =
+    const foldableSuccess =
       current.status === "success" &&
       (current.kind === "read" || current.kind === "search" || current.kind === "shell");
+    const foldableShellError = current.status === "error" && current.kind === "shell";
 
-    if (!foldable) {
+    if (!foldableSuccess && !foldableShellError) {
       result.push(current);
       i++;
       continue;
     }
 
     let j = i + 1;
-    while (j < rows.length && rows[j].status === "success" && rows[j].kind === current.kind) {
+    while (j < rows.length && rows[j].status === current.status && rows[j].kind === current.kind) {
       j++;
     }
 
@@ -415,26 +529,44 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
     } else {
       const children = rows.slice(i, j);
       const totalDurationMs = children.reduce((sum, r) => sum + (r.durationMs || 0), 0);
-      const verb =
-        current.kind === "read" ? "Read" : current.kind === "search" ? "Searched" : "Ran";
-      const target =
-        current.kind === "read"
-          ? `${count} files`
-          : current.kind === "search"
-            ? `${count} queries`
-            : `${count} commands`;
-      const label = `${verb} ${target}`;
-      result.push({
-        id: `group-${current.kind}-${i}-${j - 1}`,
-        kind: current.kind,
-        status: "success",
-        verb,
-        target,
-        label,
-        durationMs: totalDurationMs > 0 ? totalDurationMs : undefined,
-        children,
-        isGroup: true,
-      });
+      const subline = deriveGroupSubline(current.kind, current.status, children, totalDurationMs);
+
+      if (foldableShellError) {
+        result.push({
+          id: `group-shell-error-${i}-${j - 1}`,
+          kind: "shell",
+          status: "error",
+          verb: "Failed",
+          target: `${count} commands`,
+          label: `${count} commands failed`,
+          ...(subline ? { subline } : {}),
+          durationMs: totalDurationMs > 0 ? totalDurationMs : undefined,
+          children,
+          isGroup: true,
+        });
+      } else {
+        const verb =
+          current.kind === "read" ? "Read" : current.kind === "search" ? "Searched" : "Ran";
+        const target =
+          current.kind === "read"
+            ? `${count} files`
+            : current.kind === "search"
+              ? `${count} queries`
+              : `${count} commands`;
+        const label = `${verb} ${target}`;
+        result.push({
+          id: `group-${current.kind}-${i}-${j - 1}`,
+          kind: current.kind,
+          status: "success",
+          verb,
+          target,
+          label,
+          ...(subline ? { subline } : {}),
+          durationMs: totalDurationMs > 0 ? totalDurationMs : undefined,
+          children,
+          isGroup: true,
+        });
+      }
     }
     i = j;
   }
@@ -445,6 +577,7 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
 export interface BuildActivityTimelineOptions {
   thinkingSegments?: ThinkingSegment[];
   isStreaming?: boolean;
+  roundGenerationMs?: number[];
 }
 
 /**
@@ -493,9 +626,19 @@ export function buildActivityTimeline(
   const lastRound = orderedRounds[orderedRounds.length - 1];
   const result: TimelineRow[] = [];
 
+  const roundGenMs = Array.isArray(options?.roundGenerationMs) ? options.roundGenerationMs : [];
+
   for (const r of orderedRounds) {
     const segs = segmentsByRound.get(r) ?? [];
     const roundTraces = tracesByRound.get(r) ?? [];
+    const recordedGenMs =
+      r >= 1 &&
+      r - 1 < roundGenMs.length &&
+      typeof roundGenMs[r - 1] === "number" &&
+      Number.isFinite(roundGenMs[r - 1]) &&
+      roundGenMs[r - 1] > 0
+        ? roundGenMs[r - 1]
+        : undefined;
     for (let sIdx = 0; sIdx < segs.length; sIdx++) {
       const seg = segs[sIdx];
       const isTailStreaming =
@@ -503,11 +646,15 @@ export function buildActivityTimeline(
         r === lastRound &&
         sIdx === segs.length - 1 &&
         roundTraces.length === 0;
+      const segDurationMs = sIdx === 0 ? recordedGenMs : undefined;
       const prevRow = result.length > 0 ? result[result.length - 1] : null;
       if (prevRow && prevRow.kind === "thinking") {
         prevRow.thinkingText = prevRow.thinkingText
           ? `${prevRow.thinkingText}\n\n${seg.text}`
           : seg.text;
+        if (segDurationMs !== undefined) {
+          prevRow.durationMs = (prevRow.durationMs ?? 0) + segDurationMs;
+        }
         if (isTailStreaming) {
           prevRow.status = "running";
           prevRow.verb = "Thinking";
@@ -521,6 +668,7 @@ export function buildActivityTimeline(
           verb: isTailStreaming ? "Thinking" : "Thought",
           target: "Reasoning",
           label: isTailStreaming ? "Thinking…" : "Thought",
+          ...(segDurationMs !== undefined ? { durationMs: segDurationMs } : {}),
           thinkingText: seg.text,
           round: r,
         });

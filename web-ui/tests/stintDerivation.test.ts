@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import React from "react";
+import { renderToString } from "react-dom/server";
 import fs from "node:fs";
 import path from "node:path";
-import { deriveStintMetrics } from "../lib/stintDerivation";
+import { deriveStintMetrics, formatStintDuration } from "../lib/stintDerivation";
+import { StintCard } from "../components/StintCard";
 
 describe("stintDerivation — pure thread-record metrics", () => {
   it("derives rounds, time, tokens, avg tok/s, files, tests, and PR from a fixture record", () => {
@@ -70,6 +73,63 @@ describe("stintDerivation — pure thread-record metrics", () => {
 
   it("returns null when no metrics can be derived", () => {
     assert.equal(deriveStintMetrics({}), null);
+  });
+
+  it("Fix 8: formats TIME metric like the mock ('4m 03s') and derives duration from traces when durationMs is absent", () => {
+    assert.equal(formatStintDuration(243_000), "4m 03s");
+    assert.equal(formatStintDuration(45_000), "45s");
+    assert.equal(formatStintDuration(3_665_000), "1h 01m 05s");
+
+    const derived = deriveStintMetrics({
+      traces: [
+        {
+          tool: "workspace_read_file",
+          args: { path: "a.ts" },
+          timestamp: "2026-11-22T10:00:00.000Z",
+          durationMs: 100,
+        },
+        {
+          tool: "workspace_run_command",
+          args: { command: "npm test" },
+          timestamp: "2026-11-22T10:04:00.000Z",
+          durationMs: 3000,
+        },
+      ],
+    });
+    assert.ok(derived);
+    assert.equal(derived.durationMs, 243_000);
+
+    const html = renderToString(
+      React.createElement(StintCard, {
+        durationMs: 243_000,
+        outputTokens: 600,
+        roundPromptTokens: [4000, 5000],
+        roundGenerationMs: [6000, 6000],
+      })
+    );
+    assert.ok(html.includes('data-testid="stint-time"'));
+    assert.ok(html.includes("4m 03s"));
+  });
+
+  it("Fix 9: omits avg speed in stint card when no generation data is recorded (never renders 0.0 tok/s)", () => {
+    const metrics = deriveStintMetrics({
+      durationMs: 17_835_000,
+      outputTokens: 500,
+      roundPromptTokens: [4000],
+      roundGenerationMs: [],
+    });
+    assert.ok(metrics);
+    assert.equal(metrics.avgTokPerSec, undefined);
+
+    const html = renderToString(
+      React.createElement(StintCard, {
+        durationMs: 17_835_000,
+        outputTokens: 500,
+        roundPromptTokens: [4000],
+      })
+    );
+    assert.ok(!html.includes("0.0 tok/s"));
+    assert.ok(!html.includes('data-testid="stint-avg-speed"'));
   });
 
   it("guard: StintCard.tsx never uses banned zinc-500 text classes", () => {

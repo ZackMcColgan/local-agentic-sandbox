@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const componentsDir = path.join(process.cwd(), "components");
+const componentsDir = path.resolve(__dirname, "../components");
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(componentsDir, rel), "utf8");
@@ -79,6 +79,57 @@ describe("Board #59: dark-mode contrast floor on #000", () => {
     assert.ok(
       src.includes("dark:text-zinc-300"),
       "disabled controls use zinc-300 (contrast 10.08 on zinc-800 >= floor)"
+    );
+  });
+});
+
+describe("Timeline Iteration 2: light-mode contrast floor for timeline surfaces", () => {
+  const timelineFiles = ["ActivityTimeline.tsx", "NowLineBar.tsx", "StintCard.tsx"];
+
+  it("timeline components never use unprefixed dark-only zinc text or bare bg-black in light mode", () => {
+    const unprefixedLightZincText = /(?<![:\w-])text-zinc-(?:100|200|300|400|500)\b/g;
+    const unprefixedBgBlack = /(?<![:\w-])bg-black(?:\/\d+)?\b/g;
+
+    for (const file of timelineFiles) {
+      const src = read(file);
+      const zincHits = src.match(unprefixedLightZincText) ?? [];
+      assert.equal(
+        zincHits.length,
+        0,
+        `${file} has washed-out light-mode zinc text: ${zincHits.join(", ")}`
+      );
+      const blackHits = src.match(unprefixedBgBlack) ?? [];
+      assert.equal(
+        blackHits.length,
+        0,
+        `${file} has unprefixed bg-black that renders dark in light mode: ${blackHits.join(", ")}`
+      );
+      assert.equal(/\btext-zinc-500\b/.test(src), false, `${file} must never use zinc-500`);
+    }
+  });
+
+  it("ActivityTimeline error surfaces use rose-700 on rose-50 with rose-300 border in light mode", () => {
+    const src = read("ActivityTimeline.tsx");
+    assert.ok(src.includes("text-rose-700"), "light-mode error text floor is rose-700");
+    assert.ok(src.includes("bg-rose-50"), "light-mode error surface is rose-50");
+    assert.ok(src.includes("border-rose-300"), "light-mode error border is rose-300");
+    assert.ok(
+      src.includes("border-zinc-300 dark:border-zinc-800"),
+      "fold/card borders visible on white"
+    );
+  });
+
+  it("StintCard and NowLineBar preserve dark-mode classes while meeting light-mode floors", () => {
+    const stint = read("StintCard.tsx");
+    assert.ok(stint.includes("text-zinc-600 dark:text-zinc-400"), "stint labels mode-aware");
+    assert.ok(stint.includes("text-zinc-800 dark:text-zinc-200"), "stint values mode-aware");
+    assert.ok(stint.includes("bg-zinc-50 dark:bg-black"), "stint card surface mode-aware");
+
+    const nowLine = read("NowLineBar.tsx");
+    assert.ok(nowLine.includes("bg-zinc-50 dark:bg-black"), "now-line surface mode-aware");
+    assert.ok(
+      nowLine.includes("text-zinc-600 dark:text-zinc-400"),
+      "now-line secondary text mode-aware"
     );
   });
 });

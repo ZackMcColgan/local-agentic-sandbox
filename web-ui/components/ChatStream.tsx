@@ -2327,7 +2327,7 @@ export function ChatStream({
                 streamStatus={streamStatus}
                 traces={activeTraces}
                 startedAtMs={turnStartedAtRef.current}
-                nowMs={lastActivityAtMs}
+                lastActivityAtMs={lastActivityAtMs}
                 totalDurationMs={lastAssistant?.durationMs}
                 outputTokens={lastAssistant?.outputTokens}
                 roundGenerationMs={lastAssistant?.roundGenerationMs}

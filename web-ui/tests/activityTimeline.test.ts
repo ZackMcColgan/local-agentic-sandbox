@@ -276,8 +276,8 @@ describe("activityTimeline — pure row model", () => {
       },
       0
     );
-    assert.equal(withPreamble.target, "Get-Content 'C:\\repo\\testGate.ts'");
-    assert.equal(withPreamble.label, "Ran Get-Content 'C:\\repo\\testGate.ts'");
+    assert.equal(withPreamble.target, "Get-Content '...\\repo\\testGate.ts'");
+    assert.equal(withPreamble.label, "Ran Get-Content '...\\repo\\testGate.ts'");
 
     const withDoubleQuotes = traceToTimelineRow(
       {
@@ -438,5 +438,191 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(rows[0].kind, "thinking");
     assert.ok(rows[0].thinkingText?.includes("Assessing user weather request"));
     assert.ok(rows[0].thinkingText?.includes("Redirecting to SVG diagram"));
+  });
+
+  it("Fix 2: attaches per-round generation duration to thinking rows and omits duration when unrecorded", () => {
+    const withGen = buildActivityTimeline(
+      [{ tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 20, round: 1 }],
+      undefined,
+      {
+        thinkingSegments: [
+          { round: 1, text: "Round 1 thought" },
+          { round: 2, text: "Round 2 thought" },
+        ],
+        roundGenerationMs: [2500, 4100],
+      }
+    );
+    assert.equal(withGen[0].kind, "thinking");
+    assert.equal(withGen[0].durationMs, 2500);
+    assert.equal(withGen[2].kind, "thinking");
+    assert.equal(withGen[2].durationMs, 4100);
+
+    const withoutGen = buildActivityTimeline([], undefined, {
+      thinkingSegments: [{ round: 1, text: "Legacy thought" }],
+    });
+    assert.equal(withoutGen[0].durationMs, undefined);
+  });
+
+  it("Fix 3: populates fold card context sublines for read groups and shell groups", () => {
+    const readRows = buildActivityTimeline([
+      {
+        tool: "workspace_read_file",
+        args: { path: "web-ui/components/SettingsView.tsx" },
+        durationMs: 10,
+      },
+      {
+        tool: "workspace_read_file",
+        args: { path: "web-ui/components/ChatStream.tsx" },
+        durationMs: 20,
+      },
+      { tool: "workspace_read_file", args: { path: "web-ui/lib/turnSpeed.ts" }, durationMs: 15 },
+      { tool: "workspace_read_file", args: { path: "web-ui/lib/testGate.ts" }, durationMs: 15 },
+    ]);
+    assert.equal(readRows.length, 1);
+    assert.equal(readRows[0].label, "Read 4 files");
+    assert.equal(readRows[0].subline, "SettingsView.tsx, ChatStream.tsx +2 more");
+
+    const shellRows = buildActivityTimeline([
+      {
+        tool: "host_run_powershell",
+        args: { command: "cd C:\\Users\\zackm\\Desktop\\repos\\timeline3-wt; git status --short" },
+        durationMs: 200,
+      },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cd C:\\Users\\zackm\\Desktop\\repos\\timeline3-wt; git diff --stat" },
+        durationMs: 300,
+      },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cd C:\\Users\\zackm\\Desktop\\repos\\timeline3-wt; npm run test:gate" },
+        durationMs: 1500,
+      },
+    ]);
+    assert.equal(shellRows.length, 1);
+    assert.equal(shellRows[0].label, "Ran 3 commands");
+    assert.ok(shellRows[0].subline?.includes("...\\repos\\timeline3-wt"));
+    assert.ok(shellRows[0].subline?.includes("2.0s"));
+  });
+
+  it("Fix 4: folds 3+ consecutive failed shell rows into a rose error group with total duration, keeping lone failures inline", () => {
+    const traces: TimelineTraceInput[] = [
+      {
+        tool: "host_run_powershell",
+        args: { command: "cmd1" },
+        durationMs: 1000,
+        isError: true,
+        result: "Exit code 1: err1",
+      },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cmd2" },
+        durationMs: 1500,
+        isError: true,
+        result: "Exit code 1: err2",
+      },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cmd3" },
+        durationMs: 500,
+        isError: true,
+        result: "Exit code 1: err3",
+      },
+      { tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 10 },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cmd4" },
+        durationMs: 400,
+        isError: true,
+        result: "Exit code 1: lone",
+      },
+    ];
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].isGroup, true);
+    assert.equal(rows[0].status, "error");
+    assert.equal(rows[0].label, "3 commands failed");
+    assert.equal(rows[0].subline, "3.0s");
+    assert.equal(rows[0].children?.length, 3);
+    assert.equal(rows[1].label, "Read a.ts");
+    assert.equal(rows[2].isGroup, undefined);
+    assert.equal(rows[2].status, "error");
+    assert.equal(rows[2].label, "Ran cmd4");
+  });
+
+  it("Fix 5: strips cd chains, $env: assignments, Write-Host echo framing, and elides absolute paths to last two segments", () => {
+    const envCase = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: { command: "$env:GIT_TERMINAL_PROMPT='0'; git status --short" },
+        durationMs: 40,
+      },
+      0
+    );
+    assert.equal(envCase.label, "Ran git status --short");
+
+    const cdSemicolon = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command: "cd C:\\Users\\zackm\\Desktop\\repos\\timeline3-wt; git grep 'NowLineBar'",
+        },
+        durationMs: 50,
+      },
+      1
+    );
+    assert.equal(cdSemicolon.label, "Ran git grep 'NowLineBar'");
+
+    const cdAmpersand = traceToTimelineRow(
+      {
+        tool: "workspace_run_command",
+        args: { command: "cd C:\\Users\\zackm\\Desktop\\repos\\timeline3-wt & npm run test:gate" },
+        durationMs: 80,
+      },
+      2
+    );
+    assert.equal(cdAmpersand.label, "Ran npm run test:gate");
+
+    const writeHost = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command:
+            "$ErrorActionPreference='Continue'; $env:GIT_TERMINAL_PROMPT='0'; Write-Host '=== STATUS ==='; git status --short",
+        },
+        durationMs: 60,
+      },
+      3
+    );
+    assert.equal(writeHost.label, "Ran git status --short");
+
+    const elidePath = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command:
+            "Get-Content 'C:\\Users\\zackm\\Desktop\\repos\\timeline3-wt\\web-ui\\components\\SettingsView.tsx'",
+        },
+        durationMs: 30,
+      },
+      4
+    );
+    assert.equal(elidePath.label, "Ran Get-Content '...\\components\\SettingsView.tsx'");
+  });
+
+  it("Fix 6: uses operation-specific verbs for write, edit, and delete traces", () => {
+    const editRow = traceToTimelineRow(
+      { tool: "replace_in_file", args: { path: "src/app.ts", replacement: "x" }, durationMs: 10 },
+      0
+    );
+    assert.equal(editRow.verb, "Edited");
+    assert.equal(editRow.label, "Edited app.ts");
+
+    const delRow = traceToTimelineRow(
+      { tool: "delete_path", args: { path: "src/old.ts" }, durationMs: 10 },
+      1
+    );
+    assert.equal(delRow.verb, "Deleted");
+    assert.equal(delRow.label, "Deleted old.ts");
   });
 });

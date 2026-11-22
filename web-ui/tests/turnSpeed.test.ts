@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import React from "react";
+import { renderToString } from "react-dom/server";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -8,6 +10,7 @@ import {
   sumRoundGenerationMs,
   deriveNowLineState,
 } from "../lib/turnSpeed";
+import { NowLineBar } from "../components/NowLineBar";
 
 describe("turnSpeed — generation timing, tok/s, and header now-line", () => {
   it("computes average tok/s from output tokens and generation duration", () => {
@@ -135,6 +138,83 @@ describe("turnSpeed — generation timing, tok/s, and header now-line", () => {
     });
     assert.equal(state.elapsedLabel, "5s");
     assert.equal(state.tokPerSecLabel, null);
+  });
+
+  it("Fix 1: emits amber stall segment on now-line only while streaming and stalled (>45s silent)", () => {
+    const NOW = 1_700_000_000_000;
+    const stalled = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: true,
+      startedAtMs: NOW - 2_000_000,
+      lastActivityAtMs: NOW - 1_730_000,
+      nowMs: NOW,
+      outputTokens: 400,
+      roundGenerationMs: [8000],
+    });
+    assert.equal(stalled.stallLabel, "Stalled · no heartbeat 1730s");
+
+    const stalledHtml = renderToString(
+      React.createElement(NowLineBar, {
+        hasRunTurn: true,
+        isStreaming: true,
+        startedAtMs: NOW - 2_000_000,
+        lastActivityAtMs: NOW - 1_730_000,
+        nowMs: NOW,
+        outputTokens: 400,
+        roundGenerationMs: [8000],
+      })
+    );
+    assert.ok(stalledHtml.includes('data-testid="now-line-stalled"'));
+    assert.ok(stalledHtml.includes("Stalled · no heartbeat 1730s"));
+    assert.ok(stalledHtml.includes("text-amber-700"));
+    assert.ok(stalledHtml.includes("dark:text-amber-400"));
+
+    const live = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: true,
+      startedAtMs: NOW - 10_000,
+      lastActivityAtMs: NOW - 5_000,
+      nowMs: NOW,
+    });
+    assert.equal(live.stallLabel, null);
+
+    const settled = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: false,
+      totalDurationMs: 2_000_000,
+      lastActivityAtMs: NOW - 1_730_000,
+      nowMs: NOW,
+    });
+    assert.equal(settled.stallLabel, null);
+  });
+
+  it("Fix 9: settled now-line omits speed when no generation data is recorded (never renders 0.0 tok/s)", () => {
+    assert.equal(computeAverageTokPerSec(1, 100_000), null);
+
+    const settledNoGen = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: false,
+      nowMs: 1_700_000_000_000,
+      totalDurationMs: 17_835_000,
+      outputTokens: 500,
+      roundGenerationMs: [],
+    });
+    assert.equal(settledNoGen.visible, true);
+    assert.equal(settledNoGen.elapsedLabel, "4h 57m 15s");
+    assert.equal(settledNoGen.tokensLabel, "500 tok");
+    assert.equal(settledNoGen.tokPerSecLabel, null);
+
+    const html = renderToString(
+      React.createElement(NowLineBar, {
+        hasRunTurn: true,
+        isStreaming: false,
+        nowMs: 1_700_000_000_000,
+        totalDurationMs: 17_835_000,
+        outputTokens: 500,
+      })
+    );
+    assert.ok(!html.includes("0.0 tok/s"));
+    assert.ok(!html.includes('data-testid="now-line-toks"'));
   });
 
   it("guard: NowLineBar.tsx never uses banned zinc-500 text classes", () => {

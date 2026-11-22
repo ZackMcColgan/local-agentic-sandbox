@@ -25,8 +25,6 @@ import { ExecutionTraceItem } from "../ExecutionTrace";
 import { CompletionVerificationBadge } from "../CompletionVerificationBadge";
 import { SvgViewer, SvgFileLink } from "../SvgViewer";
 import { LiveRunBlock } from "../LiveRunBlock";
-import { LiveActivityHeader } from "../LiveActivityHeader";
-import { phaseLabelForTool } from "../../lib/liveActivity";
 import { CodeBlock } from "../ArtifactRenderers";
 import {
   isSvgCode,
@@ -48,12 +46,12 @@ import {
   displayBasename,
 } from "../../lib/chatUtils";
 import { CanvasDiffCard, CanvasFileOpenButton } from "../ArtifactCanvas";
-import { resolveTurnStatusPhase } from "../../lib/chatStatus";
 import { TaskManifest } from "../../lib/subagents/types";
 import { formatFileSize } from "../../lib/chat/attachments";
 import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
 import { StintCard } from "../StintCard";
+import { sumRoundGenerationMs } from "../../lib/turnSpeed";
 import type { TimelineWriteDiff } from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
@@ -164,9 +162,6 @@ export function ChatMessageItem({
   isStoppingTask,
   activeAssistantMsgId,
   completedTurnMsgId,
-  streamStatus,
-  turnStartedAtMs,
-  lastActivityAtMs,
   expandedTraces,
   expandedProofs,
   hasResolvedDetachedTurn,
@@ -342,48 +337,12 @@ export function ChatMessageItem({
               if (!hasThought && !isStreamingThis && !showDoneChip && turnTraces.length === 0)
                 return null;
 
-              const liveLastTrace =
-                liveTurnTraces.length > 0 ? liveTurnTraces[liveTurnTraces.length - 1] : null;
-              const msgLastTrace =
-                m.traces && m.traces.length > 0 ? m.traces[m.traces.length - 1] : null;
-              const statusTool = streamStatus
-                ? (streamStatus.match(
-                    /^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i
-                  )?.[1] ?? null)
-                : null;
-              const toolForPhase = liveLastTrace?.tool || msgLastTrace?.tool || statusTool;
-              const phaseLabel = toolForPhase
-                ? phaseLabelForTool(toolForPhase)
-                : (resolveTurnStatusPhase({
-                    isStreaming: true,
-                    streamStatus,
-                    hasThought: Boolean(m.thought),
-                    hasContent: Boolean(m.content),
-                  }) ?? "Starting turn…");
-              const parsedTs = m.timestamp ? Date.parse(m.timestamp) : NaN;
-              const startedAtMs =
-                turnStartedAtMs ?? (Number.isNaN(parsedTs) ? lastActivityAtMs : parsedTs);
-              const traceCount = Math.max(
-                m.traces?.length ?? 0,
-                isStreamingThis ? liveTurnTraces.length : 0
-              );
+              const recordedGenMs = sumRoundGenerationMs(m.roundGenerationMs);
+              const thinkingDurationMs =
+                m.thinkingDurationMs ?? (recordedGenMs > 0 ? recordedGenMs : undefined);
 
               return (
                 <div className="w-full space-y-2">
-                  {isStreamingThis && (
-                    <LiveActivityHeader
-                      startedAtMs={startedAtMs}
-                      lastActivityAtMs={lastActivityAtMs}
-                      round={m.roundPromptTokens?.length}
-                      traceCount={traceCount}
-                      traces={
-                        isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces
-                      }
-                      phaseLabel={phaseLabel}
-                      activityLabel={statusTool ? null : streamStatus}
-                      isStreaming={isStreamingThis}
-                    />
-                  )}
                   {showDoneChip && (
                     <div
                       data-testid="turn-done-chip"
@@ -398,7 +357,7 @@ export function ChatMessageItem({
                         thought={m.thought}
                         isStreaming={isStreamingThis}
                         hasContent={Boolean(m.content && m.content.trim())}
-                        durationMs={m.thinkingDurationMs ?? m.durationMs}
+                        durationMs={thinkingDurationMs}
                       />
                     )}
                   {(turnTraces.length > 0 ||
@@ -406,6 +365,7 @@ export function ChatMessageItem({
                     <ActivityTimeline
                       traces={turnTraces}
                       thinkingSegments={m.thinkingSegments}
+                      roundGenerationMs={m.roundGenerationMs}
                       isStreaming={isStreamingThis}
                       hasContent={Boolean(m.content && m.content.trim())}
                       onOpenCanvasDiff={onOpenCanvasDiff}
