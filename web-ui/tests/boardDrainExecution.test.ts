@@ -12,7 +12,11 @@ import {
 } from "../lib/board/boardOrchestrator";
 import { BoardStore } from "../lib/board/boardStore";
 import { composeDispatcherBrief } from "../lib/board/dispatcher";
-import { classifyJobSummary, createProductionIssueAndWait } from "../lib/board/productionDrain";
+import {
+  classifyJobSummary,
+  createProductionIssueAndWait,
+  createProductionWorkingItemLivenessCheck,
+} from "../lib/board/productionDrain";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import { POST as drainPost } from "../app/api/board/drain/route";
 
@@ -560,6 +564,191 @@ test("Fix 3: orchestrator marks item needs-attention and counts failed when job 
     assert.equal(report.failedCount, 1);
     assert.equal(report.completedCount, 0);
     assert.equal(report.surfacedIssues[0]?.code, "job-blocked");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("Fix 1: orphaned working item (stopped thread + no live job) is marked needs-attention and drain issues next queued item", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const orphaned = store.create({
+      title: "Interrupted job",
+      brief: "Died during container OOMKill.",
+      status: "working",
+      threadLink: "/?thread=thread-orphaned-1",
+      author: "Owner",
+      source: "manual",
+    });
+    const nextQueued = store.create({
+      title: "Next queued job",
+      brief: "Should run after orphaned item is recovered.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    const issuedIds: string[] = [];
+    const checkWorkingItemLiveness = createProductionWorkingItemLivenessCheck({
+      threadStore: {
+        createThread: () => {
+          throw new Error("unexpected createThread");
+        },
+        getThread: async (id: string) =>
+          id === "thread-orphaned-1"
+            ? {
+                id: "thread-orphaned-1",
+                title: "#1 Interrupted job",
+                status: "stopped",
+                model: "test-model",
+                reasoningEffort: "medium",
+                messages: [],
+                error: "Turn incomplete: Server restarted or turn interrupted",
+                createdAt: "2026-11-21T00:00:00.000Z",
+                updatedAt: "2026-11-21T00:00:05.000Z",
+              }
+            : null,
+      },
+      isThreadLive: () => false,
+    });
+
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      maxItems: 1,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      checkWorkingItemLiveness,
+      issueAndWait: async ({ item }): Promise<JobExecutionOutcome> => {
+        issuedIds.push(item.id);
+        return {
+          status: "completed",
+          threadId: `thread-${item.id}`,
+          summary: "Completed next queued job.",
+        };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    const afterOrphaned = store.get(orphaned.id);
+    const afterNext = store.get(nextQueued.id);
+
+    assert.equal(afterOrphaned?.status, "needs-attention");
+    assert.equal(afterOrphaned?.needsAttention, true);
+    assert.match(afterOrphaned?.parkedReason ?? "", /without an outcome|restart/i);
+    assert.deepEqual(issuedIds, [nextQueued.id]);
+    assert.equal(afterNext?.status, "done");
+    assert.equal(report.completedCount, 1);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("Fix 1: working item with a live job stops the drain and issues nothing", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const liveItem = store.create({
+      title: "Live running job",
+      brief: "Still actively executing.",
+      status: "working",
+      threadLink: "/?thread=thread-live-1",
+      author: "Owner",
+      source: "manual",
+    });
+    const queued = store.create({
+      title: "Queued next job",
+      brief: "Must wait while live job runs.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    let issuedCount = 0;
+    const checkWorkingItemLiveness = createProductionWorkingItemLivenessCheck({
+      threadStore: {
+        createThread: () => {
+          throw new Error("unexpected createThread");
+        },
+        getThread: async () => ({
+          id: "thread-live-1",
+          title: "#1 Live running job",
+          status: "active",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:05.000Z",
+        }),
+      },
+      isThreadLive: (id) => id === "thread-live-1",
+    });
+
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      maxItems: 2,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      checkWorkingItemLiveness,
+      issueAndWait: async () => {
+        issuedCount += 1;
+        return { status: "completed", threadId: "t-unexpected" };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    assert.equal(issuedCount, 0);
+    assert.equal(store.get(liveItem.id)?.status, "working");
+    assert.equal(store.get(queued.id)?.status, "queued");
+    assert.equal(report.stopReason, "job-already-running");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("Fix 1: working item whose liveness check errors stops the drain (fail-safe)", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const workingItem = store.create({
+      title: "Unknown liveness job",
+      brief: "Liveness check throws.",
+      status: "working",
+      threadLink: "/?thread=thread-err-1",
+      author: "Owner",
+      source: "manual",
+    });
+    const queued = store.create({
+      title: "Queued next job",
+      brief: "Must not start when liveness check errors.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    let issuedCount = 0;
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      maxItems: 2,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      checkWorkingItemLiveness: async () => {
+        throw new Error("thread store read failed");
+      },
+      issueAndWait: async () => {
+        issuedCount += 1;
+        return { status: "completed", threadId: "t-unexpected" };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    assert.equal(issuedCount, 0);
+    assert.equal(store.get(workingItem.id)?.status, "working");
+    assert.equal(store.get(queued.id)?.status, "queued");
+    assert.equal(report.stopReason, "job-already-running");
   } finally {
     env.cleanup();
   }
