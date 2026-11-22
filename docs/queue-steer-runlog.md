@@ -46,6 +46,13 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
   only the eval-pack + skillGate suites (2 suites) and silently drops the retryAfter slice.
   Scope the gate with `--since=origin/develop` to exclude untracked scratch. No code change
   needed; job remains COMPLETE.
+- Auto-resume attempt 1/2 (final re-verification, 2026-11-20): branch clean, PR #217
+  OPEN + MERGEABLE into develop. Targeted gate
+  `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail
+  (4.5s). Scoped full gate `node scripts/test-gate.js --since=origin/develop` -> PASSED,
+  636 pass / 0 fail / 2 skip in 67.2s (<90s budget); suite count grew from 409 to 638 as
+  develop advanced (Board #54/#56/#59 slices merged in), `tests/retryAfter.test.ts` still
+  selected. No code change required; job remains COMPLETE.
 
 ## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
