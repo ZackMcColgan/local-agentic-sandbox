@@ -27,3 +27,17 @@
   - web-ui/components/BoardView.tsx: working-column copy now honest: auto-start only when board control is `running` (schedulerDaemon.ts:249-256, boardControl.ts).
   - deploy/k8s/network-policies.yaml: comments state port-only host egress semantics; README documents the boundary (AC route: accurate documentation; ipBlock tightening left off to avoid risking prod web-ui under docker-desktop CNI).
 - Verification: docsIntegrity 11/11 green; engineToggle + settingsView green; `npm run test:gate` via bridge.
+
+## Board Item #59 — Single-emerald accent + dark-mode contrast floor (BoardView, ChatStream, SettingsView)
+
+- Worktree: `C:\Users\zackm\Desktop\repos\board59-wt`, branch `feature/emerald-accent-contrast-floor` (off develop).
+- Test-first: `web-ui/tests/accentContrastAudit.test.ts` (banned cyan/sky scan on BoardView + ChatStream; rose-400 heading floor check; disabled-control floor check) and `web-ui/tests/e2e/settingsMobile.spec.ts` (412px dark Playwright render audit: zero banned accent classes across Settings/Board/Chat, Danger Zone heading and disabled Start button clear the zinc-400-on-#000 floor of 8.2). Both red before the fix.
+- Patches (one file per commit):
+  - web-ui/components/BoardView.tsx: banned cyan accents on active/working states replaced with single-emerald tokens (`border-emerald-500/40`, `text-emerald-300/400`, `bg-emerald-*`).
+  - web-ui/components/ChatStream.tsx: steer pending-deck border/chip/italic sky accents -> emerald; steer-queue expand chevron sky -> emerald; active queue chip cyan -> emerald; mid-turn Steer button `bg-cyan-600` -> `bg-emerald-600` with dark-mode `bg-emerald-400 text-black` variant.
+  - web-ui/components/settings/DangerZone.tsx: heading `dark:text-rose-400` (7.80 on #000, below floor) -> `dark:text-rose-300` (11.05); ShieldAlert icon lifted to match.
+  - web-ui/components/settings/EngineZone.tsx + NotificationsZone.tsx: disabled controls `opacity-50 ... dark:text-zinc-400` (5.81 on zinc-800) -> full-opacity `dark:bg-zinc-800 dark:text-zinc-300` (10.08); light-mode disabled text lifted zinc-400 -> zinc-500 (4.4 on zinc-100).
+  - web-ui/components/settings/MemoryZone.tsx: `disabled:opacity-50` -> `disabled:bg-zinc-800 disabled:text-zinc-300 disabled:cursor-not-allowed`.
+  - web-ui/lib/testGate.ts: new MAPPING_RULES entry wiring accentContrastAudit.test.ts to BoardView/ChatStream/SettingsView/settings zones (gateManifestCompleteness green).
+- Verification: accentContrastAudit 4/4, darkTextFloor 2/2, settingsView 8/8, parityChatSurfaces 11/11, paritySidebarDrawer 11/11, uirHeaderActivity 20/20, gateManifestCompleteness 1/1 green; `npm run test:gate` PASSED: 687 unit tests + 128 Playwright specs (incl. settingsMobile 5/5 across all 4 projects), 0 failed.
+- Note: `transition-all` on engine buttons animates the disabled-state background; the e2e floor check waits 400ms for the transition to settle before measuring computed contrast.

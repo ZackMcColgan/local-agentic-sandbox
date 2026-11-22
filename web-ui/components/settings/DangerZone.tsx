@@ -11,7 +11,7 @@ export interface DangerZoneProps {
 export function DangerZone({ isSelfDeployActive, onToggleSelfDeploy }: DangerZoneProps) {
   return (
     <>
-      <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-400 mb-3 px-1">
+      <h2 className="text-lg font-semibold text-rose-700 dark:text-rose-300 mb-3 px-1">
         Danger Zone
       </h2>
 
@@ -19,7 +19,7 @@ export function DangerZone({ isSelfDeployActive, onToggleSelfDeploy }: DangerZon
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
-              <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+              <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-300" />
               <span>Enable self-deploy</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">

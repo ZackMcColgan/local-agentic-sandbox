@@ -119,7 +119,7 @@ export function EngineZone({
             onClick={() => onEngineAction("start")}
             className={`min-h-[44px] py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
               engineData.status === "running"
-                ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-400"
+                ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-300"
                 : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
             }`}
             title="Start llama-server"
@@ -135,7 +135,7 @@ export function EngineZone({
             onClick={() => onEngineAction("stop")}
             className={`min-h-[44px] py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
               engineData.status === "stopped"
-                ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-400"
+                ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-300"
                 : "bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
             }`}
             title="Stop llama-server to reclaim VRAM"

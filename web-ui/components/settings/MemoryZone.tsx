@@ -62,7 +62,7 @@ export function MemoryZone({
             data-testid="settings-memory-save-btn"
             onClick={onSaveMemory}
             disabled={memorySaving || memoryText.length > 2000}
-            className="rounded-xl px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-xl px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-zinc-800 disabled:text-zinc-300 disabled:cursor-not-allowed"
           >
             {memorySaving ? "Saving..." : "Save"}
           </button>

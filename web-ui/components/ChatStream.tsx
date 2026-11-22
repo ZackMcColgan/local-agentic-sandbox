@@ -2682,9 +2682,9 @@ export function ChatStream({
             {pendingSteers.length > 0 && (
               <div
                 data-testid="chat-steer-pending-deck"
-                className="flex items-center gap-2 pb-2 mb-2 border-b border-sky-100 dark:border-sky-950/60 max-w-[840px] mx-auto"
+                className="flex items-center gap-2 pb-2 mb-2 border-b border-stone-200 dark:border-white/[0.10] max-w-[840px] mx-auto"
               >
-                <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 shrink-0 uppercase tracking-wider flex items-center gap-1">
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 shrink-0 uppercase tracking-wider flex items-center gap-1">
                   <span>Steer pending ({pendingSteers.length}):</span>
                 </span>
                 <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none">
@@ -2692,12 +2692,12 @@ export function ChatStream({
                     <div
                       key={idx}
                       data-testid="chat-steer-pending-chip"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-[11px] font-medium text-sky-950 dark:text-sky-200 shrink-0 max-w-[280px]"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[11px] font-medium text-emerald-950 dark:text-emerald-200 shrink-0 max-w-[280px]"
                     >
                       <span className="truncate" title={st}>
                         {st}
                       </span>
-                      <span className="text-[9px] text-sky-600 dark:text-sky-400 italic shrink-0">
+                      <span className="text-[9px] text-emerald-700 dark:text-emerald-300 italic shrink-0">
                         (lands at next step)
                       </span>
                       <button
@@ -2706,7 +2706,7 @@ export function ChatStream({
                         onClick={() => {
                           setPendingSteers((prev) => prev.filter((_, i) => i !== idx));
                         }}
-                        className="p-0.5 rounded-full hover:bg-sky-200 dark:hover:bg-sky-800 text-sky-600 dark:text-sky-400 hover:text-sky-950 transition-colors"
+                        className="p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-600 dark:text-emerald-400 hover:text-emerald-950 transition-colors"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -2884,7 +2884,7 @@ export function ChatStream({
                         onClick={() => handleSelectMidTurnAction("steer")}
                         className={`px-2.5 py-0.5 rounded-full transition-all ${
                           midTurnAction === "steer"
-                            ? "bg-white dark:bg-[#0e0e12] text-cyan-800 dark:text-cyan-300 font-semibold shadow-xs"
+                            ? "bg-white dark:bg-[#0e0e12] text-emerald-800 dark:text-emerald-300 font-semibold shadow-xs"
                             : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200"
                         }`}
                       >
@@ -2934,7 +2934,7 @@ export function ChatStream({
                       data-testid="send-button"
                       className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0 ${
                         isGeneratingOrRunning && midTurnAction === "steer"
-                          ? "bg-cyan-600 hover:bg-cyan-500 text-white"
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white dark:bg-emerald-400 dark:hover:bg-emerald-300 dark:text-black"
                           : "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black"
                       }`}
                       title={
