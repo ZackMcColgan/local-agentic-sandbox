@@ -445,3 +445,60 @@ test("rendezvous: chunkComplete handoff written via route target is seen by supe
     fs.rmSync(tmpCheckpointDir, { recursive: true, force: true });
   }
 });
+
+test("handleLiveTurnChunkBudget with bankGit=false writes handoff/runlog without mutating dirty checkout", async () => {
+  const repoDir = initTempGitRepo();
+  const handoffPath = path.join(repoDir, ".agent", "checkpoints", "thread-no-wt.handoff.json");
+  const runlogPath = path.join(repoDir, "docs", "internal", "queue-steer-runlog.md");
+
+  try {
+    const initialSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repoDir,
+      encoding: "utf8",
+    }).trim();
+    // Simulate a dirty shared host checkout with an untracked file
+    fs.writeFileSync(path.join(repoDir, "host-untracked.txt"), "do not commit\n", "utf8");
+
+    const hit = await handleLiveTurnChunkBudget({
+      roundsUsed: 2,
+      elapsedMs: 200,
+      budget: { maxRounds: 2 },
+      jobId: "thread-no-wt",
+      workspaceRoot: repoDir,
+      handoffPath,
+      runlogPath,
+      bankGit: false,
+      currentState: "round 2 done",
+      nextStep: "resume from round 2",
+      openQuestions: [],
+    });
+
+    assert.equal(hit.exceeded, true);
+    if (hit.exceeded) {
+      assert.equal(hit.marker, TURN_CHUNK_COMPLETE_MARKER);
+      assert.equal(hit.handoff.chunkComplete, true);
+      assert.equal(hit.handoff.headSha, initialSha);
+      assert.ok(hit.handoff.branch.length > 0);
+    }
+
+    // Host checkout HEAD must remain unchanged and untracked file must not be staged/committed
+    const afterSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repoDir,
+      encoding: "utf8",
+    }).trim();
+    assert.equal(afterSha, initialSha);
+    const status = execFileSync("git", ["status", "--porcelain"], {
+      cwd: repoDir,
+      encoding: "utf8",
+    });
+    assert.match(status, /\?\?\s+host-untracked\.txt/);
+
+    const written = readMilestoneHandoff(handoffPath) as ChunkHandoffBrief | null;
+    assert.ok(written);
+    assert.equal(written?.chunkComplete, true);
+    assert.equal(written?.headSha, initialSha);
+    assert.ok(fs.existsSync(runlogPath));
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
