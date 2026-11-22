@@ -465,17 +465,27 @@ export const HOST_TOOLS_DEFINITIONS = [
     type: "function",
     function: {
       name: "host_read_file",
-      description: "Read the full contents of a file on the host machine filesystem.",
+      description:
+        "Read one file (via path) or many files/directories in a single call (via paths) on the host machine filesystem. Prefer paths when reading multiple files or a folder tree; directories expand recursively, skipping node_modules, .git, build outputs, and binaries.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Absolute path on the host machine." },
+          path: {
+            type: "string",
+            description:
+              "Single absolute path on the host machine. Provide either path or paths, not both.",
+          },
+          paths: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "List of file or directory paths on the host machine to read in one call. Directories expand recursively, skipping node_modules, .git, build outputs, and binaries. Provide either path or paths, not both.",
+          },
           start_line: { type: "number", description: "Optional start line (1-indexed)." },
           end_line: { type: "number", description: "Optional end line (1-indexed)." },
           offset: { type: "number", description: "Optional line offset." },
           limit: { type: "number", description: "Optional line count limit." },
         },
-        required: ["path"],
       },
     },
   },

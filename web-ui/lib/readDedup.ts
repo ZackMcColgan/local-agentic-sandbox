@@ -105,6 +105,38 @@ export interface ReadDedupDecision {
   meta?: ReadDedupMeta;
 }
 
+/** Shape of an individual file entry inside a multi-file read result. */
+export interface MultiReadFileItem {
+  path: string;
+  content: string;
+  total_lines?: number;
+  total_bytes?: number;
+  showing_lines?: string;
+  truncated?: boolean;
+  deduplicated?: boolean;
+  [key: string]: unknown;
+}
+
+/** Shape of a multi-file read result returned by host_read_file(paths: [...]). */
+export interface MultiReadResultShape {
+  success?: boolean;
+  multi: true;
+  files: MultiReadFileItem[];
+  [key: string]: unknown;
+}
+
+/** Type guard recognizing a multi-file read payload. */
+export function isMultiReadResult(value: unknown): value is MultiReadResultShape {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as { multi?: unknown; files?: unknown };
+  return obj.multi === true && Array.isArray(obj.files);
+}
+
+/** Canonicalizes path separators for registry lookup while keeping original path in metadata. */
+function normalizeDedupPathKey(rawPath: string): string {
+  return rawPath.trim().replace(/\\/g, "/");
+}
+
 /**
  * Per-thread dedup registry. Seeded from the thread's prior conversation
  * messages (earlier turns) so a re-read in a later turn stubs against the
@@ -147,20 +179,52 @@ export class ReadDedupRegistry {
       }
       const traceIndex = toolCount++;
       const round = assistantCount;
+      const rawContent = typeof msg.content === "string" ? msg.content : "";
+
+      // Seed per-file entries from prior multi-read results
+      let parsedPrior: unknown = null;
+      try {
+        parsedPrior = rawContent ? JSON.parse(rawContent) : null;
+      } catch {}
+      if (isMultiReadResult(parsedPrior)) {
+        for (const file of parsedPrior.files) {
+          if (
+            !file ||
+            typeof file.path !== "string" ||
+            !file.path.trim() ||
+            typeof file.content !== "string" ||
+            file.deduplicated === true ||
+            file.truncated === true
+          ) {
+            continue;
+          }
+          const key = normalizeDedupPathKey(file.path);
+          this.entries.set(key, {
+            path: file.path,
+            contentHash: computeContentHash(file.content),
+            round,
+            traceIndex,
+            messageIndex: i,
+            originalChars: file.content.length,
+          });
+        }
+        continue;
+      }
+
       const pairedCall = Array.isArray(msg.tool_calls)
         ? msg.tool_calls[0]
         : this.findPairedCall(priorMessages, msg.tool_call_id);
       const path = extractReadPath(this.parseArgs(pairedCall));
       if (!path) continue;
-      const content = extractReadContent(typeof msg.content === "string" ? msg.content : "");
+      const content = extractReadContent(rawContent);
       if (content === null) continue;
-      this.entries.set(path, {
+      this.entries.set(normalizeDedupPathKey(path), {
         path,
         contentHash: computeContentHash(content),
         round,
         traceIndex,
         messageIndex: i,
-        originalChars: typeof msg.content === "string" ? msg.content.length : 0,
+        originalChars: rawContent.length,
       });
     }
   }
@@ -185,8 +249,9 @@ export class ReadDedupRegistry {
     const content = extractReadContent(resultContent);
     if (content === null) return { deduplicated: false };
 
+    const key = normalizeDedupPathKey(path);
     const contentHash = computeContentHash(content);
-    const existing = this.entries.get(path);
+    const existing = this.entries.get(key);
     if (existing && existing.contentHash === contentHash) {
       return { deduplicated: true, stub: buildReadDedupStub(existing), meta: existing };
     }
@@ -198,8 +263,73 @@ export class ReadDedupRegistry {
       traceIndex,
       originalChars: resultContent.length,
     };
-    this.entries.set(path, meta);
+    this.entries.set(key, meta);
     return { deduplicated: false, meta };
+  }
+
+  /**
+   * Applies per-file read dedup across a multi-file read result without mutating
+   * the input audit object. Unchanged files have ONLY their own section stubbed;
+   * new or modified siblings keep their full content and anchor/re-anchor the registry.
+   */
+  checkAndRecordMultiRead<T extends MultiReadResultShape>(
+    toolName: string,
+    result: T,
+    round: number,
+    traceIndex: number
+  ): { result: T; dedupedMetas: ReadDedupMeta[] } {
+    if (
+      !READ_DEDUP_TOOLS.includes(toolName as (typeof READ_DEDUP_TOOLS)[number]) ||
+      !isMultiReadResult(result)
+    ) {
+      return { result, dedupedMetas: [] };
+    }
+
+    const dedupedMetas: ReadDedupMeta[] = [];
+    const nextFiles: MultiReadFileItem[] = result.files.map((file) => {
+      if (
+        !file ||
+        typeof file.path !== "string" ||
+        !file.path.trim() ||
+        typeof file.content !== "string" ||
+        file.truncated === true
+      ) {
+        return file;
+      }
+
+      const key = normalizeDedupPathKey(file.path);
+      const contentHash = computeContentHash(file.content);
+      const existing = this.entries.get(key);
+      if (existing && existing.contentHash === contentHash) {
+        dedupedMetas.push(existing);
+        return {
+          ...file,
+          content: buildReadDedupStub(existing),
+          deduplicated: true,
+        };
+      }
+
+      this.entries.set(key, {
+        path: file.path,
+        contentHash,
+        round,
+        traceIndex,
+        originalChars: file.content.length,
+      });
+      return file;
+    });
+
+    if (dedupedMetas.length === 0) {
+      return { result, dedupedMetas };
+    }
+
+    return {
+      result: {
+        ...result,
+        files: nextFiles,
+      },
+      dedupedMetas,
+    };
   }
 
   private parseArgs(pairedCall: DedupToolCall | undefined): Record<string, unknown> | undefined {

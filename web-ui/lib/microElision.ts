@@ -102,6 +102,20 @@ function recoverTarget(
     const val = args[k];
     if (typeof val === "string" && val.trim()) return { target: val.trim(), targetKind: "path" };
   }
+  if (Array.isArray(args.paths) && args.paths.length > 0) {
+    const firstPaths = args.paths
+      .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+      .map((p) => p.trim());
+    if (firstPaths.length > 0) {
+      return {
+        target:
+          firstPaths.length === 1
+            ? firstPaths[0]
+            : `${firstPaths[0]} (+${firstPaths.length - 1} more)`,
+        targetKind: "path",
+      };
+    }
+  }
   for (const k of commandKeys) {
     const val = args[k];
     if (typeof val === "string" && val.trim()) return { target: val.trim(), targetKind: "command" };

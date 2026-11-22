@@ -73,18 +73,30 @@ describe("Chat-2: File Reads & Pagination Parity Suite", () => {
       const wsParams = wsParamsObj?.properties || {};
       const hostParams = hostParamsObj?.properties || {};
 
-      // Required parameter
+      // Required parameter: workspace_read_file requires path; host_read_file accepts either path or paths
       assert.deepEqual(wsParamsObj?.required, ["path"]);
-      assert.deepEqual(hostParamsObj?.required, ["path"]);
+      assert.ok(
+        !hostParamsObj?.required || !hostParamsObj.required.includes("path"),
+        "host_read_file must allow paths as an alternative to path"
+      );
 
-      // Parameter keys parity
-      const expectedKeys = ["path", "start_line", "end_line", "offset", "limit"].sort();
-      assert.deepEqual(Object.keys(wsParams).sort(), expectedKeys);
-      assert.deepEqual(Object.keys(hostParams).sort(), expectedKeys);
+      // Parameter keys parity (host_read_file extends with paths: string[])
+      const expectedWsKeys = ["path", "start_line", "end_line", "offset", "limit"].sort();
+      const expectedHostKeys = [
+        "path",
+        "paths",
+        "start_line",
+        "end_line",
+        "offset",
+        "limit",
+      ].sort();
+      assert.deepEqual(Object.keys(wsParams).sort(), expectedWsKeys);
+      assert.deepEqual(Object.keys(hostParams).sort(), expectedHostKeys);
 
       // Parameter types parity
       assert.equal(wsParams.path?.type, "string");
       assert.equal(hostParams.path?.type, "string");
+      assert.equal(hostParams.paths?.type, "array");
 
       assert.equal(wsParams.start_line?.type, "number");
       assert.equal(hostParams.start_line?.type, "number");

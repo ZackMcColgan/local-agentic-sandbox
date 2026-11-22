@@ -922,6 +922,22 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("host-bridge/multiRead") ||
+      p.includes("host-bridge/server") ||
+      p.includes("lib/hostMode") ||
+      p.includes("lib/readDedup") ||
+      p.includes("hostMultiRead.test.ts"),
+    tests: ["tests/hostMultiRead.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/chat/toolFanout") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("roundToolFanout.test.ts"),
+    tests: ["tests/roundToolFanout.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/chat/roundLoop") ||
       p.includes("app/api/chat/route") ||
       p.includes("chatRoundLoop.test.ts"),

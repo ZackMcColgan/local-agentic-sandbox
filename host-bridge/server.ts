@@ -7,6 +7,7 @@ import { checkCommandDialect } from "./dialectGuard";
 import { isDestructiveHostAction } from "./classifier";
 import { applyReplaceString } from "./replaceString";
 import { getBridgeManifest } from "./manifest";
+import { readMultipleFiles } from "./multiRead";
 import { JobStore, runAsyncJob, resolveAsyncTimeoutSeconds } from "./jobStore";
 import {
   executeGitVerb,
@@ -650,6 +651,44 @@ export async function handleToolExecution(
   }
 
   if (tool === "host_read_file") {
+    const hasPath = typeof args?.path === "string" && args.path.trim().length > 0;
+    const hasPaths = args?.paths !== undefined && args?.paths !== null;
+
+    if (hasPath && hasPaths) {
+      return {
+        success: false,
+        error: "Provide exactly one of 'path' or 'paths', not both.",
+      };
+    }
+
+    if (!hasPath && !hasPaths) {
+      return {
+        success: false,
+        error: "Provide exactly one of 'path' or 'paths'.",
+      };
+    }
+
+    if (hasPaths) {
+      if (
+        !Array.isArray(args.paths) ||
+        args.paths.length === 0 ||
+        !args.paths.every((p) => typeof p === "string" && p.trim().length > 0)
+      ) {
+        return {
+          success: false,
+          error: "'paths' must be a non-empty array of file or directory path strings.",
+        };
+      }
+      const maxTotalChars =
+        typeof args?.max_total_chars === "number" && Number.isFinite(args.max_total_chars)
+          ? args.max_total_chars
+          : undefined;
+      return readMultipleFiles(args.paths as string[], effectiveCwd, {
+        maxTotalChars,
+        maxFileBytes: MAX_FILE_READ_BYTES,
+      }) as unknown as HostToolResult;
+    }
+
     const rawPath = String(args?.path || "");
     const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(effectiveCwd, rawPath);
 
@@ -658,6 +697,12 @@ export async function handleToolExecution(
     }
 
     const stats = fs.statSync(resolvedPath);
+    if (stats.isDirectory()) {
+      return {
+        success: false,
+        error: `Path is a directory: ${rawPath}. Pass it via paths: ["${rawPath}"] to read a directory tree.`,
+      };
+    }
     if (stats.size > MAX_FILE_READ_BYTES) {
       res.writeHead(413, { "Content-Type": "application/json" });
       res.end(
