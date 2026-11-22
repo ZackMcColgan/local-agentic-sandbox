@@ -16,6 +16,16 @@
   - HTTP-date -> max(0, Date.parse(value) - nowMs)
   - negative / non-integer / unparseable -> null
 - Status: COMPLETE. Files committed on `feature/retry-after-parser` (PR into develop).
+- Auto-resume attempt 1/2: found an in-progress merge of origin/develop into
+  `feature/retry-after-parser` with two conflicts (`docs/queue-steer-runlog.md`,
+  `web-ui/tests/retryAfter.test.ts`). Resolved both to a union (keep both runlog
+  sections; keep our `../lib/retryAfter.mjs` import under develop's prettier
+  formatting). Merge committed as `71ad704`. Targeted gate
+  `npx tsx scripts/test-gate.ts --files=web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail.
+  Note: the gate initially failed on a missing `typescript` devDependency (not hoisted
+  to the workspace root); installed `typescript@5.7.3 --no-save` at root to fix the
+  eval-pack grader's `tsc` spawn and the mcp-server typecheck. Environment gap, not a
+  regression from this job.
 
 ## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
