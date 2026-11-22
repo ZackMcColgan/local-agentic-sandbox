@@ -73,10 +73,7 @@ describe("stintDerivation — pure thread-record metrics", () => {
   });
 
   it("guard: StintCard.tsx never uses banned zinc-500 text classes", () => {
-    const src = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/components/StintCard.tsx"),
-      "utf8"
-    );
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/StintCard.tsx"), "utf8");
     assert.equal(/\btext-zinc-500\b/.test(src), false);
   });
 });

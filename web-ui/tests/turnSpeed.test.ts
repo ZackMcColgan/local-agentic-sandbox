@@ -73,10 +73,7 @@ describe("turnSpeed — generation timing, tok/s, and header now-line", () => {
   });
 
   it("guard: NowLineBar.tsx never uses banned zinc-500 text classes", () => {
-    const src = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/components/NowLineBar.tsx"),
-      "utf8"
-    );
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/NowLineBar.tsx"), "utf8");
     assert.equal(/\btext-zinc-500\b/.test(src), false);
   });
 });

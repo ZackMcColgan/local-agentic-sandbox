@@ -27,7 +27,7 @@ describe("CanvasDiffSheet — unified diff line numbers & guards", () => {
 
   it("guard: CanvasDiffSheet.tsx never uses banned zinc-500 text classes", () => {
     const src = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/components/CanvasDiffSheet.tsx"),
+      path.resolve(__dirname, "../components/CanvasDiffSheet.tsx"),
       "utf8"
     );
     assert.equal(/\btext-zinc-500\b/.test(src), false);

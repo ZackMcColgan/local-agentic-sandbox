@@ -2654,9 +2654,9 @@ export function ChatStream({
                 type="button"
                 data-testid="live-follow-pill"
                 onClick={() => scrollToBottom("smooth")}
-                className="pointer-events-auto min-h-[40px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Jump to live"
-                aria-label="Jump to live"
+                aria-label="Jump to bottom"
               >
                 <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
                 <span>{isLoading ? "Live" : "Latest"}</span>

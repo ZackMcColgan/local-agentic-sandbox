@@ -77,7 +77,7 @@ describe("ActivityTimeline — thinking preview & turn rendering", () => {
 
   it("guard: ActivityTimeline.tsx never uses banned zinc-500 text classes", () => {
     const src = fs.readFileSync(
-      path.resolve(process.cwd(), "web-ui/components/ActivityTimeline.tsx"),
+      path.resolve(__dirname, "../components/ActivityTimeline.tsx"),
       "utf8"
     );
     assert.equal(
