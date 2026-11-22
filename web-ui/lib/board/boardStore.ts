@@ -13,6 +13,14 @@ export interface BoardEvidence {
   liveLine?: string;
 }
 
+export interface BoardHandoff {
+  state: string;
+  branch: string;
+  headSha: string;
+  nextStep: string;
+  openQuestions?: string[];
+}
+
 export interface BoardItem {
   id: string;
   key: string;
@@ -27,6 +35,8 @@ export interface BoardItem {
   needsAttention?: boolean;
   evidence?: BoardEvidence;
   threadLink?: string;
+  handoff?: BoardHandoff;
+  autoResumeCount?: number;
   sprint?: string;
   createdAt: string;
   updatedAt: string;
@@ -46,6 +56,8 @@ export interface CreateBoardItemInput {
   needsAttention?: boolean;
   evidence?: BoardEvidence;
   threadLink?: string;
+  handoff?: BoardHandoff;
+  autoResumeCount?: number;
   sprint?: string;
 }
 
@@ -60,7 +72,61 @@ export interface UpdateBoardItemInput {
   needsAttention?: boolean;
   evidence?: BoardEvidence;
   threadLink?: string;
+  handoff?: BoardHandoff | null;
+  autoResumeCount?: number;
   sprint?: string;
+}
+
+export function extractThreadIdFromLink(threadLink?: string): string | null {
+  if (typeof threadLink !== "string") return null;
+  const trimmed = threadLink.trim();
+  if (!trimmed) return null;
+  const queryMatch = /[?&]thread=([^&#]+)/.exec(trimmed);
+  if (queryMatch) {
+    try {
+      return decodeURIComponent(queryMatch[1]);
+    } catch {
+      return queryMatch[1];
+    }
+  }
+  if (!trimmed.includes("/") && !trimmed.includes("?")) {
+    return trimmed;
+  }
+  return null;
+}
+
+/**
+ * Returns the set of thread IDs linked from persisted board items without
+ * creating directories or running migrations. Used by the stall supervisor
+ * so it skips drain-owned threads.
+ */
+export function listBoardOwnedThreadIds(boardDir?: string): Set<string> {
+  const owned = new Set<string>();
+  const resolvedDir =
+    boardDir ||
+    process.env.BOARD_DIR ||
+    (process.env.WORKSPACE_DIR
+      ? path.resolve(process.env.WORKSPACE_DIR, ".agent/board")
+      : path.resolve(process.cwd(), ".agent/board"));
+  const filePath = path.join(resolvedDir, "board.json");
+  if (!fs.existsSync(filePath)) {
+    return owned;
+  }
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    if (!raw.trim()) return owned;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return owned;
+    for (const item of parsed as Array<{ threadLink?: string }>) {
+      const id = extractThreadIdFromLink(item?.threadLink);
+      if (id) {
+        owned.add(id);
+      }
+    }
+  } catch {
+    // Non-fatal: return whatever could be read
+  }
+  return owned;
 }
 
 export function resolveBoardDir(): string {
@@ -232,8 +298,13 @@ export class BoardStore {
       author: "Owner",
       source: input.source,
       ...(input.parkedReason ? { parkedReason: input.parkedReason.trim() } : {}),
+      ...(input.needsAttention !== undefined ? { needsAttention: input.needsAttention } : {}),
       ...(input.evidence ? { evidence: input.evidence } : {}),
       ...(input.threadLink ? { threadLink: input.threadLink } : {}),
+      ...(input.handoff ? { handoff: input.handoff } : {}),
+      ...(typeof input.autoResumeCount === "number"
+        ? { autoResumeCount: input.autoResumeCount }
+        : {}),
       ...(input.sprint ? { sprint: input.sprint } : {}),
       createdAt: now,
       updatedAt: now,
@@ -259,13 +330,21 @@ export class BoardStore {
       throw new Error("Parked board item requires a reason string");
     }
 
+    const definedPatch = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined)
+    ) as Partial<BoardItem> & { handoff?: BoardHandoff | null };
+
     const updated: BoardItem = {
       ...current,
-      ...patch,
+      ...(definedPatch as Partial<BoardItem>),
       status: nextStatus,
       ...(nextReason !== undefined ? { parkedReason: nextReason.trim() } : {}),
       updatedAt: new Date().toISOString(),
     };
+
+    if (patch.handoff === null) {
+      delete updated.handoff;
+    }
 
     items[idx] = updated;
     this.writeAll(items);

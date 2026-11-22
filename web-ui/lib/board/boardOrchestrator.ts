@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { BoardStore, type BoardStatus } from "./boardStore";
+import { BoardStore, extractThreadIdFromLink, type BoardStatus } from "./boardStore";
 import {
   composeDispatcherBrief,
   selectHeadEligibleItem,
@@ -34,34 +34,29 @@ import {
   type SelfDeployVerifiedResult,
 } from "../deploy/selfDeployVerified";
 
+export { extractThreadIdFromLink };
+
 export const MAX_DRAIN_ITEMS = 5;
 export const MAX_DRAIN_DURATION_MS = 10 * 60 * 1000;
 export const MAX_TRIAGE_ATTEMPTS = 2;
+export const MAX_ORPHAN_AUTO_RESUMES = 2;
 export const ORPHANED_WORKING_ITEM_REASON =
   "Job thread ended without an outcome (possible restart)";
 
+export interface OrphanedThreadEvidence {
+  threadId?: string;
+  hasPrOrCommitEvidence: boolean;
+  evidenceSummary?: string;
+  previousAttemptSummary?: string;
+  branch?: string;
+  headSha?: string;
+}
+
 export type WorkingItemLiveness =
   | { status: "live"; reason?: string }
-  | { status: "orphaned"; reason: string }
+  | { status: "completed"; outcome: JobExecutionOutcome; reason?: string }
+  | { status: "orphaned"; reason: string; evidence?: OrphanedThreadEvidence }
   | { status: "unknown"; reason?: string };
-
-export function extractThreadIdFromLink(threadLink?: string): string | null {
-  if (typeof threadLink !== "string") return null;
-  const trimmed = threadLink.trim();
-  if (!trimmed) return null;
-  const queryMatch = /[?&]thread=([^&#]+)/.exec(trimmed);
-  if (queryMatch) {
-    try {
-      return decodeURIComponent(queryMatch[1]);
-    } catch {
-      return queryMatch[1];
-    }
-  }
-  if (!trimmed.includes("/") && !trimmed.includes("?")) {
-    return trimmed;
-  }
-  return null;
-}
 
 export interface OrchestratorIssue {
   code: string;
@@ -114,7 +109,7 @@ export interface DrainItemOutcome {
   itemId: string;
   key: string;
   title: string;
-  outcome: "completed" | "failed" | "in-progress" | "chunk-requeued";
+  outcome: "completed" | "failed" | "in-progress" | "chunk-requeued" | "orphan-requeued";
   threadId?: string;
   reason?: string;
   triage?: TriageOutcome;
@@ -175,6 +170,7 @@ export interface BoardOrchestratorDeps {
   issueAndWait: (params: {
     item: DispatcherBoardItem;
     brief: string;
+    onThreadCreated?: (threadId: string) => void;
   }) => Promise<JobExecutionOutcome>;
   triageAutoFix?: (
     issue: OrchestratorIssue,
@@ -313,14 +309,20 @@ export class BoardOrchestrator {
     item: DispatcherBoardItem,
     patch: {
       status?: BoardStatus;
-      handoff?: DispatcherHandoff;
+      handoff?: DispatcherHandoff | null;
+      autoResumeCount?: number;
       needsAttention?: boolean;
       parkedReason?: string;
       threadLink?: string;
     }
   ): void {
     if (patch.status !== undefined) item.status = patch.status;
-    if (patch.handoff !== undefined) item.handoff = patch.handoff;
+    if (patch.handoff === null) {
+      delete item.handoff;
+    } else if (patch.handoff !== undefined) {
+      item.handoff = patch.handoff;
+    }
+    if (patch.autoResumeCount !== undefined) item.autoResumeCount = patch.autoResumeCount;
     if (patch.needsAttention !== undefined) item.needsAttention = patch.needsAttention;
     if (patch.parkedReason !== undefined) item.parkedReason = patch.parkedReason;
     if (patch.threadLink !== undefined) item.threadLink = patch.threadLink;
@@ -333,10 +335,12 @@ export class BoardOrchestrator {
     if (!this.deps.items) {
       const store = this.deps.boardStore ?? new BoardStore(this.deps.boardDir);
       store.update(item.id, {
-        status: patch.status,
-        needsAttention: patch.needsAttention,
-        parkedReason: patch.parkedReason,
-        threadLink: patch.threadLink,
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.handoff !== undefined ? { handoff: patch.handoff } : {}),
+        ...(patch.autoResumeCount !== undefined ? { autoResumeCount: patch.autoResumeCount } : {}),
+        ...(patch.needsAttention !== undefined ? { needsAttention: patch.needsAttention } : {}),
+        ...(patch.parkedReason !== undefined ? { parkedReason: patch.parkedReason } : {}),
+        ...(patch.threadLink !== undefined ? { threadLink: patch.threadLink } : {}),
       });
     }
   }
@@ -509,6 +513,7 @@ export class BoardOrchestrator {
           break;
         }
         let hasLiveWorkingItem = false;
+        let restartLoopAfterRecovery = false;
         for (const workingItem of workingItems) {
           let liveness: WorkingItemLiveness;
           try {
@@ -522,23 +527,212 @@ export class BoardOrchestrator {
             hasLiveWorkingItem = true;
             break;
           }
-          if (liveness.status === "orphaned") {
-            const reason = liveness.reason || ORPHANED_WORKING_ITEM_REASON;
+          if (liveness.status === "completed") {
+            const recoveryStartMs = this.now();
             this.log(
-              `[orchestrator] recovering orphaned working item ${workingItem.id} (${workingItem.key}): ${reason}`
+              `[orchestrator] reconciling settled working item ${workingItem.id} (${workingItem.key}): ${
+                liveness.reason || liveness.outcome.status
+              }`
             );
-            this.updateItem(workingItem, {
-              status: "needs-attention",
-              needsAttention: true,
-              parkedReason: reason,
-            });
-            surfacedIssues.push({
-              itemId: workingItem.id,
-              key: workingItem.key,
-              code: "orphaned-working-item",
-              message: reason,
-            });
-            failedCount += 1;
+            const outcomeResult = liveness.outcome;
+            if (outcomeResult.status === "completed") {
+              let shadowStages: ShadowStageOutcomes | undefined;
+              if (
+                outcomeResult.prNumber !== undefined &&
+                (this.deps.flowMonitor || this.deps.reviewerGate)
+              ) {
+                const prShadow = await this.runPrOpenShadowStages(workingItem, {
+                  prNumber: outcomeResult.prNumber,
+                  headSha: outcomeResult.headSha ?? "unknown-head",
+                });
+                shadowStages = {
+                  ...(prShadow.flowMonitor ? { flowMonitor: prShadow.flowMonitor } : {}),
+                  ...(prShadow.reviewerGate ? { reviewerGate: prShadow.reviewerGate } : {}),
+                };
+              }
+              if (outcomeResult.merged && outcomeResult.mergeSha && this.deps.selfDeploy) {
+                const selfDeploy = await this.runMergedShadowStage(workingItem, {
+                  mergeSha: outcomeResult.mergeSha,
+                  targetTag: outcomeResult.deployTag,
+                });
+                shadowStages = {
+                  ...(shadowStages ?? {}),
+                  selfDeploy,
+                };
+              }
+              if (shadowStages?.selfDeploy?.needsAttention) {
+                this.updateItem(workingItem, {
+                  status: "needs-attention",
+                  needsAttention: true,
+                  parkedReason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
+                  threadLink: `/?thread=${outcomeResult.threadId}`,
+                });
+                failedCount += 1;
+                itemsProcessed += 1;
+                outcomes.push({
+                  itemId: workingItem.id,
+                  key: workingItem.key,
+                  title: workingItem.title,
+                  outcome: "failed",
+                  threadId: outcomeResult.threadId,
+                  reason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
+                  shadowStages,
+                  durationMs: Math.max(0, this.now() - recoveryStartMs),
+                });
+              } else {
+                this.updateItem(workingItem, {
+                  status: "done",
+                  threadLink: `/?thread=${outcomeResult.threadId}`,
+                  ...(workingItem.handoff ? { handoff: null } : {}),
+                });
+                completedCount += 1;
+                itemsProcessed += 1;
+                outcomes.push({
+                  itemId: workingItem.id,
+                  key: workingItem.key,
+                  title: workingItem.title,
+                  outcome: "completed",
+                  threadId: outcomeResult.threadId,
+                  reason: outcomeResult.summary,
+                  ...(shadowStages ? { shadowStages } : {}),
+                  durationMs: Math.max(0, this.now() - recoveryStartMs),
+                });
+              }
+            } else if (outcomeResult.status === "chunk-complete") {
+              this.updateItem(workingItem, {
+                status: "queued",
+                handoff: outcomeResult.handoff,
+                threadLink: `/?thread=${outcomeResult.threadId}`,
+              });
+              requeuedCount += 1;
+              itemsProcessed += 1;
+              outcomes.push({
+                itemId: workingItem.id,
+                key: workingItem.key,
+                title: workingItem.title,
+                outcome: "chunk-requeued",
+                threadId: outcomeResult.threadId,
+                reason: outcomeResult.handoff.nextStep,
+                durationMs: Math.max(0, this.now() - recoveryStartMs),
+              });
+            } else if (outcomeResult.status === "failed") {
+              const issue = outcomeResult.issue ?? {
+                code: "execution-failed",
+                message: outcomeResult.error,
+                autoFixable: false,
+              };
+              this.updateItem(workingItem, {
+                status: "needs-attention",
+                needsAttention: true,
+                parkedReason: issue.message,
+                threadLink: outcomeResult.threadId
+                  ? `/?thread=${outcomeResult.threadId}`
+                  : undefined,
+              });
+              surfacedIssues.push({
+                itemId: workingItem.id,
+                key: workingItem.key,
+                code: issue.code,
+                message: issue.message,
+              });
+              failedCount += 1;
+              itemsProcessed += 1;
+              outcomes.push({
+                itemId: workingItem.id,
+                key: workingItem.key,
+                title: workingItem.title,
+                outcome: "failed",
+                threadId: outcomeResult.threadId,
+                reason: issue.message,
+                durationMs: Math.max(0, this.now() - recoveryStartMs),
+              });
+            } else {
+              hasLiveWorkingItem = true;
+              break;
+            }
+            restartLoopAfterRecovery = true;
+            break;
+          } else if (liveness.status === "orphaned") {
+            const recoveryStartMs = this.now();
+            const currentCount = workingItem.autoResumeCount ?? 0;
+            const evidence = liveness.evidence;
+            const baseReason = liveness.reason || ORPHANED_WORKING_ITEM_REASON;
+
+            if (evidence?.hasPrOrCommitEvidence) {
+              const reason = evidence.evidenceSummary
+                ? `Interrupted thread already has PR/commit evidence (${evidence.evidenceSummary}); manual review required.`
+                : "Interrupted thread already has PR/commit evidence; manual review required.";
+              this.log(
+                `[orchestrator] parking orphaned working item ${workingItem.id} (${workingItem.key}) due to PR/commit evidence: ${reason}`
+              );
+              this.updateItem(workingItem, {
+                status: "needs-attention",
+                needsAttention: true,
+                parkedReason: reason,
+              });
+              surfacedIssues.push({
+                itemId: workingItem.id,
+                key: workingItem.key,
+                code: "orphaned-working-item",
+                message: reason,
+              });
+              failedCount += 1;
+            } else if (currentCount < MAX_ORPHAN_AUTO_RESUMES) {
+              const nextCount = currentCount + 1;
+              const prevThreadRef = evidence?.threadId
+                ? `thread ${evidence.threadId}`
+                : "previous attempt";
+              const prevSummary = evidence?.previousAttemptSummary
+                ? `Previous attempt: ${evidence.previousAttemptSummary}`
+                : `Previous attempt interrupted (${baseReason}).`;
+              const handoff: DispatcherHandoff = {
+                state: `Auto-resume attempt ${nextCount}/${MAX_ORPHAN_AUTO_RESUMES} after interrupted ${prevThreadRef}. ${prevSummary}`,
+                branch: evidence?.branch || "unknown (check git rev-parse --abbrev-ref HEAD)",
+                headSha: evidence?.headSha || "unknown (check git log -n 5 --oneline)",
+                nextStep:
+                  "Inspect banked state (git status, git log, existing worktree/runlog) and continue from where the previous attempt left off. Continue, do not restart from scratch.",
+                openQuestions: [`Original brief: ${workingItem.brief.slice(0, 600)}`],
+              };
+              this.log(
+                `[orchestrator] requeuing orphaned working item ${workingItem.id} (${workingItem.key}) for auto-resume ${nextCount}/${MAX_ORPHAN_AUTO_RESUMES}`
+              );
+              this.updateItem(workingItem, {
+                status: "queued",
+                autoResumeCount: nextCount,
+                handoff,
+                needsAttention: false,
+              });
+              requeuedCount += 1;
+              itemsProcessed += 1;
+              outcomes.push({
+                itemId: workingItem.id,
+                key: workingItem.key,
+                title: workingItem.title,
+                outcome: "orphan-requeued",
+                threadId: evidence?.threadId,
+                reason: handoff.state,
+                durationMs: Math.max(0, this.now() - recoveryStartMs),
+              });
+              restartLoopAfterRecovery = true;
+              break;
+            } else {
+              const reason = `Auto-resume budget exhausted (${currentCount}/${MAX_ORPHAN_AUTO_RESUMES}): ${baseReason}`;
+              this.log(
+                `[orchestrator] parking orphaned working item ${workingItem.id} (${workingItem.key}): ${reason}`
+              );
+              this.updateItem(workingItem, {
+                status: "needs-attention",
+                needsAttention: true,
+                parkedReason: reason,
+              });
+              surfacedIssues.push({
+                itemId: workingItem.id,
+                key: workingItem.key,
+                code: "orphaned-working-item",
+                message: reason,
+              });
+              failedCount += 1;
+            }
           } else {
             hasLiveWorkingItem = true;
             break;
@@ -547,6 +741,9 @@ export class BoardOrchestrator {
         if (hasLiveWorkingItem) {
           stopReason = "job-already-running";
           break;
+        }
+        if (restartLoopAfterRecovery) {
+          continue;
         }
       }
 
@@ -557,15 +754,21 @@ export class BoardOrchestrator {
       }
 
       const itemStartMs = this.now();
-      this.updateItem(head, { status: "working" });
 
       const brief = composeDispatcherBrief(head, {
         operatorMemory: this.deps.operatorMemory,
         hostCheckoutPath: this.deps.hostCheckoutPath,
       });
 
+      const onThreadCreated = (threadId: string) => {
+        this.updateItem(head, {
+          status: "working",
+          threadLink: `/?thread=${threadId}`,
+        });
+      };
+
       this.log(`[orchestrator] issuing ${head.id} (${head.key} ${head.title})`);
-      let result = await this.deps.issueAndWait({ item: head, brief });
+      let result = await this.deps.issueAndWait({ item: head, brief, onThreadCreated });
 
       if (result.status === "failed") {
         const issue: OrchestratorIssue = result.issue ?? {
@@ -580,7 +783,11 @@ export class BoardOrchestrator {
             operatorMemory: this.deps.operatorMemory,
             hostCheckoutPath: this.deps.hostCheckoutPath,
           });
-          result = await this.deps.issueAndWait({ item: head, brief: retryBrief });
+          result = await this.deps.issueAndWait({
+            item: head,
+            brief: retryBrief,
+            onThreadCreated,
+          });
         }
 
         if (result.status === "failed") {
@@ -656,6 +863,7 @@ export class BoardOrchestrator {
           this.updateItem(head, {
             status: "done",
             threadLink: `/?thread=${result.threadId}`,
+            ...(head.handoff ? { handoff: null } : {}),
           });
           completedCount += 1;
           itemsProcessed += 1;

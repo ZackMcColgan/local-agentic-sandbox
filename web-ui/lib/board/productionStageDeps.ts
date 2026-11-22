@@ -32,7 +32,7 @@ export type HostBridgeExecutor = (
 ) => Promise<HostBridgeCommandResult>;
 
 export interface StageThreadStore {
-  createThread: (input: { title?: string; initialPrompt?: string }) => Thread;
+  createThread: (input: { title?: string; initialPrompt?: string; boardItemId?: string }) => Thread;
   getThread: (id: string) => Promise<Thread | null> | Thread | null;
 }
 

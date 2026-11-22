@@ -17,6 +17,7 @@ import type {
 import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconomics";
 import { getHostSettings } from "../hostSettings";
 import { superviseStalledThread } from "./inAppSupervisor";
+import { listBoardOwnedThreadIds } from "../board/boardStore";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
 
@@ -511,6 +512,7 @@ export class ThreadStore {
   async sweepStalledThreads(now: number = Date.now()): Promise<number> {
     let acted = 0;
     const summaries = await this.listThreadSummaries();
+    let drainOwnedThreadIds: Set<string> | null = null;
     for (const s of summaries) {
       const isStreaming = s.status === "active" || s.status === "running" || s.hasStreamingMessage;
       const updatedAtMs = Date.parse(s.updatedAt);
@@ -518,12 +520,24 @@ export class ThreadStore {
       if (!isStreaming || !isStale) {
         continue;
       }
+      // Board-drain-owned threads are recovered exclusively by BoardOrchestrator.
+      if (s.boardItemId) {
+        continue;
+      }
+      drainOwnedThreadIds ??= listBoardOwnedThreadIds();
+      if (drainOwnedThreadIds.has(s.id)) {
+        continue;
+      }
       const thread = await this.getThread(s.id);
       if (!thread) {
         continue;
       }
+      if (thread.boardItemId || drainOwnedThreadIds.has(thread.id)) {
+        continue;
+      }
       const outcome = superviseStalledThread(thread, {
         now,
+        isDrainOwnedThread: (id) => Boolean(thread.boardItemId || drainOwnedThreadIds?.has(id)),
         threadAdapter: {
           saveThread: (t) => this.saveThread(t),
           createFreshThread: (opts) =>
@@ -551,7 +565,7 @@ export class ThreadStore {
           },
         },
       });
-      if (outcome.action !== "not_stalled") {
+      if (outcome.action !== "not_stalled" && outcome.action !== "skipped_drain_owned") {
         acted += 1;
       }
     }
@@ -908,6 +922,7 @@ export class ThreadStore {
             ...(t.model !== undefined ? { model: t.model } : {}),
             ...(t.reasoningEffort !== undefined ? { reasoningEffort: t.reasoningEffort } : {}),
             ...(t.taskId !== undefined ? { taskId: t.taskId } : {}),
+            ...(t.boardItemId !== undefined ? { boardItemId: t.boardItemId } : {}),
             ...((t as { error?: string }).error !== undefined
               ? { error: (t as { error?: string }).error }
               : {}),
@@ -1123,6 +1138,7 @@ export class ThreadStore {
     initialPrompt?: string;
     attachments?: ThreadAttachment[];
     taskId?: string;
+    boardItemId?: string;
     error?: string;
     parkedReason?: string;
     scope?: TaskScope;
@@ -1157,6 +1173,7 @@ export class ThreadStore {
       reasoningEffort: params.reasoningEffort || "medium",
       hostAccess,
       taskId: params.taskId,
+      ...(params.boardItemId !== undefined ? { boardItemId: params.boardItemId } : {}),
       scope: params.scope,
       isTest: params.isTest ?? false,
       ...(params.isSubagent !== undefined ? { isSubagent: params.isSubagent } : {}),

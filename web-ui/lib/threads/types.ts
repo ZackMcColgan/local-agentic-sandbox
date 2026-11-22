@@ -135,6 +135,8 @@ export interface ThreadSummary {
   model?: string;
   reasoningEffort?: Thread["reasoningEffort"];
   taskId?: string;
+  /** Board item ID when this thread is owned by the board drain. */
+  boardItemId?: string;
   error?: string;
   parkedReason?: string;
   messageCount: number;
@@ -157,6 +159,8 @@ export interface Thread {
   compaction?: ThreadCompactionBoundary;
   hostAccess?: boolean;
   taskId?: string;
+  /** Board item ID when this thread is owned by the board drain (never supervised by inAppSupervisor). */
+  boardItemId?: string;
   error?: string;
   parkedReason?: string;
   scope?: TaskScope;
