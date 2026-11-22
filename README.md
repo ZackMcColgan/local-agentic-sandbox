@@ -42,7 +42,7 @@
 - **Fail-closed verification** — a change-aware local test gate, a seven-check CI pipeline, an invariant test net, and an adversarial "chaos" battery (overflow inputs, stop/start abuse, unhappy paths) stand between a model's output and `develop`.
 - **A work board, not a black box** — queued, working, and done items are visible in the UI and editable through the board API (`PATCH /api/board`); the operator can steer, stop (stop aborts the server-side turn), and inspect everything from a phone. One job runs at a time; the next queued item starts when the operator runs the board drain (board control in the `running` state).
 - **Full observability** — every agent turn is an OpenTelemetry trace (a real 28-span turn is shown below), viewable in Jaeger.
-- **Local inference** — **Strata** inference engine on the host GPU (AMD RX 9070 XT, ROCm/HIP), serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) at 128K context. Nothing leaves the machine.
+- **Local inference** — **Strata** inference engine on the host GPU (AMD RX 9070 XT, ROCm/HIP), serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) at 128K context; `swift-15-27b-mtp` is the fallback model on the optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default). Nothing leaves the machine.
 
 ![A real agent turn as a Jaeger trace: 28 spans of model reasoning and tool calls](docs/images/jaeger-trace.png)
 
