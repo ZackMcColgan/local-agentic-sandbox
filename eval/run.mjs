@@ -60,8 +60,6 @@ async function resolveModel(endpoint, requestedModel) {
 export async function callEndpoint(endpoint, model, prompt, taskId, opts = {}) {
   const { fetchImpl = fetch, timeoutMs = DEFAULT_TASK_TIMEOUT_MS } = opts;
   const url = `${endpoint.replace(/\/$/, "")}/chat/completions`;
-  const probePath = path.join(repoRoot, "eval/tasks", taskId, "probe.json");
-  const probe = fs.existsSync(probePath) ? JSON.parse(fs.readFileSync(probePath, "utf8")) : null;
 
   const messages = [{ role: "user", content: prompt }];
   const body = { model, messages, temperature: 0 };
