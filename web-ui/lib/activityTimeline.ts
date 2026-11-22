@@ -15,6 +15,7 @@ export interface TimelineWriteDiff {
   addedLines: number;
   removedLines: number;
   diffText?: string;
+  synthesized?: boolean;
 }
 
 export interface TimelineTraceInput {
@@ -264,6 +265,7 @@ export function extractWriteDiffFromTrace(
   if (!filePath) return undefined;
 
   let diffText: string | undefined;
+  let synthesized = false;
   let addedLines: number | undefined;
   let removedLines: number | undefined;
 
@@ -288,6 +290,24 @@ export function extractWriteDiffFromTrace(
     removedLines = removedLines ?? counted.removedLines;
   }
 
+  const hasReplacementArg = Boolean(
+    trace.args && typeof trace.args.replacement === "string" && trace.args.replacement.length > 0
+  );
+  const fullWrittenContent =
+    trace.args && typeof trace.args.content === "string" && trace.args.content.length > 0
+      ? trace.args.content
+      : trace.args && typeof trace.args.newContent === "string" && trace.args.newContent.length > 0
+        ? trace.args.newContent
+        : undefined;
+
+  if (!diffText && fullWrittenContent && !hasReplacementArg && (removedLines ?? 0) === 0) {
+    const lines = fullWrittenContent.split("\n");
+    diffText = `@@ -0,0 +1,${lines.length} @@\n${lines.map((l) => `+${l}`).join("\n")}`;
+    synthesized = true;
+    addedLines = addedLines ?? lines.length;
+    removedLines = removedLines ?? 0;
+  }
+
   if (addedLines === undefined && removedLines === undefined) {
     const content = readStringArg(trace.args, ["content", "newContent", "replacement"]);
     if (content) {
@@ -301,6 +321,7 @@ export function extractWriteDiffFromTrace(
     addedLines: addedLines ?? 0,
     removedLines: removedLines ?? 0,
     ...(diffText ? { diffText } : {}),
+    ...(synthesized ? { synthesized: true } : {}),
   };
 }
 

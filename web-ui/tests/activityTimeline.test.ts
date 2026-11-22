@@ -7,6 +7,7 @@ import {
   traceToTimelineRow,
   type TimelineTraceInput,
 } from "../lib/activityTimeline";
+import { parseUnifiedDiffWithLineNumbers } from "../components/CanvasDiffSheet";
 
 describe("activityTimeline — pure row model", () => {
   it("maps each tool kind to its verb-first row", () => {
@@ -312,5 +313,58 @@ describe("activityTimeline — pure row model", () => {
     );
     assert.equal(preambleOnly.target, "$ErrorActionPreference='Continue'; $f='a.ts';");
     assert.equal(preambleOnly.label, "Ran $ErrorActionPreference='Continue'; $f='a.ts';");
+  });
+
+  it("synthesizes unified diff text for creation writes with full content and no recorded diff", () => {
+    const content = "import { test } from '@playwright/test';\n\ntest('works', () => {});";
+    const row = traceToTimelineRow(
+      {
+        tool: "workspace_write_file",
+        args: { path: "web-ui/tests/e2e/settingsMobile.spec.ts", content },
+        durationMs: 40,
+      },
+      0
+    );
+
+    assert.ok(row.writeDiff);
+    assert.equal(row.writeDiff.synthesized, true);
+    assert.equal(row.writeDiff.addedLines, 3);
+    assert.equal(row.writeDiff.removedLines, 0);
+    assert.ok(row.writeDiff.diffText);
+
+    const parsed = parseUnifiedDiffWithLineNumbers(row.writeDiff.diffText);
+    const added = parsed.filter((l) => l.kind === "add");
+    assert.equal(added.length, 3);
+    assert.equal(added[0].text, "+import { test } from '@playwright/test';");
+    assert.equal(added[1].text, "+");
+    assert.equal(added[2].text, "+test('works', () => {});");
+  });
+
+  it("does not synthesize diff text for replacement-only edits and leaves real diffs untouched", () => {
+    const editRow = traceToTimelineRow(
+      {
+        tool: "replace_in_file",
+        args: { path: "src/app.ts", replacement: "const x = 2;" },
+        durationMs: 25,
+      },
+      0
+    );
+    assert.ok(editRow.writeDiff);
+    assert.equal(editRow.writeDiff.diffText, undefined);
+    assert.equal(editRow.writeDiff.synthesized, undefined);
+
+    const realDiff = "@@ -1,1 +1,2 @@\n const a = 1;\n+const b = 2;";
+    const realRow = traceToTimelineRow(
+      {
+        tool: "workspace_write_file",
+        args: { path: "src/app.ts", content: "const a = 1;\nconst b = 2;" },
+        result: { diff: realDiff, addedLines: 1, removedLines: 0 },
+        durationMs: 25,
+      },
+      1
+    );
+    assert.ok(realRow.writeDiff);
+    assert.equal(realRow.writeDiff.diffText, realDiff);
+    assert.equal(realRow.writeDiff.synthesized, undefined);
   });
 });
