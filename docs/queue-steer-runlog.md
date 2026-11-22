@@ -26,6 +26,15 @@
   to the workspace root); installed `typescript@5.7.3 --no-save` at root to fix the
   eval-pack grader's `tsc` spawn and the mcp-server typecheck. Environment gap, not a
   regression from this job.
+- Auto-resume attempt 1/2 (continuation): re-ran grader against repo
+  `web-ui/lib/retryAfter.mjs` -> 4 pass / 0 fail; `npx tsx --test
+  web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
+  bridge: `npx tsx scripts/test-gate.ts --since=origin/develop` -> PASSED, 409 pass /
+  0 fail / 2 skip in 59.4s (<90s budget). Pitfall logged: `npm run test:gate
+  -- --since=...` swallows `--since` as npm's own config flag and silently drops the
+  changed-file scope (selected only 2 suites); invoke `npx tsx scripts/test-gate.ts
+  --since=...` directly instead.
+- Status: COMPLETE. PR opened into develop.
 
 ## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
