@@ -262,4 +262,55 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(rows[3].isGroup, undefined);
     assert.equal(rows[3].label, "Ran cmd6");
   });
+
+  it("strips leading PowerShell boilerplate and Set-Location from shell command targets", () => {
+    const withPreamble = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command:
+            "$ErrorActionPreference='Continue'; $f='C:\\Users\\zackm\\Desktop\\repo\\testGate.ts'; Set-Location 'C:\\Users\\zackm\\Desktop\\repo'; Get-Content 'C:\\repo\\testGate.ts'",
+        },
+        durationMs: 120,
+      },
+      0
+    );
+    assert.equal(withPreamble.target, "Get-Content 'C:\\repo\\testGate.ts'");
+    assert.equal(withPreamble.label, "Ran Get-Content 'C:\\repo\\testGate.ts'");
+
+    const withDoubleQuotes = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command: '$ErrorActionPreference = "Continue"; $dir="web-ui"; Set-Location "C:\\repo"; npm run test:gate',
+        },
+        durationMs: 80,
+      },
+      1
+    );
+    assert.equal(withDoubleQuotes.target, "npm run test:gate");
+    assert.equal(withDoubleQuotes.label, "Ran npm run test:gate");
+
+    const plain = traceToTimelineRow(
+      {
+        tool: "workspace_run_command",
+        args: { command: "npm run test:gate" },
+        durationMs: 50,
+      },
+      2
+    );
+    assert.equal(plain.target, "npm run test:gate");
+    assert.equal(plain.label, "Ran npm run test:gate");
+
+    const preambleOnly = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: { command: "$ErrorActionPreference='Continue'; $f='a.ts';" },
+        durationMs: 10,
+      },
+      3
+    );
+    assert.equal(preambleOnly.target, "$ErrorActionPreference='Continue'; $f='a.ts';");
+    assert.equal(preambleOnly.label, "Ran $ErrorActionPreference='Continue'; $f='a.ts';");
+  });
 });

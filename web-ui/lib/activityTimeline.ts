@@ -159,6 +159,24 @@ function verbForKind(kind: TimelineToolKind, tool: string, isRunning: boolean): 
   }
 }
 
+const LEADING_SHELL_BOILERPLATE_RE =
+  /^\s*(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:'[^']*'|"[^"]*")|Set-Location\s+(?:'[^']*'|"[^"]*"));\s*/i;
+
+/**
+ * Strips leading PowerShell preamble assignments and Set-Location segments
+ * so shell row labels show the operative command. Falls back to the original
+ * command if stripping empties it.
+ */
+export function stripShellBoilerplate(command: string): string {
+  let remaining = command.trim();
+  while (remaining.length > 0) {
+    const next = remaining.replace(LEADING_SHELL_BOILERPLATE_RE, "");
+    if (next === remaining) break;
+    remaining = next.trim();
+  }
+  return remaining || command;
+}
+
 function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): string {
   const args = trace.args;
   if (kind === "read" || kind === "write") {
@@ -171,7 +189,7 @@ function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): stri
   }
   if (kind === "shell") {
     const cmd = readStringArg(args, ["command", "cmd", "script"]);
-    return cmd ? truncate(cmd, MAX_TARGET_LEN) : trace.tool.replace(/_/g, " ");
+    return cmd ? truncate(stripShellBoilerplate(cmd), MAX_TARGET_LEN) : trace.tool.replace(/_/g, " ");
   }
   if (kind === "web") {
     const url = readStringArg(args, ["url", "uri", "query"]);
