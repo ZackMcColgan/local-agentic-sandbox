@@ -197,16 +197,16 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     );
   });
 
-  it("Test 5: web-ui container memory limit is 1Gi (OOMKill RCA: 384Mi ceiling)", () => {
+  it("Test 5: web-ui container memory limit is 2Gi (OOMKill RCA: raised from 1Gi)", () => {
     const webUiPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
     const webUiYaml = fs.readFileSync(webUiPath, "utf8");
 
-    // RCA: pod web-ui-548b99549f-665xt was OOMKilled at 01:01 CT Nov 12 2026
-    // under load with limits.memory: 384Mi. The web-ui container limit must be 1Gi.
+    // RCA: pod web-ui was OOMKilled under load with limits.memory: 1Gi (Nov 21 2026)
+    // after previously being raised from 384Mi (Nov 12 2026). The web-ui container limit must be 2Gi.
     assert.match(
       webUiYaml,
-      /limits:\s*\n\s*cpu:\s*"?1000m"?\s*\n\s*memory:\s*"1Gi"/,
-      "deploy/k8s/web-ui.yaml must set the web-ui container memory limit to 1Gi"
+      /limits:\s*\n\s*cpu:\s*"?1000m"?\s*\n\s*memory:\s*"2Gi"/,
+      "deploy/k8s/web-ui.yaml must set the web-ui container memory limit to 2Gi"
     );
 
     // The old 384Mi ceiling must be gone entirely.
