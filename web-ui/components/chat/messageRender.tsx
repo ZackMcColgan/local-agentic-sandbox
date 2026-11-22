@@ -25,9 +25,6 @@ import { ExecutionTraceItem } from "../ExecutionTrace";
 import { CompletionVerificationBadge } from "../CompletionVerificationBadge";
 import { SvgViewer, SvgFileLink } from "../SvgViewer";
 import { LiveRunBlock } from "../LiveRunBlock";
-import { ThinkingPanel } from "../ThinkingPanel";
-import { LiveActivityHeader } from "../LiveActivityHeader";
-import { phaseLabelForTool } from "../../lib/liveActivity";
 import { CodeBlock } from "../ArtifactRenderers";
 import {
   isSvgCode,
@@ -43,16 +40,16 @@ import {
   formatHumanReadableTrace,
   getServedByNote,
   extractFileWriteDiffsFromTraces,
-  formatElapsedDuration,
   formatMessageTimestamp,
   displayRepoPath,
   displayBasename,
 } from "../../lib/chatUtils";
 import { CanvasDiffCard, CanvasFileOpenButton } from "../ArtifactCanvas";
-import { resolveTurnStatusPhase } from "../../lib/chatStatus";
 import { TaskManifest } from "../../lib/subagents/types";
 import { formatFileSize } from "../../lib/chat/attachments";
 import { CompactionPill } from "./compactionPill";
+import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
+import type { TimelineWriteDiff } from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
@@ -146,6 +143,7 @@ export interface ChatMessageItemProps {
   onStopTask?: () => Promise<void> | void;
   onRunControlAction: (action: "pause" | "resume" | "restart") => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
+  onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }
 
 export function ChatMessageItem({
@@ -160,10 +158,10 @@ export function ChatMessageItem({
   isLoading,
   isStoppingTask,
   activeAssistantMsgId,
-  completedTurnMsgId,
-  streamStatus,
-  turnStartedAtMs,
-  lastActivityAtMs,
+  completedTurnMsgId: _completedTurnMsgId,
+  streamStatus: _streamStatus,
+  turnStartedAtMs: _turnStartedAtMs,
+  lastActivityAtMs: _lastActivityAtMs,
   expandedTraces,
   expandedProofs,
   hasResolvedDetachedTurn,
@@ -176,6 +174,7 @@ export function ChatMessageItem({
   onStopTask,
   onRunControlAction,
   onDeployRun,
+  onOpenCanvasDiff,
 }: ChatMessageItemProps) {
   const isUser = m.role === "user";
   const isCopied = copiedMessageId === m.id;
@@ -321,85 +320,31 @@ export function ChatMessageItem({
             </div>
           )}
 
-          {/* Live Activity Header + Worker Reasoning Panel (Suppressed on task host message) */}
+          {/* Activity Timeline + Thinking Preview for ALL non-task-host turns */}
           {!isTaskHostMessage &&
             (() => {
               const isStreamingThis = Boolean(
                 m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
               );
-              const shouldRenderThinking = Boolean(m.thought || isStreamingThis);
-              const showDoneChip = Boolean(
-                !isStreamingThis && completedTurnMsgId === m.id && typeof m.durationMs === "number"
-              );
-              if (!shouldRenderThinking && !showDoneChip) return null;
-
-              const rawThought = m.thought || "";
-
-              // uir-1 (UI-017): activity header inputs. The phase is the
-              // latest observed tool in words; the round comes only from
-              // the record's per-round token array when it exists (never
-              // fabricated mid-turn).
-              const liveLastTrace =
-                liveTurnTraces.length > 0 ? liveTurnTraces[liveTurnTraces.length - 1] : null;
-              const msgLastTrace =
-                m.traces && m.traces.length > 0 ? m.traces[m.traces.length - 1] : null;
-              const statusTool = streamStatus
-                ? (streamStatus.match(
-                    /^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i
-                  )?.[1] ?? null)
-                : null;
-              const toolForPhase = liveLastTrace?.tool || msgLastTrace?.tool || statusTool;
-              const phaseLabel = toolForPhase
-                ? phaseLabelForTool(toolForPhase)
-                : (resolveTurnStatusPhase({
-                    isStreaming: true,
-                    streamStatus,
-                    hasThought: Boolean(m.thought),
-                    hasContent: Boolean(m.content),
-                  }) ?? "Starting turn…");
-              const parsedTs = m.timestamp ? Date.parse(m.timestamp) : NaN;
-              const startedAtMs =
-                turnStartedAtMs ?? (Number.isNaN(parsedTs) ? lastActivityAtMs : parsedTs);
-              const traceCount = Math.max(
-                m.traces?.length ?? 0,
-                isStreamingThis ? liveTurnTraces.length : 0
-              );
+              const turnTraces =
+                isStreamingThis && (!m.traces || m.traces.length === 0)
+                  ? liveTurnTraces
+                  : m.traces || [];
+              const hasThought = Boolean(m.thought && m.thought.trim());
+              if (!hasThought && !isStreamingThis && turnTraces.length === 0) return null;
 
               return (
                 <div className="w-full space-y-2">
-                  {isStreamingThis && (
-                    <LiveActivityHeader
-                      startedAtMs={startedAtMs}
-                      lastActivityAtMs={lastActivityAtMs}
-                      round={m.roundPromptTokens?.length}
-                      traceCount={traceCount}
-                      traces={
-                        isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces
-                      }
-                      phaseLabel={phaseLabel}
-                      activityLabel={statusTool ? null : streamStatus}
+                  {(hasThought || isStreamingThis) && (
+                    <ThinkingPreviewBlock
+                      thought={m.thought}
                       isStreaming={isStreamingThis}
-                    />
-                  )}
-                  {showDoneChip && (
-                    <div
-                      data-testid="turn-done-chip"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
-                    >
-                      <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
-                    </div>
-                  )}
-                  {shouldRenderThinking && (
-                    <ThinkingPanel
-                      rawThought={rawThought}
-                      isStreaming={isStreamingThis}
-                      streamStatus={isStreamingThis ? streamStatus : null}
                       hasContent={Boolean(m.content && m.content.trim())}
-                      defaultExpanded={Boolean(isStreamingThis || m.isStreaming)}
                       durationMs={m.thinkingDurationMs ?? m.durationMs}
-                      phaseTimings={m.phaseTimings}
-                      timestamp={m.timestamp}
                     />
+                  )}
+                  {turnTraces.length > 0 && (
+                    <ActivityTimeline traces={turnTraces} onOpenCanvasDiff={onOpenCanvasDiff} />
                   )}
                 </div>
               );

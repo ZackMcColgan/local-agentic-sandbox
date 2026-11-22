@@ -69,6 +69,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/activityTimeline.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("components/ActivityTimeline") || p.includes("activityTimelineRender.test.ts"),
+    tests: ["tests/activityTimelineRender.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
     tests: ["tests/repoMap.test.ts"],
   },
