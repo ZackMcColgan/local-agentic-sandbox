@@ -360,7 +360,11 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
       const secondTick = daemon.tick();
 
       await secondTick;
-      assert.equal(drainCalls, 1, "Second tick must not start a second drain while first is in flight");
+      assert.equal(
+        drainCalls,
+        1,
+        "Second tick must not start a second drain while first is in flight"
+      );
 
       releaseFirstDrain();
       await firstTick;

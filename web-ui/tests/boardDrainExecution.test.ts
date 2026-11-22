@@ -12,7 +12,7 @@ import {
 } from "../lib/board/boardOrchestrator";
 import { BoardStore } from "../lib/board/boardStore";
 import { composeDispatcherBrief } from "../lib/board/dispatcher";
-import { createProductionIssueAndWait } from "../lib/board/productionDrain";
+import { classifyJobSummary, createProductionIssueAndWait } from "../lib/board/productionDrain";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import { POST as drainPost } from "../app/api/board/drain/route";
 
@@ -470,4 +470,97 @@ test("Fix 2: composeDispatcherBrief includes concrete hostCheckoutPath when reso
     !brief.includes("the configured host checkout"),
     "Composed brief must not fall back to generic placeholder when hostCheckoutPath is set"
   );
+});
+
+test("Fix 3: classifyJobSummary distinguishes blocked, turn-ended, and completed summaries", () => {
+  assert.equal(
+    classifyJobSummary(
+      "**BLOCKED — target files are not present in this sandbox checkout, and host access is withheld.**\n\nDetails follow."
+    ),
+    "blocked"
+  );
+  assert.equal(
+    classifyJobSummary("Partial output...\n\n⚠️ [Turn ended: maximum tool rounds reached]"),
+    "turn-ended"
+  );
+  assert.equal(
+    classifyJobSummary(
+      "Opened PR #205. Resolved the issue that previously blocked the nightly eval run."
+    ),
+    "completed"
+  );
+});
+
+test("Fix 3: orchestrator marks item needs-attention and counts failed when job summary declares BLOCKED", async () => {
+  const env = makeTempEnv();
+  try {
+    const store = new BoardStore(env.boardDir);
+    const item = store.create({
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+
+    const blockedFirstLine =
+      "**BLOCKED — target files are not present in this sandbox checkout, and host access is withheld.**";
+
+    const issueAndWait = createProductionIssueAndWait({
+      hostCheckoutPath: "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox",
+      executeHostTool: async () => ({ ok: true, exitCode: 0, stdout: "develop\n" }),
+      threadStore: {
+        createThread: () => ({
+          id: "thread-blocked-54",
+          title: "#1 Eval harness fix",
+          status: "active",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:00.000Z",
+        }),
+        getThread: async () => ({
+          id: "thread-blocked-54",
+          title: "#1 Eval harness fix",
+          status: "completed",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [
+            {
+              id: "msg-blocked-1",
+              role: "assistant",
+              content: `${blockedFirstLine}\n\nStopping per standing job protocol.`,
+              timestamp: "2026-11-21T00:00:01.000Z",
+            },
+          ],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:00.000Z",
+        }),
+      },
+      dispatchChatTurn: async () => ({ ok: true, status: 200, rawStream: "" }),
+    });
+
+    const orchestrator = new BoardOrchestrator({
+      boardStore: store,
+      boardDir: env.boardDir,
+      maxItems: 1,
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      issueAndWait,
+    });
+
+    const report = await orchestrator.drain();
+    const afterItem = store.get(item.id);
+
+    assert.equal(afterItem?.status, "needs-attention");
+    assert.equal(afterItem?.needsAttention, true);
+    assert.equal(afterItem?.parkedReason, blockedFirstLine);
+    assert.equal(report.failedCount, 1);
+    assert.equal(report.completedCount, 0);
+    assert.equal(report.surfacedIssues[0]?.code, "job-blocked");
+  } finally {
+    env.cleanup();
+  }
 });

@@ -47,8 +47,25 @@ export interface ProductionDrainOptions {
 }
 
 export type HostCheckoutGroundingResult =
-  | { ok: true; branch: string }
-  | { ok: false; message: string };
+  { ok: true; branch: string } | { ok: false; message: string };
+
+export type JobSummaryClassification = "blocked" | "turn-ended" | "completed";
+
+export function classifyJobSummary(summary: string): JobSummaryClassification {
+  const trimmed = summary.trim();
+  if (!trimmed) return "completed";
+
+  const firstLine = trimmed.split(/\r?\n/)[0]?.trim() ?? "";
+  if (/^(?:[*_`#>\-\s]*?)BLOCKED\b/.test(firstLine)) {
+    return "blocked";
+  }
+
+  if (/⚠️\s*\[Turn ended:/i.test(trimmed)) {
+    return "turn-ended";
+  }
+
+  return "completed";
+}
 
 function isHostCommandSuccess(res: HostBridgeCommandResult | null | undefined): boolean {
   if (!res) return false;
@@ -169,6 +186,24 @@ export function createProductionIssueAndWait(
           m.role === "assistant" && typeof m.content === "string" && m.content.trim().length > 0
       );
       const lastAssistant = assistantMessages[assistantMessages.length - 1]?.content ?? "";
+      const classification = classifyJobSummary(lastAssistant);
+      if (classification === "blocked" || classification === "turn-ended") {
+        const firstLine =
+          lastAssistant.trim().split(/\r?\n/)[0]?.trim() ||
+          `Job ended with classification '${classification}'`;
+        const code = classification === "blocked" ? "job-blocked" : "job-turn-ended";
+        return {
+          status: "failed",
+          threadId: thread.id,
+          error: firstLine,
+          issue: {
+            code,
+            autoFixable: false,
+            message: firstLine,
+          },
+        };
+      }
+
       const metadata = extractJobOutcomeMetadata(lastAssistant, response.rawStream);
 
       return {
