@@ -61,7 +61,10 @@ async function openDark412(
   await page.goto("/?drawer=open");
   await expect(page.locator('[data-testid="navigation-drawer"]')).toBeVisible();
   const label = view === "sessions" ? "New session" : view === "board" ? "Board" : "Settings";
-  await page.locator(`[data-testid="navigation-drawer"] button:has-text("${label}")`).first().click();
+  await page
+    .locator(`[data-testid="navigation-drawer"] button:has-text("${label}")`)
+    .first()
+    .click();
   await expect(page.locator("body")).toBeVisible();
 }
 
@@ -114,7 +117,6 @@ test.describe("Board #59: 412px dark render audit", () => {
     // Body is #000 in dark mode; heading text must clear the floor.
     expect(result.bg).toBe("rgb(0, 0, 0)");
 
-
     expect(result.ratio).toBeGreaterThanOrEqual(DARK_TEXT_FLOOR);
   });
 
@@ -141,13 +143,13 @@ test.describe("Board #59: 412px dark render audit", () => {
 
       const la = lum(cs.color);
       const lb = lum(cs.backgroundColor);
-      return { color: cs.color, bg: cs.backgroundColor, ratio: (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05) };
+      return {
+        color: cs.color,
+        bg: cs.backgroundColor,
+        ratio: (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05),
+      };
     });
-
 
     expect(result.ratio).toBeGreaterThanOrEqual(DARK_TEXT_FLOOR);
   });
 });
-
-
-
