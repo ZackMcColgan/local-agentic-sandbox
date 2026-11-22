@@ -11,6 +11,8 @@ import {
   type JobExecutionOutcome,
 } from "../lib/board/boardOrchestrator";
 import { BoardStore } from "../lib/board/boardStore";
+import { composeDispatcherBrief } from "../lib/board/dispatcher";
+import { createProductionIssueAndWait } from "../lib/board/productionDrain";
 import type { BoardControlRecord } from "../lib/board/boardControlStore";
 import { POST as drainPost } from "../app/api/board/drain/route";
 
@@ -317,4 +319,155 @@ test("(c) extractJobOutcomeMetadata parses PR, headSha, mergeSha, and deployTag 
 
   const empty = extractJobOutcomeMetadata("Completed refactoring with no PR.");
   assert.deepEqual(empty, {});
+});
+
+test("Fix 2: issueAndWait returns host-checkout-unavailable and creates no thread when bridge check fails", async () => {
+  let createThreadCalls = 0;
+  let dispatchCalls = 0;
+
+  const issueAndWait = createProductionIssueAndWait({
+    hostCheckoutPath: "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox",
+    executeHostTool: async () => ({
+      ok: false,
+      exitCode: 128,
+      stderr: "fatal: not a git repository",
+    }),
+    threadStore: {
+      createThread: () => {
+        createThreadCalls += 1;
+        throw new Error("should not create thread");
+      },
+      getThread: async () => null,
+    },
+    dispatchChatTurn: async () => {
+      dispatchCalls += 1;
+      return { ok: true, status: 200, rawStream: "" };
+    },
+  });
+
+  const outcome = await issueAndWait({
+    item: {
+      id: "item-grounding-fail",
+      key: "#54",
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    },
+    brief: "Test brief",
+  });
+
+  assert.equal(outcome.status, "failed");
+  if (outcome.status === "failed") {
+    assert.equal(outcome.issue?.code, "host-checkout-unavailable");
+    assert.equal(outcome.issue?.autoFixable, false);
+  }
+  assert.equal(createThreadCalls, 0, "No thread may be created when host checkout check fails");
+  assert.equal(dispatchCalls, 0, "No chat turn may be dispatched when host checkout check fails");
+});
+
+test("Fix 2: issueAndWait issues thread when bridge check succeeds", async () => {
+  let createThreadCalls = 0;
+  let bridgeToolName = "";
+  let bridgeArgs: Record<string, unknown> = {};
+
+  const issueAndWait = createProductionIssueAndWait({
+    hostCheckoutPath: "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox",
+    executeHostTool: async (tool, args) => {
+      bridgeToolName = tool;
+      bridgeArgs = args;
+      return { ok: true, exitCode: 0, stdout: "develop\n" };
+    },
+    threadStore: {
+      createThread: () => {
+        createThreadCalls += 1;
+        return {
+          id: "thread-grounded-1",
+          title: "#54 Eval harness fix",
+          status: "active",
+          model: "test-model",
+          reasoningEffort: "medium",
+          messages: [],
+          createdAt: "2026-11-21T00:00:00.000Z",
+          updatedAt: "2026-11-21T00:00:00.000Z",
+        };
+      },
+      getThread: async () => ({
+        id: "thread-grounded-1",
+        title: "#54 Eval harness fix",
+        status: "completed",
+        model: "test-model",
+        reasoningEffort: "medium",
+        messages: [
+          {
+            id: "msg-1",
+            role: "assistant",
+            content: "Opened PR #204 and verified.",
+            timestamp: "2026-11-21T00:00:01.000Z",
+          },
+        ],
+        createdAt: "2026-11-21T00:00:00.000Z",
+        updatedAt: "2026-11-21T00:00:00.000Z",
+      }),
+    },
+    dispatchChatTurn: async () => ({ ok: true, status: 200, rawStream: "" }),
+  });
+
+  const outcome = await issueAndWait({
+    item: {
+      id: "item-grounding-ok",
+      key: "#54",
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    },
+    brief: "Test brief",
+  });
+
+  assert.equal(bridgeToolName, "host_run_powershell");
+  assert.equal(bridgeArgs.command, "git rev-parse --abbrev-ref HEAD");
+  assert.equal(bridgeArgs.cwd, "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox");
+  assert.equal(createThreadCalls, 1);
+  assert.equal(outcome.status, "completed");
+  if (outcome.status === "completed") {
+    assert.equal(outcome.threadId, "thread-grounded-1");
+    assert.equal(outcome.prNumber, 204);
+  }
+});
+
+test("Fix 2: composeDispatcherBrief includes concrete hostCheckoutPath when resolved", () => {
+  const concretePath = "C:\\Users\\zackm\\Desktop\\repos\\local-agentic-sandbox";
+  const brief = composeDispatcherBrief(
+    {
+      id: "item-brief-path",
+      key: "#54",
+      title: "Eval harness fix",
+      brief: "Fix eval/run.mjs",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-21T00:00:00.000Z",
+      updatedAt: "2026-11-21T00:00:00.000Z",
+    },
+    { operatorMemory: "", hostCheckoutPath: concretePath }
+  );
+
+  assert.ok(
+    brief.includes(concretePath),
+    `Expected composed brief to include concrete hostCheckoutPath ${concretePath}`
+  );
+  assert.ok(
+    !brief.includes("the configured host checkout"),
+    "Composed brief must not fall back to generic placeholder when hostCheckoutPath is set"
+  );
 });

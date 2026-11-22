@@ -82,6 +82,8 @@ spec:
               value: "/workspace/.agent/threads"
             - name: HOST_RUNNER_URL
               value: "http://host-runner-service:8765"
+            - name: HOST_CHECKOUT_PATH
+              value: 'C:\Users\zackm\Desktop\repos\local-agentic-sandbox'
             - name: HOST_RUNNER_SHARED_SECRET
               valueFrom:
                 secretKeyRef:
