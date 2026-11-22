@@ -11,6 +11,7 @@ import type { JobTokenRollup } from "../tokenEconomics";
 import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import type { ChunkBudgetConfig } from "../jobChunking";
+import type { ThinkingSegment } from "../activityTimeline";
 
 /** Result of turn-start conversation preparation (thread view + compaction report). */
 export interface TurnConversationPreparation {
@@ -60,6 +61,7 @@ export interface ThreadMessage {
   role: "user" | "assistant" | "system";
   content: string;
   thought?: string;
+  thinkingSegments?: ThinkingSegment[];
   traces?: ExecutionTraceItem[];
   attachments?: ThreadAttachment[];
   diffs?: TurnFileDiff[];
@@ -87,6 +89,8 @@ export interface ThreadMessage {
   outputTokens?: number;
   /** TOKEN ECONOMICS (a): prompt tokens recorded per model round in this turn. */
   roundPromptTokens?: number[];
+  /** Per-round generation duration (ms) for completed rounds in this turn. */
+  roundGenerationMs?: number[];
   /** TOKEN ECONOMICS (c): micro-elision audit — every stub applied during the
    * turn (tool, target, original size, round). The full results remain in
    * `traces`, so a stubbed result stays recoverable from the thread record. */

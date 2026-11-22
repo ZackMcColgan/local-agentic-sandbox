@@ -392,16 +392,24 @@ export function ChatMessageItem({
                       <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
                     </div>
                   )}
-                  {(hasThought || isStreamingThis) && (
-                    <ThinkingPreviewBlock
-                      thought={m.thought}
+                  {!(Array.isArray(m.thinkingSegments) && m.thinkingSegments.length > 0) &&
+                    (hasThought || isStreamingThis) && (
+                      <ThinkingPreviewBlock
+                        thought={m.thought}
+                        isStreaming={isStreamingThis}
+                        hasContent={Boolean(m.content && m.content.trim())}
+                        durationMs={m.thinkingDurationMs ?? m.durationMs}
+                      />
+                    )}
+                  {(turnTraces.length > 0 ||
+                    (Array.isArray(m.thinkingSegments) && m.thinkingSegments.length > 0)) && (
+                    <ActivityTimeline
+                      traces={turnTraces}
+                      thinkingSegments={m.thinkingSegments}
                       isStreaming={isStreamingThis}
                       hasContent={Boolean(m.content && m.content.trim())}
-                      durationMs={m.thinkingDurationMs ?? m.durationMs}
+                      onOpenCanvasDiff={onOpenCanvasDiff}
                     />
-                  )}
-                  {turnTraces.length > 0 && (
-                    <ActivityTimeline traces={turnTraces} onOpenCanvasDiff={onOpenCanvasDiff} />
                   )}
                 </div>
               );

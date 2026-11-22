@@ -22,6 +22,7 @@ export interface ExecutionTraceItem {
   timestamp: string;
   model?: string;
   tier?: "sandbox" | "browser";
+  round?: number;
 }
 
 interface ExecutionTraceProps {

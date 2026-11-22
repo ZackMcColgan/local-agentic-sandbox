@@ -114,6 +114,7 @@ export interface ChatMessage {
   tokensAfterCompaction?: number;
   roundPromptTokens?: number[];
   roundGenerationMs?: number[];
+  thinkingSegments?: Array<{ round: number; text: string }>;
   outputTokens?: number;
   compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
@@ -1067,6 +1068,9 @@ export function ChatStream({
               upsertAssistant(prev, (msg) => ({
                 ...msg,
                 thought: event.thought,
+                thinkingSegments: Array.isArray(event.thinkingSegments)
+                  ? event.thinkingSegments
+                  : msg.thinkingSegments,
               }))
             );
           } else if (event.type === "thinking") {
@@ -1162,6 +1166,8 @@ export function ChatStream({
                       thinkingDurationMs: event.thinkingDurationMs,
                       phaseTimings: event.phaseTimings,
                       roundPromptTokens: event.roundPromptTokens,
+                      roundGenerationMs: event.roundGenerationMs,
+                      thinkingSegments: event.thinkingSegments,
                       outputTokens: event.outputTokens,
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
@@ -1198,6 +1204,12 @@ export function ChatStream({
                 roundPromptTokens: Array.isArray(event.roundPromptTokens)
                   ? event.roundPromptTokens
                   : msg.roundPromptTokens,
+                roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                  ? event.roundGenerationMs
+                  : msg.roundGenerationMs,
+                thinkingSegments: Array.isArray(event.thinkingSegments)
+                  ? event.thinkingSegments
+                  : msg.thinkingSegments,
                 outputTokens:
                   typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
                 status: finalStatus,

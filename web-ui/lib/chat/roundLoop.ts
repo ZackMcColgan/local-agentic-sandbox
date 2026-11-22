@@ -122,6 +122,7 @@ export interface TraceItem {
   timestamp: string;
   model: string;
   tier?: "sandbox" | "browser" | "workspace" | "host";
+  round?: number;
 }
 
 export interface LlmToolCall {
@@ -641,6 +642,8 @@ export async function runChatTurn(
     // rolled up onto the assistant message and the thread record.
     const roundPromptTokens: number[] = [];
     const roundGenerationMs: number[] = [];
+    const thinkingSegments: Array<{ round: number; text: string }> = [];
+    let cumulativeOutputTokens = 0;
     let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
     // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
     // turnMicroElisions declared with the other turn state, so both persist
@@ -933,6 +936,7 @@ export async function runChatTurn(
       let roundSizeCapped = false;
       const toolCallsFromMessage: LlmToolCall[] = [];
       const roundStreamStartMs = Date.now();
+      let roundOutputTokens = 0;
 
       try {
         for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
@@ -942,8 +946,10 @@ export async function runChatTurn(
           }
           if (typeof chunk.outputTokens === "number") {
             turnState.turnOutputTokens = chunk.outputTokens;
+            roundOutputTokens = chunk.outputTokens;
           } else if (typeof chunk.eval_count === "number") {
             turnState.turnOutputTokens = chunk.eval_count;
+            roundOutputTokens = chunk.eval_count;
           }
           // TOKEN ECONOMICS (a): prompt tokens arrive on the finish chunk via
           // the PR #63 usage plumbing (promptTokens) or Ollama's
@@ -966,11 +972,20 @@ export async function runChatTurn(
               accumulatedThoughts.length > 0
                 ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
                 : roundThinking;
+            const liveSegments = roundThinking.trim()
+              ? [...thinkingSegments, { round, text: roundThinking.trim() }]
+              : [...thinkingSegments];
             streamSnapshot.maybeWrite(
               turnState.accumulatedStreamedTokens,
-              currentCumulativeThought
+              currentCumulativeThought,
+              undefined,
+              { thinkingSegments: liveSegments }
             );
-            await sendEvent({ type: "thought", thought: currentCumulativeThought });
+            await sendEvent({
+              type: "thought",
+              thought: currentCumulativeThought,
+              thinkingSegments: liveSegments,
+            });
           }
           if (chunk.message?.content) {
             const nowMs = Date.now();
@@ -1019,6 +1034,9 @@ export async function runChatTurn(
         }
       } finally {
         roundGenerationMs.push(Math.max(1, Date.now() - roundStreamStartMs));
+        if (roundOutputTokens > 0) {
+          cumulativeOutputTokens += roundOutputTokens;
+        }
         roundDeadline.clear();
         if (activeThreadId) {
           clearRoundAbortController(activeThreadId, roundAbortController);
@@ -1030,7 +1048,9 @@ export async function runChatTurn(
       roundFinishReasons.push(roundFinishReason || "stop");
 
       if (roundThinking.trim()) {
-        accumulatedThoughts.push(roundThinking.trim());
+        const trimmedThinking = roundThinking.trim();
+        accumulatedThoughts.push(trimmedThinking);
+        thinkingSegments.push({ round, text: trimmedThinking });
         thinkingEndMs = Date.now();
       }
 
@@ -1629,6 +1649,7 @@ export async function runChatTurn(
           timestamp: new Date().toISOString(),
           model: turnState.activeModel,
           tier: target.tier,
+          round,
         };
         if (
           toolName === "workspace_write_file" &&
@@ -1740,6 +1761,9 @@ export async function runChatTurn(
         {
           force: true,
           roundPromptTokens: [...roundPromptTokens],
+          roundGenerationMs: [...roundGenerationMs],
+          outputTokens: cumulativeOutputTokens > 0 ? cumulativeOutputTokens : undefined,
+          thinkingSegments: thinkingSegments.length > 0 ? [...thinkingSegments] : undefined,
         }
       );
       if (activeThreadId) {
@@ -2141,6 +2165,7 @@ export async function runChatTurn(
         outputTokens: finalOutputTokens,
         roundPromptTokens: roundPromptTokens,
         roundGenerationMs: roundGenerationMs.length > 0 ? roundGenerationMs : undefined,
+        thinkingSegments: thinkingSegments.length > 0 ? thinkingSegments : undefined,
         // TOKEN ECONOMICS (c): micro-elision audit rides on the final record.
         microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
         // TOKEN ECONOMICS (d): read-dedup audit rides on the final record.
@@ -2175,6 +2200,7 @@ export async function runChatTurn(
       diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
       content: cleanedContent,
       thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+      thinkingSegments: thinkingSegments.length > 0 ? thinkingSegments : undefined,
       thinkingDurationMs:
         thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
       phaseTimings: {

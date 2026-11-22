@@ -6,15 +6,22 @@
  * summaries and write diff metadata without side effects.
  */
 
-export type TimelineToolKind = "read" | "search" | "write" | "shell" | "web" | "subagent" | "other";
+export type TimelineToolKind =
+  "read" | "search" | "write" | "shell" | "web" | "subagent" | "thinking" | "other";
 
 export type TimelineRowStatus = "running" | "success" | "error";
+
+export interface ThinkingSegment {
+  round: number;
+  text: string;
+}
 
 export interface TimelineWriteDiff {
   filePath: string;
   addedLines: number;
   removedLines: number;
   diffText?: string;
+  synthesized?: boolean;
 }
 
 export interface TimelineTraceInput {
@@ -26,6 +33,7 @@ export interface TimelineTraceInput {
   tier?: string;
   status?: "running" | "complete" | "error" | "success";
   isError?: boolean;
+  round?: number;
 }
 
 export interface TimelineRow {
@@ -41,6 +49,8 @@ export interface TimelineRow {
   children?: TimelineRow[];
   isGroup?: boolean;
   rawTraceIndex?: number;
+  thinkingText?: string;
+  round?: number;
 }
 
 const MAX_TARGET_LEN = 64;
@@ -159,6 +169,24 @@ function verbForKind(kind: TimelineToolKind, tool: string, isRunning: boolean): 
   }
 }
 
+const LEADING_SHELL_BOILERPLATE_RE =
+  /^\s*(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:'[^']*'|"[^"]*")|Set-Location\s+(?:'[^']*'|"[^"]*"));\s*/i;
+
+/**
+ * Strips leading PowerShell preamble assignments and Set-Location segments
+ * so shell row labels show the operative command. Falls back to the original
+ * command if stripping empties it.
+ */
+export function stripShellBoilerplate(command: string): string {
+  let remaining = command.trim();
+  while (remaining.length > 0) {
+    const next = remaining.replace(LEADING_SHELL_BOILERPLATE_RE, "");
+    if (next === remaining) break;
+    remaining = next.trim();
+  }
+  return remaining || command;
+}
+
 function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): string {
   const args = trace.args;
   if (kind === "read" || kind === "write") {
@@ -171,7 +199,9 @@ function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): stri
   }
   if (kind === "shell") {
     const cmd = readStringArg(args, ["command", "cmd", "script"]);
-    return cmd ? truncate(cmd, MAX_TARGET_LEN) : trace.tool.replace(/_/g, " ");
+    return cmd
+      ? truncate(stripShellBoilerplate(cmd), MAX_TARGET_LEN)
+      : trace.tool.replace(/_/g, " ");
   }
   if (kind === "web") {
     const url = readStringArg(args, ["url", "uri", "query"]);
@@ -246,6 +276,7 @@ export function extractWriteDiffFromTrace(
   if (!filePath) return undefined;
 
   let diffText: string | undefined;
+  let synthesized = false;
   let addedLines: number | undefined;
   let removedLines: number | undefined;
 
@@ -270,6 +301,24 @@ export function extractWriteDiffFromTrace(
     removedLines = removedLines ?? counted.removedLines;
   }
 
+  const hasReplacementArg = Boolean(
+    trace.args && typeof trace.args.replacement === "string" && trace.args.replacement.length > 0
+  );
+  const fullWrittenContent =
+    trace.args && typeof trace.args.content === "string" && trace.args.content.length > 0
+      ? trace.args.content
+      : trace.args && typeof trace.args.newContent === "string" && trace.args.newContent.length > 0
+        ? trace.args.newContent
+        : undefined;
+
+  if (!diffText && fullWrittenContent && !hasReplacementArg && (removedLines ?? 0) === 0) {
+    const lines = fullWrittenContent.split("\n");
+    diffText = `@@ -0,0 +1,${lines.length} @@\n${lines.map((l) => `+${l}`).join("\n")}`;
+    synthesized = true;
+    addedLines = addedLines ?? lines.length;
+    removedLines = removedLines ?? 0;
+  }
+
   if (addedLines === undefined && removedLines === undefined) {
     const content = readStringArg(trace.args, ["content", "newContent", "replacement"]);
     if (content) {
@@ -283,6 +332,7 @@ export function extractWriteDiffFromTrace(
     addedLines: addedLines ?? 0,
     removedLines: removedLines ?? 0,
     ...(diffText ? { diffText } : {}),
+    ...(synthesized ? { synthesized: true } : {}),
   };
 }
 
@@ -332,7 +382,8 @@ export function traceToTimelineRow(
 }
 
 /**
- * Folds consecutive completed `read` or `search` rows into a single expandable group row.
+ * Folds consecutive completed `read`, `search` (2+), or `shell` (3+) rows into
+ * a single expandable group row.
  */
 export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   const result: TimelineRow[] = [];
@@ -341,7 +392,8 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   while (i < rows.length) {
     const current = rows[i];
     const foldable =
-      current.status === "success" && (current.kind === "read" || current.kind === "search");
+      current.status === "success" &&
+      (current.kind === "read" || current.kind === "search" || current.kind === "shell");
 
     if (!foldable) {
       result.push(current);
@@ -355,19 +407,29 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
     }
 
     const count = j - i;
-    if (count === 1) {
-      result.push(current);
+    const minFold = current.kind === "shell" ? 3 : 2;
+    if (count < minFold) {
+      for (let k = i; k < j; k++) {
+        result.push(rows[k]);
+      }
     } else {
       const children = rows.slice(i, j);
       const totalDurationMs = children.reduce((sum, r) => sum + (r.durationMs || 0), 0);
-      const isRead = current.kind === "read";
-      const label = isRead ? `Read ${count} files` : `Searched ${count} queries`;
+      const verb =
+        current.kind === "read" ? "Read" : current.kind === "search" ? "Searched" : "Ran";
+      const target =
+        current.kind === "read"
+          ? `${count} files`
+          : current.kind === "search"
+            ? `${count} queries`
+            : `${count} commands`;
+      const label = `${verb} ${target}`;
       result.push({
         id: `group-${current.kind}-${i}-${j - 1}`,
         kind: current.kind,
         status: "success",
-        verb: isRead ? "Read" : "Searched",
-        target: isRead ? `${count} files` : `${count} queries`,
+        verb,
+        target,
         label,
         durationMs: totalDurationMs > 0 ? totalDurationMs : undefined,
         children,
@@ -380,14 +442,97 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
   return result;
 }
 
+export interface BuildActivityTimelineOptions {
+  thinkingSegments?: ThinkingSegment[];
+  isStreaming?: boolean;
+}
+
 /**
- * End-to-end pure transform from raw traces to folded timeline rows.
+ * End-to-end pure transform from raw traces (and optional per-round thinking
+ * segments) to folded timeline rows.
  */
 export function buildActivityTimeline(
   traces: TimelineTraceInput[] | undefined,
-  nowMs?: number
+  nowMs?: number,
+  options?: BuildActivityTimelineOptions
 ): TimelineRow[] {
-  if (!Array.isArray(traces) || traces.length === 0) return [];
-  const rows = traces.map((t, idx) => traceToTimelineRow(t, idx, nowMs));
-  return foldTimelineRows(rows);
+  const safeTraces = Array.isArray(traces) ? traces : [];
+  const validSegments = Array.isArray(options?.thinkingSegments)
+    ? options.thinkingSegments.filter((s) => s && typeof s.text === "string" && s.text.trim())
+    : [];
+
+  if (validSegments.length === 0) {
+    if (safeTraces.length === 0) return [];
+    const rows = safeTraces.map((t, idx) => traceToTimelineRow(t, idx, nowMs));
+    return foldTimelineRows(rows);
+  }
+
+  const segmentsByRound = new Map<number, ThinkingSegment[]>();
+  const roundSet = new Set<number>();
+  for (const seg of validSegments) {
+    const r = typeof seg.round === "number" && Number.isFinite(seg.round) ? seg.round : 1;
+    roundSet.add(r);
+    const list = segmentsByRound.get(r) ?? [];
+    list.push(seg);
+    segmentsByRound.set(r, list);
+  }
+
+  const tracesByRound = new Map<number, Array<{ trace: TimelineTraceInput; index: number }>>();
+  let fallbackRound = 1;
+  for (let idx = 0; idx < safeTraces.length; idx++) {
+    const t = safeTraces[idx];
+    const r = typeof t.round === "number" && Number.isFinite(t.round) ? t.round : fallbackRound;
+    fallbackRound = r;
+    roundSet.add(r);
+    const list = tracesByRound.get(r) ?? [];
+    list.push({ trace: t, index: idx });
+    tracesByRound.set(r, list);
+  }
+
+  const orderedRounds = Array.from(roundSet).sort((a, b) => a - b);
+  const lastRound = orderedRounds[orderedRounds.length - 1];
+  const result: TimelineRow[] = [];
+
+  for (const r of orderedRounds) {
+    const segs = segmentsByRound.get(r) ?? [];
+    const roundTraces = tracesByRound.get(r) ?? [];
+    for (let sIdx = 0; sIdx < segs.length; sIdx++) {
+      const seg = segs[sIdx];
+      const isTailStreaming =
+        Boolean(options?.isStreaming) &&
+        r === lastRound &&
+        sIdx === segs.length - 1 &&
+        roundTraces.length === 0;
+      const prevRow = result.length > 0 ? result[result.length - 1] : null;
+      if (prevRow && prevRow.kind === "thinking") {
+        prevRow.thinkingText = prevRow.thinkingText
+          ? `${prevRow.thinkingText}\n\n${seg.text}`
+          : seg.text;
+        if (isTailStreaming) {
+          prevRow.status = "running";
+          prevRow.verb = "Thinking";
+          prevRow.label = "Thinking…";
+        }
+      } else {
+        result.push({
+          id: `thinking-round-${r}-${sIdx}`,
+          kind: "thinking",
+          status: isTailStreaming ? "running" : "success",
+          verb: isTailStreaming ? "Thinking" : "Thought",
+          target: "Reasoning",
+          label: isTailStreaming ? "Thinking…" : "Thought",
+          thinkingText: seg.text,
+          round: r,
+        });
+      }
+    }
+    if (roundTraces.length > 0) {
+      const actionRows = roundTraces.map(({ trace, index }) =>
+        traceToTimelineRow(trace, index, nowMs)
+      );
+      result.push(...foldTimelineRows(actionRows));
+    }
+  }
+
+  return result;
 }

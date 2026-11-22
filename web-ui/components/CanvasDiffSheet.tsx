@@ -80,7 +80,10 @@ export function CanvasDiffSheet({
           </button>
           <span className="font-mono text-xs text-zinc-200 truncate">{currentDiff.filePath}</span>
         </div>
-        <div className="inline-flex items-center gap-1.5 font-mono text-xs shrink-0">
+        <div className="inline-flex items-center gap-2 font-mono text-xs shrink-0">
+          {currentDiff.synthesized && (
+            <span className="text-[11px] font-sans text-zinc-400">content as written</span>
+          )}
           <span className="text-emerald-400">+{currentDiff.addedLines}</span>
           <span className="text-rose-400">−{currentDiff.removedLines}</span>
         </div>

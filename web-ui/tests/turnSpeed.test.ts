@@ -72,6 +72,71 @@ describe("turnSpeed — generation timing, tok/s, and header now-line", () => {
     assert.equal(completed.tokPerSecLabel, "40.0 tok/s");
   });
 
+  it("shows completed-rounds average tok/s while streaming when no live EMA is present", () => {
+    const state = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: true,
+      traces: [
+        {
+          tool: "workspace_run_command",
+          args: { command: "npm test" },
+          status: "running",
+          timestamp: "2026-11-22T10:00:00.000Z",
+        },
+      ],
+      startedAtMs: Date.parse("2026-11-22T10:00:00.000Z"),
+      nowMs: Date.parse("2026-11-22T10:00:30.000Z"),
+      outputTokens: 500,
+      roundGenerationMs: [4000, 6000],
+      liveTokPerSec: null,
+    });
+    assert.equal(state.visible, true);
+    assert.equal(state.elapsedLabel, "30s");
+    assert.equal(state.tokensLabel, "500 tok");
+    assert.equal(state.tokPerSecLabel, "50.0 tok/s");
+  });
+
+  it("derives elapsed from earliest trace timestamp on observed turns without startedAtMs", () => {
+    const state = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: true,
+      traces: [
+        {
+          tool: "workspace_read_file",
+          args: { path: "a.ts" },
+          timestamp: "2026-11-22T10:00:05.000Z",
+        },
+        {
+          tool: "workspace_run_command",
+          args: { command: "npm test" },
+          status: "running",
+          timestamp: "2026-11-22T10:00:12.000Z",
+        },
+      ],
+      startedAtMs: null,
+      nowMs: Date.parse("2026-11-22T10:00:20.000Z"),
+      outputTokens: 200,
+      roundGenerationMs: [4000],
+    });
+    assert.equal(state.elapsedLabel, "15s");
+    assert.equal(state.tokensLabel, "200 tok");
+    assert.equal(state.tokPerSecLabel, "50.0 tok/s");
+  });
+
+  it("omits tok/s when streaming with zero completed rounds and no live EMA", () => {
+    const state = deriveNowLineState({
+      hasRunTurn: true,
+      isStreaming: true,
+      startedAtMs: 1000,
+      nowMs: 6000,
+      outputTokens: 100,
+      roundGenerationMs: [],
+      liveTokPerSec: null,
+    });
+    assert.equal(state.elapsedLabel, "5s");
+    assert.equal(state.tokPerSecLabel, null);
+  });
+
   it("guard: NowLineBar.tsx never uses banned zinc-500 text classes", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../components/NowLineBar.tsx"), "utf8");
     assert.equal(/\btext-zinc-500\b/.test(src), false);

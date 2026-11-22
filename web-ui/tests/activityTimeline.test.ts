@@ -7,6 +7,7 @@ import {
   traceToTimelineRow,
   type TimelineTraceInput,
 } from "../lib/activityTimeline";
+import { parseUnifiedDiffWithLineNumbers } from "../components/CanvasDiffSheet";
 
 describe("activityTimeline — pure row model", () => {
   it("maps each tool kind to its verb-first row", () => {
@@ -196,5 +197,246 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(rows.length, 2);
     assert.equal(rows[0].isGroup, undefined);
     assert.equal(rows[1].status, "running");
+  });
+
+  it("folds consecutive completed shell rows of 3 or more into one expandable group row", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "host_run_powershell", args: { command: "git status" }, durationMs: 100 },
+      { tool: "host_run_powershell", args: { command: "git diff" }, durationMs: 150 },
+      { tool: "workspace_run_command", args: { command: "npm test" }, durationMs: 250 },
+      { tool: "host_run_powershell", args: { command: "git log -1" }, durationMs: 50 },
+      { tool: "host_run_powershell", args: { command: "ls" }, durationMs: 50 },
+    ];
+
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].isGroup, true);
+    assert.equal(rows[0].kind, "shell");
+    assert.equal(rows[0].verb, "Ran");
+    assert.equal(rows[0].label, "Ran 5 commands");
+    assert.equal(rows[0].children?.length, 5);
+    assert.equal(rows[0].durationMs, 600);
+    assert.equal(rows[0].children?.[0].target, "git status");
+    assert.equal(rows[0].children?.[4].target, "ls");
+  });
+
+  it("does not fold a run of 1 or 2 shell rows", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "host_run_powershell", args: { command: "git status" }, durationMs: 100 },
+      { tool: "host_run_powershell", args: { command: "git diff" }, durationMs: 150 },
+    ];
+
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].isGroup, undefined);
+    assert.equal(rows[1].isGroup, undefined);
+    assert.equal(rows[0].label, "Ran git status");
+    assert.equal(rows[1].label, "Ran git diff");
+  });
+
+  it("breaks shell folding on an error row and keeps the error row unfolded", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "host_run_powershell", args: { command: "cmd1" }, durationMs: 10 },
+      { tool: "host_run_powershell", args: { command: "cmd2" }, durationMs: 10 },
+      { tool: "host_run_powershell", args: { command: "cmd3" }, durationMs: 10 },
+      {
+        tool: "host_run_powershell",
+        args: { command: "cmd4" },
+        durationMs: 20,
+        isError: true,
+        result: "Exit code 1: boom",
+      },
+      { tool: "host_run_powershell", args: { command: "cmd5" }, durationMs: 10 },
+      { tool: "host_run_powershell", args: { command: "cmd6" }, durationMs: 10 },
+    ];
+
+    const rows = buildActivityTimeline(traces);
+    assert.equal(rows.length, 4);
+    assert.equal(rows[0].isGroup, true);
+    assert.equal(rows[0].label, "Ran 3 commands");
+    assert.equal(rows[0].children?.length, 3);
+    assert.equal(rows[1].status, "error");
+    assert.equal(rows[1].isGroup, undefined);
+    assert.ok(rows[1].errorSummary?.includes("Exit code 1"));
+    assert.equal(rows[2].isGroup, undefined);
+    assert.equal(rows[2].label, "Ran cmd5");
+    assert.equal(rows[3].isGroup, undefined);
+    assert.equal(rows[3].label, "Ran cmd6");
+  });
+
+  it("strips leading PowerShell boilerplate and Set-Location from shell command targets", () => {
+    const withPreamble = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command:
+            "$ErrorActionPreference='Continue'; $f='C:\\Users\\zackm\\Desktop\\repo\\testGate.ts'; Set-Location 'C:\\Users\\zackm\\Desktop\\repo'; Get-Content 'C:\\repo\\testGate.ts'",
+        },
+        durationMs: 120,
+      },
+      0
+    );
+    assert.equal(withPreamble.target, "Get-Content 'C:\\repo\\testGate.ts'");
+    assert.equal(withPreamble.label, "Ran Get-Content 'C:\\repo\\testGate.ts'");
+
+    const withDoubleQuotes = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: {
+          command:
+            '$ErrorActionPreference = "Continue"; $dir="web-ui"; Set-Location "C:\\repo"; npm run test:gate',
+        },
+        durationMs: 80,
+      },
+      1
+    );
+    assert.equal(withDoubleQuotes.target, "npm run test:gate");
+    assert.equal(withDoubleQuotes.label, "Ran npm run test:gate");
+
+    const plain = traceToTimelineRow(
+      {
+        tool: "workspace_run_command",
+        args: { command: "npm run test:gate" },
+        durationMs: 50,
+      },
+      2
+    );
+    assert.equal(plain.target, "npm run test:gate");
+    assert.equal(plain.label, "Ran npm run test:gate");
+
+    const preambleOnly = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: { command: "$ErrorActionPreference='Continue'; $f='a.ts';" },
+        durationMs: 10,
+      },
+      3
+    );
+    assert.equal(preambleOnly.target, "$ErrorActionPreference='Continue'; $f='a.ts';");
+    assert.equal(preambleOnly.label, "Ran $ErrorActionPreference='Continue'; $f='a.ts';");
+  });
+
+  it("synthesizes unified diff text for creation writes with full content and no recorded diff", () => {
+    const content = "import { test } from '@playwright/test';\n\ntest('works', () => {});";
+    const row = traceToTimelineRow(
+      {
+        tool: "workspace_write_file",
+        args: { path: "web-ui/tests/e2e/settingsMobile.spec.ts", content },
+        durationMs: 40,
+      },
+      0
+    );
+
+    assert.ok(row.writeDiff);
+    assert.equal(row.writeDiff.synthesized, true);
+    assert.equal(row.writeDiff.addedLines, 3);
+    assert.equal(row.writeDiff.removedLines, 0);
+    assert.ok(row.writeDiff.diffText);
+
+    const parsed = parseUnifiedDiffWithLineNumbers(row.writeDiff.diffText);
+    const added = parsed.filter((l) => l.kind === "add");
+    assert.equal(added.length, 3);
+    assert.equal(added[0].text, "+import { test } from '@playwright/test';");
+    assert.equal(added[1].text, "+");
+    assert.equal(added[2].text, "+test('works', () => {});");
+  });
+
+  it("does not synthesize diff text for replacement-only edits and leaves real diffs untouched", () => {
+    const editRow = traceToTimelineRow(
+      {
+        tool: "replace_in_file",
+        args: { path: "src/app.ts", replacement: "const x = 2;" },
+        durationMs: 25,
+      },
+      0
+    );
+    assert.ok(editRow.writeDiff);
+    assert.equal(editRow.writeDiff.diffText, undefined);
+    assert.equal(editRow.writeDiff.synthesized, undefined);
+
+    const realDiff = "@@ -1,1 +1,2 @@\n const a = 1;\n+const b = 2;";
+    const realRow = traceToTimelineRow(
+      {
+        tool: "workspace_write_file",
+        args: { path: "src/app.ts", content: "const a = 1;\nconst b = 2;" },
+        result: { diff: realDiff, addedLines: 1, removedLines: 0 },
+        durationMs: 25,
+      },
+      1
+    );
+    assert.ok(realRow.writeDiff);
+    assert.equal(realRow.writeDiff.diffText, realDiff);
+    assert.equal(realRow.writeDiff.synthesized, undefined);
+  });
+
+  it("interleaves thinkingSegments inline before each round's action rows (think-act-think-act)", () => {
+    const traces: TimelineTraceInput[] = [
+      { tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 20, round: 1 },
+      {
+        tool: "workspace_write_file",
+        args: { path: "b.ts", content: "x=1" },
+        durationMs: 30,
+        round: 2,
+      },
+    ];
+    const rows = buildActivityTimeline(traces, undefined, {
+      thinkingSegments: [
+        { round: 1, text: "First I will read a.ts" },
+        { round: 2, text: "Now I will write b.ts" },
+      ],
+    });
+
+    assert.equal(rows.length, 4);
+    assert.equal(rows[0].kind, "thinking");
+    assert.equal(rows[0].thinkingText, "First I will read a.ts");
+    assert.equal(rows[1].kind, "read");
+    assert.equal(rows[1].label, "Read a.ts");
+    assert.equal(rows[2].kind, "thinking");
+    assert.equal(rows[2].thinkingText, "Now I will write b.ts");
+    assert.equal(rows[3].kind, "write");
+    assert.equal(rows[3].label, "Wrote b.ts");
+  });
+
+  it("renders a thinking row even when a segment's round has no traces, and marks streaming tail running", () => {
+    const rows = buildActivityTimeline([], undefined, {
+      thinkingSegments: [{ round: 1, text: "Analyzing architecture..." }],
+      isStreaming: true,
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].kind, "thinking");
+    assert.equal(rows[0].thinkingText, "Analyzing architecture...");
+    assert.equal(rows[0].status, "running");
+
+    const withLiveTail = buildActivityTimeline(
+      [{ tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 10, round: 1 }],
+      undefined,
+      {
+        thinkingSegments: [
+          { round: 1, text: "Round 1 thought" },
+          { round: 2, text: "Streaming round 2 thought..." },
+        ],
+        isStreaming: true,
+      }
+    );
+    assert.equal(withLiveTail.length, 3);
+    assert.equal(withLiveTail[0].kind, "thinking");
+    assert.equal(withLiveTail[0].status, "success");
+    assert.equal(withLiveTail[1].kind, "read");
+    assert.equal(withLiveTail[2].kind, "thinking");
+    assert.equal(withLiveTail[2].thinkingText, "Streaming round 2 thought...");
+    assert.equal(withLiveTail[2].status, "running");
+  });
+
+  it("merges consecutive thinking segments when no traces occurred between rounds", () => {
+    const rows = buildActivityTimeline([], undefined, {
+      thinkingSegments: [
+        { round: 1, text: "Assessing user weather request" },
+        { round: 2, text: "Redirecting to SVG diagram" },
+      ],
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].kind, "thinking");
+    assert.ok(rows[0].thinkingText?.includes("Assessing user weather request"));
+    assert.ok(rows[0].thinkingText?.includes("Redirecting to SVG diagram"));
   });
 });
