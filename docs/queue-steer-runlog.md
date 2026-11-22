@@ -35,6 +35,17 @@
   changed-file scope (selected only 2 suites); invoke `npx tsx scripts/test-gate.ts
   --since=...` directly instead.
 - Status: COMPLETE. PR opened into develop.
+- Auto-resume attempt 1/2 (re-verification): branch `feature/retry-after-parser` clean,
+  PR #217 OPEN + MERGEABLE. Targeted gate
+  `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail.
+  Full change-aware gate scoped to committed diff
+  `node scripts/test-gate.js --since=origin/develop` -> PASSED, 409 pass / 0 fail in 61s
+  (<90s budget), with `tests/retryAfter.test.ts` in the selected suite list.
+  Pitfall reconfirmed: bare `node scripts/test-gate.js` (no `--since`) picks up the 8
+  untracked `eval/results/*` scratch dirs as "changed files", so change detection selects
+  only the eval-pack + skillGate suites (2 suites) and silently drops the retryAfter slice.
+  Scope the gate with `--since=origin/develop` to exclude untracked scratch. No code change
+  needed; job remains COMPLETE.
 
 ## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
