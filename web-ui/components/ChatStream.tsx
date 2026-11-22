@@ -65,6 +65,7 @@ import {
 import { deduplicateStreamMessages } from "../lib/chat/streamMessages";
 export { deduplicateStreamMessages };
 import { ChatMessageItem, UserMessageContent } from "./chat/messageRender";
+import { NowLineBar } from "./NowLineBar";
 export { UserMessageContent };
 import { HostApprovalsPanel } from "./chat/approvals";
 import {
@@ -109,6 +110,7 @@ export interface ChatMessage {
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
   roundPromptTokens?: number[];
+  roundGenerationMs?: number[];
   outputTokens?: number;
   compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
@@ -2292,6 +2294,28 @@ export function ChatStream({
               </div>
             </div>
           </header>
+
+          {(() => {
+            const lastAssistant = [...messages]
+              .reverse()
+              .find((msg) => msg.role === "assistant" && msg.id !== "welcome");
+            const hasRunTurn = Boolean(isLoading || lastAssistant);
+            const activeTraces =
+              isLoading && liveTurnTraces.length > 0 ? liveTurnTraces : lastAssistant?.traces || [];
+            return (
+              <NowLineBar
+                hasRunTurn={hasRunTurn}
+                isStreaming={Boolean(isLoading || lastAssistant?.status === "streaming")}
+                streamStatus={streamStatus}
+                traces={activeTraces}
+                startedAtMs={turnStartedAtRef.current}
+                nowMs={lastActivityAtMs}
+                totalDurationMs={lastAssistant?.durationMs}
+                outputTokens={lastAssistant?.outputTokens}
+                roundGenerationMs={lastAssistant?.roundGenerationMs}
+              />
+            );
+          })()}
 
           {/* Confirm Dialog for Permanent Session Deletion (mirrors ThreadsSidebar) */}
           {showDeleteConfirm && onDeleteThread && (

@@ -74,6 +74,13 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/activityTimelineRender.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/turnSpeed") ||
+      p.includes("components/NowLineBar") ||
+      p.includes("turnSpeed.test.ts"),
+    tests: ["tests/turnSpeed.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/subagents/repoMap") || p.includes("repoMap.test.ts"),
     tests: ["tests/repoMap.test.ts"],
   },

@@ -640,6 +640,7 @@ export async function runChatTurn(
     // TOKEN ECONOMICS (a): per-round prompt-token integral + compaction count,
     // rolled up onto the assistant message and the thread record.
     const roundPromptTokens: number[] = [];
+    const roundGenerationMs: number[] = [];
     let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
     // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
     // turnMicroElisions declared with the other turn state, so both persist
@@ -931,6 +932,7 @@ export async function runChatTurn(
       let roundFinishReason: string | undefined = undefined;
       let roundSizeCapped = false;
       const toolCallsFromMessage: LlmToolCall[] = [];
+      const roundStreamStartMs = Date.now();
 
       try {
         for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
@@ -1016,6 +1018,7 @@ export async function runChatTurn(
           throw roundErr;
         }
       } finally {
+        roundGenerationMs.push(Math.max(1, Date.now() - roundStreamStartMs));
         roundDeadline.clear();
         if (activeThreadId) {
           clearRoundAbortController(activeThreadId, roundAbortController);
@@ -2137,6 +2140,7 @@ export async function runChatTurn(
         roundFinishReasons: roundFinishReasons.length > 0 ? roundFinishReasons : undefined,
         outputTokens: finalOutputTokens,
         roundPromptTokens: roundPromptTokens,
+        roundGenerationMs: roundGenerationMs.length > 0 ? roundGenerationMs : undefined,
         // TOKEN ECONOMICS (c): micro-elision audit rides on the final record.
         microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
         // TOKEN ECONOMICS (d): read-dedup audit rides on the final record.
@@ -2164,6 +2168,7 @@ export async function runChatTurn(
       type: "done",
       status: turnStatus,
       roundPromptTokens,
+      roundGenerationMs: roundGenerationMs.length > 0 ? roundGenerationMs : undefined,
       outputTokens: finalOutputTokens,
       isIncomplete: turnStatus === "incomplete" ? true : undefined,
       attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
