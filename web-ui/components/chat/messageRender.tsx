@@ -25,6 +25,8 @@ import { ExecutionTraceItem } from "../ExecutionTrace";
 import { CompletionVerificationBadge } from "../CompletionVerificationBadge";
 import { SvgViewer, SvgFileLink } from "../SvgViewer";
 import { LiveRunBlock } from "../LiveRunBlock";
+import { LiveActivityHeader } from "../LiveActivityHeader";
+import { phaseLabelForTool } from "../../lib/liveActivity";
 import { CodeBlock } from "../ArtifactRenderers";
 import {
   isSvgCode,
@@ -40,11 +42,13 @@ import {
   formatHumanReadableTrace,
   getServedByNote,
   extractFileWriteDiffsFromTraces,
+  formatElapsedDuration,
   formatMessageTimestamp,
   displayRepoPath,
   displayBasename,
 } from "../../lib/chatUtils";
 import { CanvasDiffCard, CanvasFileOpenButton } from "../ArtifactCanvas";
+import { resolveTurnStatusPhase } from "../../lib/chatStatus";
 import { TaskManifest } from "../../lib/subagents/types";
 import { formatFileSize } from "../../lib/chat/attachments";
 import { CompactionPill } from "./compactionPill";
@@ -159,10 +163,10 @@ export function ChatMessageItem({
   isLoading,
   isStoppingTask,
   activeAssistantMsgId,
-  completedTurnMsgId: _completedTurnMsgId,
-  streamStatus: _streamStatus,
-  turnStartedAtMs: _turnStartedAtMs,
-  lastActivityAtMs: _lastActivityAtMs,
+  completedTurnMsgId,
+  streamStatus,
+  turnStartedAtMs,
+  lastActivityAtMs,
   expandedTraces,
   expandedProofs,
   hasResolvedDetachedTurn,
@@ -332,10 +336,62 @@ export function ChatMessageItem({
                   ? liveTurnTraces
                   : m.traces || [];
               const hasThought = Boolean(m.thought && m.thought.trim());
-              if (!hasThought && !isStreamingThis && turnTraces.length === 0) return null;
+              const showDoneChip = Boolean(
+                !isStreamingThis && completedTurnMsgId === m.id && typeof m.durationMs === "number"
+              );
+              if (!hasThought && !isStreamingThis && !showDoneChip && turnTraces.length === 0)
+                return null;
+
+              const liveLastTrace =
+                liveTurnTraces.length > 0 ? liveTurnTraces[liveTurnTraces.length - 1] : null;
+              const msgLastTrace =
+                m.traces && m.traces.length > 0 ? m.traces[m.traces.length - 1] : null;
+              const statusTool = streamStatus
+                ? (streamStatus.match(
+                    /^(?:Running|Executing|Invoking)\s+([a-zA-Z0-9_.\-]+)/i
+                  )?.[1] ?? null)
+                : null;
+              const toolForPhase = liveLastTrace?.tool || msgLastTrace?.tool || statusTool;
+              const phaseLabel = toolForPhase
+                ? phaseLabelForTool(toolForPhase)
+                : (resolveTurnStatusPhase({
+                    isStreaming: true,
+                    streamStatus,
+                    hasThought: Boolean(m.thought),
+                    hasContent: Boolean(m.content),
+                  }) ?? "Starting turn…");
+              const parsedTs = m.timestamp ? Date.parse(m.timestamp) : NaN;
+              const startedAtMs =
+                turnStartedAtMs ?? (Number.isNaN(parsedTs) ? lastActivityAtMs : parsedTs);
+              const traceCount = Math.max(
+                m.traces?.length ?? 0,
+                isStreamingThis ? liveTurnTraces.length : 0
+              );
 
               return (
                 <div className="w-full space-y-2">
+                  {isStreamingThis && (
+                    <LiveActivityHeader
+                      startedAtMs={startedAtMs}
+                      lastActivityAtMs={lastActivityAtMs}
+                      round={m.roundPromptTokens?.length}
+                      traceCount={traceCount}
+                      traces={
+                        isStreamingThis ? (m.traces?.length ? m.traces : liveTurnTraces) : m.traces
+                      }
+                      phaseLabel={phaseLabel}
+                      activityLabel={statusTool ? null : streamStatus}
+                      isStreaming={isStreamingThis}
+                    />
+                  )}
+                  {showDoneChip && (
+                    <div
+                      data-testid="turn-done-chip"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
+                    >
+                      <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
+                    </div>
+                  )}
                   {(hasThought || isStreamingThis) && (
                     <ThinkingPreviewBlock
                       thought={m.thought}

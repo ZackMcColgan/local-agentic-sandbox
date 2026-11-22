@@ -2647,7 +2647,7 @@ export function ChatStream({
             </div>
           </div>
 
-          {/* Floating "↓ Live" pill when user scrolls up */}
+          {/* Floating "Jump to bottom" button */}
           {isUserScrolledUp && (
             <div className="flex justify-center py-2 z-30 pointer-events-none bg-transparent">
               <button
@@ -2655,7 +2655,7 @@ export function ChatStream({
                 data-testid="live-follow-pill"
                 onClick={() => scrollToBottom("smooth")}
                 className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
-                title="Jump to live"
+                title="Jump to bottom"
                 aria-label="Jump to bottom"
               >
                 <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
