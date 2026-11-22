@@ -1152,7 +1152,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p.includes("lib/retryAfter"),
-    tests: ["tests/retryAfter.test.ts"]
+    tests: ["tests/retryAfter.test.ts"],
   },
   {
     match: (p) => p.includes("lib/fileParser") || p.includes("lib/visionProcessor"),
