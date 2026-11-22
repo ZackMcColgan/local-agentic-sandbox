@@ -283,7 +283,8 @@ describe("activityTimeline — pure row model", () => {
       {
         tool: "host_run_powershell",
         args: {
-          command: '$ErrorActionPreference = "Continue"; $dir="web-ui"; Set-Location "C:\\repo"; npm run test:gate',
+          command:
+            '$ErrorActionPreference = "Continue"; $dir="web-ui"; Set-Location "C:\\repo"; npm run test:gate',
         },
         durationMs: 80,
       },
@@ -371,7 +372,12 @@ describe("activityTimeline — pure row model", () => {
   it("interleaves thinkingSegments inline before each round's action rows (think-act-think-act)", () => {
     const traces: TimelineTraceInput[] = [
       { tool: "workspace_read_file", args: { path: "a.ts" }, durationMs: 20, round: 1 },
-      { tool: "workspace_write_file", args: { path: "b.ts", content: "x=1" }, durationMs: 30, round: 2 },
+      {
+        tool: "workspace_write_file",
+        args: { path: "b.ts", content: "x=1" },
+        durationMs: 30,
+        round: 2,
+      },
     ];
     const rows = buildActivityTimeline(traces, undefined, {
       thinkingSegments: [

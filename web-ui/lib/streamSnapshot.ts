@@ -82,7 +82,11 @@ export class ThrottledStreamSnapshot {
     if (Array.isArray(opts?.roundGenerationMs) && opts.roundGenerationMs.length > 0) {
       this.lastRoundGenerationMs = [...opts.roundGenerationMs];
     }
-    if (typeof opts?.outputTokens === "number" && Number.isFinite(opts.outputTokens) && opts.outputTokens > 0) {
+    if (
+      typeof opts?.outputTokens === "number" &&
+      Number.isFinite(opts.outputTokens) &&
+      opts.outputTokens > 0
+    ) {
       this.lastOutputTokens = opts.outputTokens;
     }
     if (Array.isArray(opts?.thinkingSegments) && opts.thinkingSegments.length > 0) {

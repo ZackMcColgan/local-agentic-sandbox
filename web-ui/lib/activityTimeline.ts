@@ -7,14 +7,7 @@
  */
 
 export type TimelineToolKind =
-  | "read"
-  | "search"
-  | "write"
-  | "shell"
-  | "web"
-  | "subagent"
-  | "thinking"
-  | "other";
+  "read" | "search" | "write" | "shell" | "web" | "subagent" | "thinking" | "other";
 
 export type TimelineRowStatus = "running" | "success" | "error";
 
@@ -206,7 +199,9 @@ function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): stri
   }
   if (kind === "shell") {
     const cmd = readStringArg(args, ["command", "cmd", "script"]);
-    return cmd ? truncate(stripShellBoilerplate(cmd), MAX_TARGET_LEN) : trace.tool.replace(/_/g, " ");
+    return cmd
+      ? truncate(stripShellBoilerplate(cmd), MAX_TARGET_LEN)
+      : trace.tool.replace(/_/g, " ");
   }
   if (kind === "web") {
     const url = readStringArg(args, ["url", "uri", "query"]);
