@@ -679,6 +679,11 @@ export async function runChatTurn(
           workspaceRoot: chunkWorkspaceRoot,
           handoffPath: chunkHandoffPath,
           runlogPath: chunkRunlogPath,
+          // Only stage/commit/push git state when running inside an isolated
+          // per-turn worktree. When falling back to the shared host checkout
+          // root (board #63), keep handoff/runlog resolution without mutating
+          // host git state.
+          bankGit: Boolean(_worktree),
           currentState: (
             carriedToolRoundProse ||
             carriedLengthContent ||

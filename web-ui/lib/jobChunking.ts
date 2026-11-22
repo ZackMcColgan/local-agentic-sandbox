@@ -74,10 +74,16 @@ function getGitBranch(cwd: string): string {
 }
 
 function getGitHeadSha(cwd: string): string {
-  return execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd,
-    encoding: "utf8",
-  }).trim();
+  try {
+    return (
+      execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd,
+        encoding: "utf8",
+      }).trim() || "unknown"
+    );
+  } catch {
+    return "unknown";
+  }
 }
 
 function bankGitWork(cwd: string, jobId: string): { branch: string; headSha: string } {
@@ -117,16 +123,30 @@ export interface BankChunkHandoffInput {
   nextStep: string;
   openQuestions: string[];
   completedSteps: number;
+  /**
+   * When true (default), stage/commit/push dirty work in `workspaceRoot` before
+   * writing the handoff. Set to false when `workspaceRoot` is the shared host
+   * checkout rather than an isolated per-turn worktree so chunking reads
+   * branch/HEAD without mutating or committing unrelated host files.
+   */
+  bankGit?: boolean;
 }
 
 /**
- * Banks current git work, appends a runlog entry, and writes a ChunkHandoffBrief
- * using the existing MilestoneHandoffState persistence path.
+ * Banks current git work (when `bankGit` is not false), appends a runlog entry,
+ * and writes a ChunkHandoffBrief using the existing MilestoneHandoffState
+ * persistence path.
  */
 export async function bankAndWriteChunkHandoff(
   input: BankChunkHandoffInput
 ): Promise<ChunkHandoffBrief> {
-  const { branch, headSha } = bankGitWork(input.workspaceRoot, input.jobId);
+  const { branch, headSha } =
+    input.bankGit === false
+      ? {
+          branch: getGitBranch(input.workspaceRoot),
+          headSha: getGitHeadSha(input.workspaceRoot),
+        }
+      : bankGitWork(input.workspaceRoot, input.jobId);
   const updatedAt = new Date().toISOString();
 
   if (input.runlogPath) {
@@ -322,6 +342,8 @@ export interface LiveTurnChunkBudgetInput {
   currentState: string;
   nextStep: string;
   openQuestions: string[];
+  /** Passed through to `bankAndWriteChunkHandoff` (defaults to true). */
+  bankGit?: boolean;
 }
 
 export type LiveTurnChunkBudgetResult =
@@ -354,6 +376,7 @@ export async function handleLiveTurnChunkBudget(
     nextStep: input.nextStep,
     openQuestions: input.openQuestions,
     completedSteps: input.roundsUsed,
+    bankGit: input.bankGit,
   });
 
   return {
