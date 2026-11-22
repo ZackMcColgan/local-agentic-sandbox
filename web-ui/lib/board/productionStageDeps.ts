@@ -13,6 +13,7 @@ import type {
   SelfDeployVerifiedDeps,
   VerifyDeploymentResult,
 } from "../deploy/selfDeployVerified";
+import { readResponseStreamTail } from "./streamTail";
 
 export const DEFAULT_REVIEWER_TIMEOUT_MS = 10 * 60 * 1000;
 export const DEFAULT_REVIEWER_POLL_INTERVAL_MS = 2_000;
@@ -35,10 +36,19 @@ export interface StageThreadStore {
   getThread: (id: string) => Promise<Thread | null> | Thread | null;
 }
 
+export interface ReviewerChatDispatchResult {
+  ok: boolean;
+  status: number;
+  /** Bounded tail of the chat response stream (at most `STREAM_TAIL_CAP_BYTES`), not the full stream. */
+  rawStream?: string;
+  /** Total bytes consumed from the response stream before tail truncation. */
+  streamTotalBytes?: number;
+}
+
 export type ReviewerChatDispatcher = (params: {
   threadId: string;
   brief: string;
-}) => Promise<{ ok: boolean; status: number; rawStream?: string }>;
+}) => Promise<ReviewerChatDispatchResult>;
 
 export interface ProductionStageDepsOptions {
   executeHostTool?: HostBridgeExecutor;
@@ -72,7 +82,7 @@ function defaultSleep(ms: number): Promise<void> {
 async function defaultDispatchChatTurn(params: {
   threadId: string;
   brief: string;
-}): Promise<{ ok: boolean; status: number; rawStream?: string }> {
+}): Promise<ReviewerChatDispatchResult> {
   const { POST: chatPost } = await import("../../app/api/chat/route");
   const chatReq = new NextRequest("http://localhost/api/chat", {
     method: "POST",
@@ -83,8 +93,8 @@ async function defaultDispatchChatTurn(params: {
     }),
   });
   const response = await chatPost(chatReq);
-  const rawStream = await response.text();
-  return { ok: response.ok, status: response.status, rawStream };
+  const { tail: rawStream, totalBytes: streamTotalBytes } = await readResponseStreamTail(response);
+  return { ok: response.ok, status: response.status, rawStream, streamTotalBytes };
 }
 
 function isCommandSuccess(res: HostBridgeCommandResult | null | undefined): boolean {

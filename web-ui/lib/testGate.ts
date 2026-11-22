@@ -184,6 +184,14 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/streamTail") ||
+      p.includes("lib/board/productionDrain") ||
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("boardStreamTail.test.ts"),
+    tests: ["tests/boardStreamTail.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/productionDrain") || p.includes("boardDrainExecution.test.ts"),
     tests: ["tests/boardDrainExecution.test.ts"],
   },
