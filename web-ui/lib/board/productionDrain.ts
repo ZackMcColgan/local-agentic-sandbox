@@ -21,15 +21,25 @@ import { executeHostTool as defaultExecuteHostTool } from "../hostMode";
 import { activeExecutionSet, type ThreadStore } from "../threads/threadStore";
 import { getSharedSlotScheduler } from "../slotScheduler";
 import { POST as chatPost } from "../../app/api/chat/route";
+import { readResponseStreamTail } from "./streamTail";
 
 export interface ProductionChatDispatcherParams {
   threadId: string;
   brief: string;
 }
 
+export interface ProductionChatDispatchResult {
+  ok: boolean;
+  status: number;
+  /** Bounded tail of the chat response stream (at most `STREAM_TAIL_CAP_BYTES`), not the full stream. */
+  rawStream: string;
+  /** Total bytes consumed from the response stream before tail truncation. */
+  streamTotalBytes?: number;
+}
+
 export type ProductionChatDispatcher = (
   params: ProductionChatDispatcherParams
-) => Promise<{ ok: boolean; status: number; rawStream: string }>;
+) => Promise<ProductionChatDispatchResult>;
 
 export interface ProductionIssueAndWaitOptions {
   threadStore: StageThreadStore | null;
@@ -110,7 +120,7 @@ function isHostCommandSuccess(res: HostBridgeCommandResult | null | undefined): 
 
 async function defaultDispatchChatTurn(
   params: ProductionChatDispatcherParams
-): Promise<{ ok: boolean; status: number; rawStream: string }> {
+): Promise<ProductionChatDispatchResult> {
   const chatReq = new NextRequest("http://localhost/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -120,8 +130,8 @@ async function defaultDispatchChatTurn(
     }),
   });
   const response = await chatPost(chatReq);
-  const rawStream = await response.text();
-  return { ok: response.ok, status: response.status, rawStream };
+  const { tail: rawStream, totalBytes: streamTotalBytes } = await readResponseStreamTail(response);
+  return { ok: response.ok, status: response.status, rawStream, streamTotalBytes };
 }
 
 export async function verifyHostCheckoutGrounding(
@@ -239,6 +249,14 @@ export function createProductionIssueAndWait(
       }
 
       const metadata = extractJobOutcomeMetadata(lastAssistant, response.rawStream);
+      const mem = process.memoryUsage();
+      const rssMb = (mem.rss / (1024 * 1024)).toFixed(1);
+      const heapUsedMb = (mem.heapUsed / (1024 * 1024)).toFixed(1);
+      const streamTotalBytes =
+        response.streamTotalBytes ?? Buffer.byteLength(response.rawStream, "utf8");
+      console.info(
+        `[board-drain] job completed itemId=${item.id} streamTotalBytes=${streamTotalBytes} rssMB=${rssMb} heapUsedMB=${heapUsedMb}`
+      );
 
       return {
         status: "completed",
