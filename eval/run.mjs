@@ -100,7 +100,11 @@ export async function callEndpoint(endpoint, model, prompt, taskId, opts = {}) {
     const msg = json?.choices?.[0]?.message || {};
     const finishReason = json?.choices?.[0]?.finish_reason;
 
-    if (finishReason === "tool_calls" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+    if (
+      finishReason === "tool_calls" &&
+      Array.isArray(msg.tool_calls) &&
+      msg.tool_calls.length > 0
+    ) {
       toolCallsExecuted += msg.tool_calls.length;
       messages.push({ role: "assistant", content: msg.content || "", tool_calls: msg.tool_calls });
       // Simulate the injected stall probe: the tool never returns real output,
@@ -300,10 +304,20 @@ export async function runEvalTasks(tasks, args, opts = {}) {
       const message = err?.message ?? String(err);
       fs.writeFileSync(
         path.join(runDir, `${task.id}.error.json`),
-        JSON.stringify({ taskId: task.id, mode: args.mode, error: message, at: new Date().toISOString() }, null, 2),
+        JSON.stringify(
+          { taskId: task.id, mode: args.mode, error: message, at: new Date().toISOString() },
+          null,
+          2
+        ),
         "utf8"
       );
-      results.push({ id: task.id, title: task.title, passed: false, durationMs: 0, evidence: { error: message } });
+      results.push({
+        id: task.id,
+        title: task.title,
+        passed: false,
+        durationMs: 0,
+        evidence: { error: message },
+      });
     }
   }
 

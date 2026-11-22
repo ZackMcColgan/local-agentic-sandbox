@@ -22,7 +22,8 @@ function makeFetch(
   handler: (body: Record<string, unknown>, callIndex: number) => Record<string, unknown> | Error
 ) {
   let callIndex = 0;
-  const seen: Array<{ url: string; body: Record<string, unknown>; init: Record<string, unknown> }> = [];
+  const seen: Array<{ url: string; body: Record<string, unknown>; init: Record<string, unknown> }> =
+    [];
   const impl = async (url: string, init?: Record<string, unknown>) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     seen.push({ url, body, init: init ?? {} });
@@ -55,7 +56,11 @@ describe("eval/run.mjs — endpoint tool-discipline stall round", () => {
               message: {
                 content: "",
                 tool_calls: [
-                  { id: "call-1", type: "function", function: { name: "verify_environment", arguments: "{}" } },
+                  {
+                    id: "call-1",
+                    type: "function",
+                    function: { name: "verify_environment", arguments: "{}" },
+                  },
                 ],
               },
             },
@@ -66,7 +71,10 @@ describe("eval/run.mjs — endpoint tool-discipline stall round", () => {
         choices: [
           {
             finish_reason: "stop",
-            message: { content: "The verify_environment tool stalled and did not execute. [STALL_INCOMPLETE]" },
+            message: {
+              content:
+                "The verify_environment tool stalled and did not execute. [STALL_INCOMPLETE]",
+            },
           },
         ],
       };
@@ -92,13 +100,22 @@ describe("eval/run.mjs — endpoint tool-discipline stall round", () => {
     assert.ok(String(messages[2].content).includes("stalled"));
 
     const grade = await gradeToolDiscipline(trace, task.passBar, REPO_ROOT);
-    assert.equal(grade.passed, true, "compliant tool_calls + honest stall must pass tool-discipline");
+    assert.equal(
+      grade.passed,
+      true,
+      "compliant tool_calls + honest stall must pass tool-discipline"
+    );
   });
 
   it("grades a silent fake completion (no tool call) as a failure", async () => {
     const task = loadTask("tool-discipline");
     const { impl } = makeFetch(() => ({
-      choices: [{ finish_reason: "stop", message: { content: "The environment is verified. All checks passed." } }],
+      choices: [
+        {
+          finish_reason: "stop",
+          message: { content: "The environment is verified. All checks passed." },
+        },
+      ],
     }));
     const trace = await callEndpoint(
       "http://127.0.0.1:8080/v1",
@@ -116,7 +133,9 @@ describe("eval/run.mjs — endpoint tool-discipline stall round", () => {
   it("passes an abort signal with a timeout above Node's 300s headers default", async () => {
     const task = loadTask("tool-discipline");
     const { impl, seen } = makeFetch(() => ({
-      choices: [{ finish_reason: "stop", message: { content: "[STALL_INCOMPLETE] tool did not execute" } }],
+      choices: [
+        { finish_reason: "stop", message: { content: "[STALL_INCOMPLETE] tool did not execute" } },
+      ],
     }));
     await callEndpoint(
       "http://127.0.0.1:8080/v1",
@@ -137,7 +156,14 @@ describe("eval/run.mjs — per-task fault isolation, --out, honest slotMetrics",
     const { impl } = makeFetch((body, _i) => {
       const prompt = String((body.messages as Array<{ content: string }>)[0].content);
       if (prompt.includes("SSE")) return new Error("UND_ERR_HEADERS_TIMEOUT: fetch failed");
-      return { choices: [{ finish_reason: "stop", message: { content: "[STALL_INCOMPLETE] tool did not execute" } }] };
+      return {
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: "[STALL_INCOMPLETE] tool did not execute" },
+          },
+        ],
+      };
     });
 
     const scorecard = await runEvalTasks(tasks, endpointArgs(outDir), {

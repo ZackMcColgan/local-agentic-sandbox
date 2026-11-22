@@ -333,6 +333,13 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("eval/run.mjs") || p.includes("evalRunnerJobMode.test.ts"),
     tests: ["tests/evalRunnerJobMode.test.ts"],
   },
+  {
+    match: (p) =>
+      p.includes("eval/run.mjs") ||
+      p.includes("eval/graders/tool-discipline.mjs") ||
+      p.includes("evalRunnerEndpointDiscipline.test.ts"),
+    tests: ["tests/evalRunnerEndpointDiscipline.test.ts"],
+  },
   // Lane C UI polish (header, canvas & desktop top bar)
   {
     match: (p) =>
