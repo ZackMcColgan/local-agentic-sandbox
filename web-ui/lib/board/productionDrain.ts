@@ -29,6 +29,7 @@ import {
 } from "../jobChunking";
 import { readMilestoneHandoff } from "../subagents/finishVerificationGate";
 import { POST as chatPost } from "../../app/api/chat/route";
+import { waitForTurnSettled } from "../chat/turnEngine";
 import { readResponseStreamTail } from "./streamTail";
 
 export interface ProductionChatDispatcherParams {
@@ -539,14 +540,28 @@ async function defaultDispatchChatTurn(
 ): Promise<ProductionChatDispatchResult> {
   const chatReq = new NextRequest("http://localhost/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-internal-consumer": "in-process",
+      "x-dispatch-source": "board-drain",
+    },
     body: JSON.stringify({
       threadId: params.threadId,
       messages: [{ role: "user", content: params.brief }],
     }),
   });
   const response = await chatPost(chatReq);
-  const { tail: rawStream, totalBytes: streamTotalBytes } = await readResponseStreamTail(response);
+  let rawStream = "";
+  let streamTotalBytes = 0;
+  try {
+    const tailResult = await readResponseStreamTail(response);
+    rawStream = tailResult.tail;
+    streamTotalBytes = tailResult.totalBytes;
+  } catch {
+    // Never fail a live in-process turn on stream backpressure/reader error;
+    // await the turn's own settlement below and evaluate its persisted outcome.
+  }
+  await waitForTurnSettled(params.threadId);
   return { ok: response.ok, status: response.status, rawStream, streamTotalBytes };
 }
 

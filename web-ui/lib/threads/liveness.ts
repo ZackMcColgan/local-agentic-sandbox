@@ -52,6 +52,8 @@ export function computeTurnLiveness(
 ): ThreadLiveness {
   const isLive = thread.status === "active" || thread.status === "running" || isLiveOverride;
   if (!isLive) return "settled";
+  // Queued/pre-round-0 wait must not age against the stall window.
+  if (thread.queuedForExecution) return "alive";
   const touchedAt = Date.parse(thread.updatedAt || thread.createdAt || "");
   if (!Number.isFinite(touchedAt)) return "stalled";
   return now - touchedAt <= TURN_STALL_WINDOW_MS ? "alive" : "stalled";

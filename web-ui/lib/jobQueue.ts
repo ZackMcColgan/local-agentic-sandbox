@@ -3,6 +3,8 @@ export interface JobRequest {
   id: string;
   threadId: string;
   prompt: string;
+  /** Lower numeric value = higher priority (defaults to 0; FIFO within equal priority). */
+  priority?: number;
 }
 export interface QueuedJob {
   id: string;
@@ -10,13 +12,14 @@ export interface QueuedJob {
   prompt: string;
   position: number;
   status: JobStatus;
+  priority?: number;
 }
 export interface JobQueueSnapshot {
   running: QueuedJob | null;
   queued: QueuedJob[];
 }
 
-/** Single-slot FIFO job queue. Jobs execute strictly sequentially. */
+/** Single-slot priority-aware FIFO job queue. Jobs execute strictly sequentially. */
 export class JobQueue {
   private running: QueuedJob | null = null;
   private pending: QueuedJob[] = [];
@@ -24,14 +27,27 @@ export class JobQueue {
   private jobExecutors = new WeakMap<QueuedJob, (job: QueuedJob) => Promise<void>>();
 
   enqueue(req: JobRequest): QueuedJob {
+    const priority = req.priority ?? 0;
     const job: QueuedJob = {
       id: req.id,
       threadId: req.threadId,
       prompt: req.prompt,
       position: this.pending.length + 1,
       status: "queued",
+      ...(req.priority !== undefined ? { priority: req.priority } : {}),
     };
-    this.pending.push(job);
+    let insertIdx = this.pending.length;
+    for (let i = 0; i < this.pending.length; i++) {
+      const existingPriority = this.pending[i].priority ?? 0;
+      if (priority < existingPriority) {
+        insertIdx = i;
+        break;
+      }
+    }
+    this.pending.splice(insertIdx, 0, job);
+    this.pending.forEach((j, i) => {
+      j.position = i + 1;
+    });
     return job;
   }
   snapshot(): JobQueueSnapshot {

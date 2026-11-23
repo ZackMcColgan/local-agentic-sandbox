@@ -53,6 +53,11 @@ export interface LLMStreamChunk {
   promptTokens?: number;
   eval_count?: number;
   prompt_eval_count?: number;
+  /** Progress heartbeat yielded while streaming delta.tool_calls fragments before EOF. */
+  toolCallProgress?: {
+    name?: string;
+    argumentChars: number;
+  };
   [key: string]: unknown;
 }
 
@@ -815,6 +820,10 @@ export class LlamaCppProvider implements LLMProvider {
 
           // Handle streaming delta tool calls
           if (Array.isArray(choice.delta?.tool_calls)) {
+            let sawToolCallDelta = false;
+            let primaryAcc:
+              | { id?: string; type?: string; function: { name: string; arguments: string } }
+              | undefined;
             for (const tc of choice.delta.tool_calls) {
               const idx = tc.index ?? 0;
               // Guard against runaway multi-index degenerate loops: only track primary tool call (index 0)
@@ -831,11 +840,28 @@ export class LlamaCppProvider implements LLMProvider {
               if (tc.type) acc.type = tc.type;
               if (tc.function?.name) acc.function.name += tc.function.name;
               if (tc.function?.arguments) acc.function.arguments += tc.function.arguments;
+              sawToolCallDelta = true;
+              primaryAcc = acc;
+            }
+            // Yield a lightweight progress chunk so callers (e.g. round inactivity
+            // deadlines) see life during long tool-call generations rather than
+            // buffering silently until EOF.
+            if (sawToolCallDelta) {
+              yield {
+                toolCallProgress: {
+                  name: primaryAcc?.function.name || undefined,
+                  argumentChars: primaryAcc?.function.arguments.length ?? 0,
+                },
+              };
             }
           }
 
-          // Handle non-delta message tool calls: accumulate into toolCallsAccumulator, do NOT yield on every chunk!
+          // Handle non-delta message tool calls: accumulate into toolCallsAccumulator, emit progress only
           if (Array.isArray(choice.message?.tool_calls)) {
+            let sawMessageToolCall = false;
+            let primaryAcc:
+              | { id?: string; type?: string; function: { name: string; arguments: string } }
+              | undefined;
             for (let i = 0; i < choice.message.tool_calls.length; i++) {
               const tc = choice.message.tool_calls[i];
               const idx = tc.index ?? i;
@@ -856,6 +882,16 @@ export class LlamaCppProvider implements LLMProvider {
               } else if (rawArgs && typeof rawArgs === "object") {
                 acc.function.arguments = JSON.stringify(rawArgs);
               }
+              sawMessageToolCall = true;
+              if (idx === 0) primaryAcc = acc;
+            }
+            if (sawMessageToolCall) {
+              yield {
+                toolCallProgress: {
+                  name: primaryAcc?.function.name || undefined,
+                  argumentChars: primaryAcc?.function.arguments.length ?? 0,
+                },
+              };
             }
           }
         }

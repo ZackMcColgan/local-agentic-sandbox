@@ -917,6 +917,22 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/chatTriage.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/chat/turnEngine") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/board/productionDrain") ||
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("lib/hostMode") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/threads/liveness") ||
+      p.includes("lib/threads/inAppSupervisor") ||
+      p.includes("lib/jobQueue") ||
+      p.includes("turnSurvival.test.ts"),
+    tests: ["tests/turnSurvival.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/chat/turnEngine") || p.includes("chatTurnEngine.test.ts"),
     tests: ["tests/chatTurnEngine.test.ts"],
   },

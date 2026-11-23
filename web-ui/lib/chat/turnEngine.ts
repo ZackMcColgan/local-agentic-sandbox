@@ -20,7 +20,42 @@ export interface SseEventWriterOptions {
   activeThreadId: string | null;
   writerTimeoutMs?: number;
   heartbeatIntervalMs?: number;
+  /**
+   * True when the stream consumer is an in-process caller (e.g. board drain)
+   * rather than a live browser HTTP SSE response. On writer backpressure timeout,
+   * in-process mode drops the write side only and never aborts stream.readable.
+   */
+  inProcessConsumer?: boolean;
   log?: (...args: unknown[]) => void;
+}
+
+const gTurnSettle = globalThis as {
+  __sandboxTurnSettledPromises?: Map<string, Promise<void>>;
+};
+const turnSettledPromises: Map<string, Promise<void>> = gTurnSettle.__sandboxTurnSettledPromises ||
+(gTurnSettle.__sandboxTurnSettledPromises = new Map<string, Promise<void>>());
+
+/**
+ * Registers the active turn's settle promise so in-process consumers (e.g. board drain)
+ * can await the turn's own settlement rather than relying on SSE stream death.
+ */
+export function registerTurnSettledPromise(threadId: string, settled: Promise<void>): void {
+  const tracked = settled.finally(() => {
+    if (turnSettledPromises.get(threadId) === tracked) {
+      turnSettledPromises.delete(threadId);
+    }
+  });
+  turnSettledPromises.set(threadId, tracked);
+}
+
+/**
+ * Awaits the currently registered turn's settle promise for a thread, if any.
+ */
+export async function waitForTurnSettled(threadId: string): Promise<void> {
+  const pending = turnSettledPromises.get(threadId);
+  if (pending) {
+    await pending.catch(() => {});
+  }
 }
 
 export interface SseEventWriter {
@@ -44,6 +79,7 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
     activeThreadId,
     writerTimeoutMs = 2000,
     heartbeatIntervalMs = 10_000,
+    inProcessConsumer = false,
     log = console.log,
   } = options;
 
@@ -51,6 +87,7 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
   const writer = stream.writable.getWriter();
   let readableDrainStarted = false;
   let clientDisconnected = false;
+  let writeSideDropped = false;
 
   const startReadableDrain = () => {
     if (readableDrainStarted) return;
@@ -90,7 +127,7 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
   signal.addEventListener("abort", cleanupClientSignal);
 
   const sendEvent = async (data: Record<string, unknown>) => {
-    if (clientDisconnected || signal.aborted) {
+    if (clientDisconnected || writeSideDropped || signal.aborted) {
       stopHeartbeat();
       return;
     }
@@ -111,8 +148,18 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
       ]);
     } catch (err: unknown) {
       stopHeartbeat();
-      clientDisconnected = true;
       const errMessage = err instanceof Error ? err.message : undefined;
+      if (inProcessConsumer && !signal.aborted && errMessage === "writer timeout") {
+        // In-process consumer (board drain): apply backpressure by dropping the
+        // write side only. NEVER abort stream.readable — the turn's own settle
+        // is the drain's completion signal.
+        writeSideDropped = true;
+        log(
+          `[ChatRoute] In-process SSE writer backpressure timeout for thread ${activeThreadId || "ephemeral"}. Dropping write side; turn continuing cleanly.`
+        );
+        return;
+      }
+      clientDisconnected = true;
       if (!signal.aborted && errMessage === "writer timeout") {
         startReadableDrain();
         try {
@@ -132,7 +179,7 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
   };
 
   heartbeatInterval = setInterval(() => {
-    if (clientDisconnected || signal.aborted) {
+    if (clientDisconnected || writeSideDropped || signal.aborted) {
       stopHeartbeat();
       return;
     }
@@ -147,6 +194,10 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
   const closeWriterPreStart = (timeoutMs = 1000) => {
     startReadableDrain();
     try {
+      if (inProcessConsumer) {
+        writer.close().catch(() => {});
+        return;
+      }
       if (clientDisconnected) {
         try {
           writer.abort(new Error("client disconnected")).catch(() => {});
@@ -165,6 +216,24 @@ export function createSseEventWriter(options: SseEventWriterOptions): SseEventWr
 
   const closeWriterWithTimeout = async (timeoutMs = 1000) => {
     startReadableDrain();
+    if (inProcessConsumer) {
+      try {
+        const closePromise = writer.close();
+        closePromise.catch(() => {});
+        let closeTimeoutId: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            closePromise,
+            new Promise<void>((resolve) => {
+              closeTimeoutId = setTimeout(resolve, timeoutMs);
+            }),
+          ]);
+        } finally {
+          if (closeTimeoutId !== undefined) clearTimeout(closeTimeoutId);
+        }
+      } catch {}
+      return;
+    }
     try {
       if (clientDisconnected) {
         try {
@@ -443,7 +512,7 @@ export async function runSynthesisPass(
         );
         setAccumulatedStreamedTokens(nextStreamed);
         passDeadline.arm();
-        if (nextStreamed.length > MAX_STREAMED_CONTENT_CHARS) {
+        if (passContent.length > MAX_STREAMED_CONTENT_CHARS) {
           const capped = nextStreamed + TURN_SIZE_LIMIT_MARKER;
           setAccumulatedStreamedTokens(capped);
           maybeWriteSnapshot(capped, undefined);

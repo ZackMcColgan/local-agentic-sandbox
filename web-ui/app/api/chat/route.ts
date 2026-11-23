@@ -7,6 +7,9 @@ import {
   deriveStoredThreadTitle,
   activeExecutionSet,
   markTurnActive,
+  clearTurnActive,
+  markTurnQueued,
+  clearTurnQueued,
   registerTurnAbortController,
   clearTurnAbortController,
   clearRoundAbortController,
@@ -33,6 +36,7 @@ import { getLLMProvider } from "@/lib/llm/provider";
 import {
   createSseEventWriter,
   buildAbortedAssistantMessage,
+  registerTurnSettledPromise,
   runChatTurn,
   type RunChatTurnDeps,
 } from "@/lib/chat/turnEngine";
@@ -84,6 +88,29 @@ async function* streamLlmChat(
   yield* provider.streamChat(llmBaseUrl, payload);
 }
 
+function resolveChatTurnPriority(
+  req: NextRequest,
+  dispatchSourceBody: unknown,
+  threadData: ChatThreadData | null
+): SlotPriority {
+  const rawSource = (
+    req.headers.get("x-dispatch-source") ||
+    (typeof dispatchSourceBody === "string" ? dispatchSourceBody : "")
+  )
+    .trim()
+    .toLowerCase();
+  if (rawSource === "board-drain" || rawSource === "board-job") {
+    return SlotPriority.P1_BUILDER;
+  }
+  if (rawSource === "board-reviewer" || rawSource === "orchestrator") {
+    return SlotPriority.P2_ORCHESTRATOR;
+  }
+  if (req.headers.get("x-internal-consumer") === "in-process" && threadData?.boardItemId) {
+    return SlotPriority.P1_BUILDER;
+  }
+  return SlotPriority.P0_OWNER;
+}
+
 export async function POST(req: NextRequest) {
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
   const toolClientMap = new Map<
@@ -91,6 +118,9 @@ export async function POST(req: NextRequest) {
     { client: Client | null; tier: "sandbox" | "browser" | "workspace" | "host" }
   >();
   let rootSpan: ReturnType<TelemetryTracer["startSpan"]> | null = null;
+  let registeredThreadId: string | null = null;
+  let registeredThreadsDir: string | undefined = undefined;
+  let turnEnqueued = false;
 
   try {
     const {
@@ -103,6 +133,7 @@ export async function POST(req: NextRequest) {
       approvalContinuationId,
       userMessageId: requestedUserMessageId,
       assistantMessageId: requestedAssistantMessageId,
+      dispatchSource: requestedDispatchSource,
     } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
@@ -212,6 +243,8 @@ export async function POST(req: NextRequest) {
       // CHAT-PRESENCE: register the turn marker before the first token exists, so
       // cross-device watchers see the running turn immediately.
       markTurnActive(activeThreadId);
+      registeredThreadId = activeThreadId;
+      registeredThreadsDir = threadsDir;
 
       // Seed initial streaming assistant message immediately so GET /api/threads/[id]
       // never sees a hole while the turn prepares tools/reasoning
@@ -228,6 +261,8 @@ export async function POST(req: NextRequest) {
       } catch (seedErr) {
         console.warn("[ChatRoute] Warning writing initial streaming placeholder:", seedErr);
       }
+      // Stall clock starts at turn execution (not enqueue); mark queued until runChatTurn starts.
+      markTurnQueued(activeThreadId, threadsDir);
     }
 
     // CHAT-8: throttled mid-turn snapshots (status "streaming"), upserted by message id.
@@ -384,10 +419,14 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       persistAssistantOnAbort();
     });
 
+    const inProcessConsumer = req.headers.get("x-internal-consumer") === "in-process";
+    const turnPriority = resolveChatTurnPriority(req, requestedDispatchSource, threadData);
+
     const sseWriter = createSseEventWriter({
       stream,
       signal: req.signal,
       activeThreadId,
+      inProcessConsumer,
     });
     const { sendEvent, cleanupClientSignal } = sseWriter;
 
@@ -446,7 +485,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // execute against the container's shared /workspace, so a worktree here
     // added git churn without providing isolation. Re-enable repoRoot only
     // when MCP workspace tools accept a workspace-root argument.
-    serializeTurn(
+    const turnHandle = serializeTurn(
       chatJobQueue,
       {
         id: `${assistantMessageId}-${process.pid}-${++chatTurnSeq}`,
@@ -454,7 +493,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         prompt: userPrompt,
       },
       {
-        priority: SlotPriority.P0_OWNER,
+        priority: turnPriority,
         scheduler: getSharedSlotScheduler(),
         signal: turnAbortController.signal,
         onQueued: (position) => {
@@ -468,6 +507,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           if (runTurnStarted || runTurnFinallyRan) return;
           sseWriter.stopHeartbeat();
           if (activeThreadId) {
+            activeExecutionSet.delete(activeThreadId);
+            clearTurnActive(activeThreadId);
+            clearTurnQueued(activeThreadId, threadsDir);
             clearTurnAbortController(activeThreadId);
             clearRoundAbortController(activeThreadId);
           }
@@ -477,6 +519,10 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         runTurn: (job, worktree) => runChatTurn(deps, job, worktree),
       }
     );
+    turnEnqueued = true;
+    if (activeThreadId) {
+      registerTurnSettledPromise(activeThreadId, turnHandle.settled);
+    }
 
     return new Response(stream.readable, {
       headers: {
@@ -486,6 +532,13 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       },
     });
   } catch (err: unknown) {
+    if (registeredThreadId && !turnEnqueued) {
+      activeExecutionSet.delete(registeredThreadId);
+      clearTurnActive(registeredThreadId);
+      clearTurnQueued(registeredThreadId, registeredThreadsDir);
+      clearTurnAbortController(registeredThreadId);
+      clearRoundAbortController(registeredThreadId);
+    }
     const errObj = err as { message?: string; statusCode?: number };
     const errMsg = String(errObj?.message || "");
     if (rootSpan) {

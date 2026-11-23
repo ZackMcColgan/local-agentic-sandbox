@@ -359,12 +359,23 @@ export function generateHostFileDiff(
 
 import { lintHostCommand } from "./commandDialectGuard";
 
+/** Default heartbeat cadence while a long-running host command executes (keeps turns well inside 600s stall window). */
+export const HOST_TOOL_HEARTBEAT_INTERVAL_MS = 30_000;
+
+export interface ExecuteHostToolOptions {
+  /** Periodic liveness callback fired while the host command executes. */
+  onHeartbeat?: (elapsedMs: number) => void;
+  /** Override heartbeat cadence (defaults to HOST_TOOL_HEARTBEAT_INTERVAL_MS). */
+  heartbeatIntervalMs?: number;
+}
+
 export async function executeHostTool(
   tool: string,
   args: Record<string, unknown>,
   approvalId?: string,
   capability?: unknown,
-  mergeGrant?: unknown
+  mergeGrant?: unknown,
+  options?: ExecuteHostToolOptions
 ): Promise<{
   ok?: boolean;
   success?: boolean;
@@ -411,6 +422,20 @@ export async function executeHostTool(
     headers["X-Host-Approval-Id"] = approvalId;
   }
 
+  const execStartMs = Date.now();
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  if (options?.onHeartbeat) {
+    const intervalMs = Math.max(10, options.heartbeatIntervalMs ?? HOST_TOOL_HEARTBEAT_INTERVAL_MS);
+    heartbeatTimer = setInterval(() => {
+      try {
+        options.onHeartbeat?.(Date.now() - execStartMs);
+      } catch {}
+    }, intervalMs);
+    if (typeof heartbeatTimer.unref === "function") {
+      heartbeatTimer.unref();
+    }
+  }
+
   let res: Response;
   try {
     res = await fetch(`${getHostRunnerBaseUrl()}/execute`, {
@@ -427,6 +452,10 @@ export async function executeHostTool(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : undefined;
     throw new Error(`Host runner daemon disconnected mid-turn: ${msg || "connection error"}`);
+  } finally {
+    if (heartbeatTimer !== null) {
+      clearInterval(heartbeatTimer);
+    }
   }
 
   if (!res.ok) {
@@ -724,6 +753,12 @@ export const UNATTENDED_GIT_TOOLS_DEFINITIONS = [
     },
   },
 ];
+
+export const HOST_TOOL_NAMES = new Set(HOST_TOOLS_DEFINITIONS.map((t) => t.function.name));
+
+export const UNATTENDED_GIT_TOOL_NAMES = new Set(
+  UNATTENDED_GIT_TOOLS_DEFINITIONS.map((t) => t.function.name)
+);
 
 export function shouldAdvertiseUnattendedGitTools(
   allowUnattendedHostGit: boolean,

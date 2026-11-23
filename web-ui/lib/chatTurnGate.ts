@@ -48,7 +48,10 @@ export function serializeTurn(
   req: TurnGateRequest,
   opts: TurnGateOptions
 ): TurnGateHandle {
-  const job = queue.enqueue(req);
+  const job = queue.enqueue({
+    ...req,
+    ...(opts.priority !== undefined ? { priority: opts.priority } : {}),
+  });
 
   // Decide queue position BEFORE draining: a turn is "queued" only when
   // something is ahead of it (a running turn, or another pending turn).

@@ -13,6 +13,7 @@ import type {
   SelfDeployVerifiedDeps,
   VerifyDeploymentResult,
 } from "../deploy/selfDeployVerified";
+import { waitForTurnSettled } from "../chat/turnEngine";
 import { readResponseStreamTail } from "./streamTail";
 
 export const DEFAULT_REVIEWER_TIMEOUT_MS = 10 * 60 * 1000;
@@ -86,14 +87,27 @@ async function defaultDispatchChatTurn(params: {
   const { POST: chatPost } = await import("../../app/api/chat/route");
   const chatReq = new NextRequest("http://localhost/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-internal-consumer": "in-process",
+      "x-dispatch-source": "board-reviewer",
+    },
     body: JSON.stringify({
       threadId: params.threadId,
       messages: [{ role: "user", content: params.brief }],
     }),
   });
   const response = await chatPost(chatReq);
-  const { tail: rawStream, totalBytes: streamTotalBytes } = await readResponseStreamTail(response);
+  let rawStream = "";
+  let streamTotalBytes = 0;
+  try {
+    const tailResult = await readResponseStreamTail(response);
+    rawStream = tailResult.tail;
+    streamTotalBytes = tailResult.totalBytes;
+  } catch {
+    // Await the turn's own settlement rather than failing on stream backpressure.
+  }
+  await waitForTurnSettled(params.threadId);
   return { ok: response.ok, status: response.status, rawStream, streamTotalBytes };
 }
 

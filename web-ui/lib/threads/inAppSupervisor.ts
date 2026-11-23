@@ -55,6 +55,13 @@ export function detectStalledTurn(
   windowMs: number = STALL_WINDOW_MS
 ): StallDetectionResult {
   const lastActivityAtMs = Date.parse(thread.updatedAt || thread.createdAt || "");
+  if (thread.queuedForExecution) {
+    return {
+      stalled: false,
+      inactiveMs: 0,
+      lastActivityAtMs: Number.isFinite(lastActivityAtMs) ? lastActivityAtMs : now,
+    };
+  }
   if (!isTurnStreaming(thread)) {
     return {
       stalled: false,

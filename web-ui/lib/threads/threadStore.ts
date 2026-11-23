@@ -70,6 +70,11 @@ export { TURN_STALL_WINDOW_MS, ZOMBIE_TURN_AGE_CAP_MS, isRecordStaleBeyond, isZo
  */
 export function computeTurnLiveness(thread: Thread, now: number = Date.now()): ThreadLiveness {
   const isLiveOverride = activeExecutionSet.has(thread.id) || Boolean(getActiveTurn(thread.id));
+  if (isTurnQueued(thread.id) || thread.queuedForExecution) {
+    return isLiveOverride || thread.status === "active" || thread.status === "running"
+      ? "alive"
+      : "settled";
+  }
   return computeTurnLivenessPure(thread, now, isLiveOverride);
 }
 
@@ -77,9 +82,9 @@ export function computeTurnLiveness(thread: Thread, now: number = Date.now()): T
  * TURN-LIVENESS heartbeat: refreshes the thread record's updatedAt without touching
  * messages or status, so a working round reads ALIVE even between snapshot writes.
  */
-export function touchActiveTurn(threadId: string): void {
+export function touchActiveTurn(threadId: string, threadsDir?: string): void {
   try {
-    const filePath = path.join(resolveThreadsDir(), `${threadId}.json`);
+    const filePath = path.join(threadsDir ?? resolveThreadsDir(), `${threadId}.json`);
     if (!fs.existsSync(filePath)) return;
     const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
     if (!raw || raw.id !== threadId) return;
@@ -124,6 +129,7 @@ export function resolveThreadsDir(): string {
 const g = globalThis as {
   __sandboxActiveExecutionSet?: Set<string>;
   __sandboxActiveTurnRegistry?: Map<string, ActiveTurnInfo>;
+  __sandboxQueuedTurnSet?: Set<string>;
   __sandboxActiveTurnAbortControllers?: Map<string, AbortController>;
   __sandboxActiveRoundAbortControllers?: Map<string, AbortController>;
   __sandboxDeletedThreadIds?: Set<string>;
@@ -136,6 +142,8 @@ export const activeExecutionSet: Set<string> =
 const activeTurnRegistry: Map<string, ActiveTurnInfo> =
   g.__sandboxActiveTurnRegistry ||
   (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
+const queuedTurnSet: Set<string> =
+  g.__sandboxQueuedTurnSet || (g.__sandboxQueuedTurnSet = new Set<string>());
 const activeTurnAbortControllers: Map<string, AbortController> =
   g.__sandboxActiveTurnAbortControllers ||
   (g.__sandboxActiveTurnAbortControllers = new Map<string, AbortController>());
@@ -203,6 +211,69 @@ export function getActiveTurn(threadId: string): ActiveTurnInfo | null {
 
 export function clearTurnActive(threadId: string): void {
   activeTurnRegistry.delete(threadId);
+  queuedTurnSet.delete(threadId);
+}
+
+/**
+ * Marks a thread as queued waiting for a queue/slot before round-0 execution starts.
+ * Queued time does not age against the stall window.
+ */
+export function markTurnQueued(threadId: string, threadsDir?: string): void {
+  queuedTurnSet.add(threadId);
+  const existing = activeTurnRegistry.get(threadId);
+  if (existing) {
+    existing.queued = true;
+  }
+  try {
+    const filePath = path.join(threadsDir ?? resolveThreadsDir(), `${threadId}.json`);
+    if (!fs.existsSync(filePath)) return;
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+    if (!raw || raw.id !== threadId) return;
+    raw.queuedForExecution = true;
+    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+  } catch {}
+}
+
+/**
+ * Transitions a queued thread into active execution, clearing queuedForExecution and
+ * resetting updatedAt / presence startedAt so the stall clock starts at execution.
+ */
+export function markTurnExecuting(threadId: string, threadsDir?: string): void {
+  queuedTurnSet.delete(threadId);
+  const nowIso = new Date().toISOString();
+  const existing = activeTurnRegistry.get(threadId);
+  if (existing) {
+    existing.queued = false;
+    existing.startedAt = nowIso;
+  }
+  try {
+    const filePath = path.join(threadsDir ?? resolveThreadsDir(), `${threadId}.json`);
+    if (!fs.existsSync(filePath)) return;
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+    if (!raw || raw.id !== threadId) return;
+    delete raw.queuedForExecution;
+    raw.updatedAt = nowIso;
+    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+  } catch {}
+}
+
+/**
+ * Clears queued state (e.g. on pre-start abort before execution ever begins).
+ */
+export function clearTurnQueued(threadId: string, threadsDir?: string): void {
+  queuedTurnSet.delete(threadId);
+  try {
+    const filePath = path.join(threadsDir ?? resolveThreadsDir(), `${threadId}.json`);
+    if (!fs.existsSync(filePath)) return;
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
+    if (!raw || raw.id !== threadId || !raw.queuedForExecution) return;
+    delete raw.queuedForExecution;
+    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+  } catch {}
+}
+
+export function isTurnQueued(threadId: string): boolean {
+  return queuedTurnSet.has(threadId);
 }
 
 export class ThreadStore {
@@ -520,6 +591,10 @@ export class ThreadStore {
       if (!isStreaming || !isStale) {
         continue;
       }
+      // Queued/pre-round-0 threads must not age against the stall window.
+      if (s.queuedForExecution || isTurnQueued(s.id)) {
+        continue;
+      }
       // Board-drain-owned threads are recovered exclusively by BoardOrchestrator.
       if (s.boardItemId) {
         continue;
@@ -618,6 +693,9 @@ export class ThreadStore {
         thread.status = "paused";
       } else {
         thread.status = "stopped";
+      }
+      if (thread.queuedForExecution) {
+        delete thread.queuedForExecution;
       }
       changed = true;
       if (thread.messages && thread.messages.length > 0) {
@@ -933,6 +1011,7 @@ export class ThreadStore {
             lastMessagePreview,
             hasDiffs,
             hasStreamingMessage,
+            ...(t.queuedForExecution ? { queuedForExecution: true } : {}),
           };
           this.summaryCache.set(file, { mtimeMs: stat.mtimeMs, summary });
           indexDirty = true;
