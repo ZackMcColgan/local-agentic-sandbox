@@ -163,6 +163,8 @@ export interface RunChatTurnState {
   assistantPersisted: boolean;
   lastFinishReason: string | undefined;
   turnOutputTokens: number | undefined;
+  /** Cumulative completion tokens across all dispatched rounds and synthesis passes. */
+  cumulativeOutputTokens?: number;
   turnCreatedFiles: string[];
   turnPreImages: Map<string, string>;
   turnHostDiffs: TurnFileDiff[];
@@ -229,6 +231,8 @@ export interface RunChatTurnDeps {
   onRunTurnFinally: () => void;
   isExplicitStopped: () => boolean;
   turnState: RunChatTurnState;
+  /** Timestamp (ms) captured at chat-route entry before queue wait, MCP connect, Oracle, and compaction. */
+  turnStartMs?: number;
   /** Optional override for the in-turn touchActiveTurn heartbeat interval (defaults to 30s). */
   heartbeatIntervalMs?: number;
 
@@ -291,6 +295,9 @@ export async function runChatTurn(
     turnReadDedups,
     accumulatedThoughts,
   } = turnState;
+
+  const turnStartMs = deps.turnStartMs ?? Date.now();
+  turnState.cumulativeOutputTokens = turnState.cumulativeOutputTokens ?? 0;
 
   let effectiveReasoningEffort = deps.initialEffectiveReasoningEffort;
   let threadData: ChatThreadData | null = deps.initialThreadData;
@@ -654,6 +661,7 @@ export async function runChatTurn(
       tool_calls?: LlmToolCall[];
     } = { role: "assistant", content: "" };
     let round = 0;
+    let dispatchedRounds = 0;
     // CHAT-7: no fixed 8-round ceiling. Rounds are governed by context headroom;
     // TOOL_ROUND_BACKSTOP is only the runaway guard.
     let toolLoopStopReason: ToolLoopStopReason | undefined = undefined;
@@ -686,7 +694,6 @@ export async function runChatTurn(
     const roundPromptTokens: number[] = [];
     const roundGenerationMs: number[] = [];
     const thinkingSegments: Array<{ round: number; text: string }> = [];
-    let cumulativeOutputTokens = 0;
     let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
     // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
     // turnMicroElisions declared with the other turn state, so both persist
@@ -701,7 +708,7 @@ export async function runChatTurn(
     // first read stays recoverable in the thread trace record.
     const readDedupRegistry = new ReadDedupRegistry(conversationMessages);
 
-    const turnStartMs = Date.now();
+    const chunkLoopStartMs = Date.now();
     const chunkBudget = resolveThreadChunkBudget(threadData ?? undefined);
     const chunkWorkspaceRoot = _worktree?.path || resolveJobRepoRoot() || process.cwd();
     const { jobId: chunkJobId, handoffPath: chunkHandoffPath } = resolveChunkHandoffTarget({
@@ -716,7 +723,7 @@ export async function runChatTurn(
       if (getHostSettings().jobChunkingEnabled) {
         const chunkResult = await handleLiveTurnChunkBudget({
           roundsUsed: round,
-          elapsedMs: Date.now() - turnStartMs,
+          elapsedMs: Date.now() - chunkLoopStartMs,
           budget: chunkBudget,
           jobId: chunkJobId,
           workspaceRoot: chunkWorkspaceRoot,
@@ -985,6 +992,9 @@ export async function runChatTurn(
       const toolCallsFromMessage: LlmToolCall[] = [];
       const roundStreamStartMs = Date.now();
       let roundOutputTokens = 0;
+      let roundPromptTokenCount: number | undefined = undefined;
+      dispatchedRounds++;
+      const currentRoundNumber = dispatchedRounds;
 
       try {
         for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
@@ -992,20 +1002,25 @@ export async function runChatTurn(
             turnState.lastFinishReason = chunk.finish_reason;
             roundFinishReason = chunk.finish_reason;
           }
-          if (typeof chunk.outputTokens === "number") {
-            turnState.turnOutputTokens = chunk.outputTokens;
-            roundOutputTokens = chunk.outputTokens;
-          } else if (typeof chunk.eval_count === "number") {
-            turnState.turnOutputTokens = chunk.eval_count;
-            roundOutputTokens = chunk.eval_count;
+          const chunkOutputTokens =
+            typeof chunk.outputTokens === "number"
+              ? chunk.outputTokens
+              : typeof chunk.eval_count === "number"
+                ? chunk.eval_count
+                : undefined;
+          if (typeof chunkOutputTokens === "number" && chunkOutputTokens > roundOutputTokens) {
+            turnState.cumulativeOutputTokens =
+              (turnState.cumulativeOutputTokens ?? 0) + (chunkOutputTokens - roundOutputTokens);
+            roundOutputTokens = chunkOutputTokens;
+            turnState.turnOutputTokens = turnState.cumulativeOutputTokens;
           }
           // TOKEN ECONOMICS (a): prompt tokens arrive on the finish chunk via
           // the PR #63 usage plumbing (promptTokens) or Ollama's
-          // prompt_eval_count. Exactly one entry is pushed per round.
+          // prompt_eval_count. Exactly one entry is pushed per round in finally.
           if (typeof chunk.promptTokens === "number") {
-            roundPromptTokens.push(chunk.promptTokens);
+            roundPromptTokenCount = chunk.promptTokens;
           } else if (typeof chunk.prompt_eval_count === "number") {
-            roundPromptTokens.push(chunk.prompt_eval_count);
+            roundPromptTokenCount = chunk.prompt_eval_count;
           }
           if (chunk.message?.thinking) {
             const nowMs = Date.now();
@@ -1021,7 +1036,7 @@ export async function runChatTurn(
                 ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
                 : roundThinking;
             const liveSegments = roundThinking.trim()
-              ? [...thinkingSegments, { round, text: roundThinking.trim() }]
+              ? [...thinkingSegments, { round: currentRoundNumber, text: roundThinking.trim() }]
               : [...thinkingSegments];
             streamSnapshot.maybeWrite(
               turnState.accumulatedStreamedTokens,
@@ -1088,8 +1103,8 @@ export async function runChatTurn(
         }
       } finally {
         roundGenerationMs.push(Math.max(1, Date.now() - roundStreamStartMs));
-        if (roundOutputTokens > 0) {
-          cumulativeOutputTokens += roundOutputTokens;
+        if (roundPromptTokenCount !== undefined) {
+          roundPromptTokens.push(roundPromptTokenCount);
         }
         roundDeadline.clear();
         if (activeThreadId) {
@@ -1104,7 +1119,7 @@ export async function runChatTurn(
       if (roundThinking.trim()) {
         const trimmedThinking = roundThinking.trim();
         accumulatedThoughts.push(trimmedThinking);
-        thinkingSegments.push({ round, text: trimmedThinking });
+        thinkingSegments.push({ round: currentRoundNumber, text: trimmedThinking });
         thinkingEndMs = Date.now();
       }
 
@@ -1419,7 +1434,7 @@ export async function runChatTurn(
           timestamp,
           model: turnState.activeModel,
           tier: target.tier,
-          round,
+          round: currentRoundNumber,
         };
         if (
           toolName === "workspace_write_file" &&
@@ -2062,7 +2077,10 @@ export async function runChatTurn(
           force: true,
           roundPromptTokens: [...roundPromptTokens],
           roundGenerationMs: [...roundGenerationMs],
-          outputTokens: cumulativeOutputTokens > 0 ? cumulativeOutputTokens : undefined,
+          outputTokens:
+            (turnState.cumulativeOutputTokens ?? 0) > 0
+              ? turnState.cumulativeOutputTokens
+              : undefined,
           thinkingSegments: thinkingSegments.length > 0 ? [...thinkingSegments] : undefined,
         }
       );
@@ -2205,34 +2223,65 @@ export async function runChatTurn(
       });
 
       // SYNTHESIS-RETRY: a single synthesis pass, streamed into the shared accumulators.
-      const runSynthesisPass = () =>
-        executeSynthesisPass({
-          llmBaseUrl: getLlmBaseUrl(),
-          activeModel: turnState.activeModel,
-          conversationMessages,
-          isArtifactRequest,
-          turnAbortSignal: turnAbortController.signal,
-          synthOptions,
-          accumulatedThoughts,
-          getAccumulatedStreamedTokens: () => turnState.accumulatedStreamedTokens,
-          setAccumulatedStreamedTokens: (next) => {
-            turnState.accumulatedStreamedTokens = next;
-          },
-          onFinishReason: (reason) => {
-            turnState.lastFinishReason = reason;
-          },
-          onPromptTokens: (tokens) => {
-            roundPromptTokens.push(tokens);
-          },
-          onOutputTokens: (tokens) => {
-            turnState.turnOutputTokens = tokens;
-          },
-          maybeWriteSnapshot: (content, thought) => {
-            streamSnapshot.maybeWrite(content, thought);
-          },
-          sendEvent,
-          streamChat: streamLlmChat,
-        });
+      const runSynthesisPass = async () => {
+        dispatchedRounds++;
+        const synthRoundNumber = dispatchedRounds;
+        const synthStartMs = Date.now();
+        let synthOutputTokens = 0;
+        let synthPromptTokens: number | undefined = undefined;
+        let synthFinishReason: string | undefined = undefined;
+        try {
+          const result = await executeSynthesisPass({
+            llmBaseUrl: getLlmBaseUrl(),
+            activeModel: turnState.activeModel,
+            conversationMessages,
+            isArtifactRequest,
+            turnAbortSignal: turnAbortController.signal,
+            synthOptions,
+            accumulatedThoughts,
+            getAccumulatedStreamedTokens: () => turnState.accumulatedStreamedTokens,
+            setAccumulatedStreamedTokens: (next) => {
+              turnState.accumulatedStreamedTokens = next;
+            },
+            onFinishReason: (reason) => {
+              synthFinishReason = reason;
+              turnState.lastFinishReason = reason;
+            },
+            onPromptTokens: (tokens) => {
+              synthPromptTokens = tokens;
+            },
+            onOutputTokens: (tokens) => {
+              if (tokens > synthOutputTokens) {
+                turnState.cumulativeOutputTokens =
+                  (turnState.cumulativeOutputTokens ?? 0) + (tokens - synthOutputTokens);
+                synthOutputTokens = tokens;
+                turnState.turnOutputTokens = turnState.cumulativeOutputTokens;
+              }
+            },
+            maybeWriteSnapshot: (content, thought) => {
+              streamSnapshot.maybeWrite(content, thought, undefined, {
+                outputTokens:
+                  (turnState.cumulativeOutputTokens ?? 0) > 0
+                    ? turnState.cumulativeOutputTokens
+                    : undefined,
+              });
+            },
+            sendEvent,
+            streamChat: streamLlmChat,
+          });
+          if (result.thinking.trim()) {
+            thinkingSegments.push({ round: synthRoundNumber, text: result.thinking.trim() });
+            thinkingEndMs = Date.now();
+          }
+          return result;
+        } finally {
+          roundGenerationMs.push(Math.max(1, Date.now() - synthStartMs));
+          if (synthPromptTokens !== undefined) {
+            roundPromptTokens.push(synthPromptTokens);
+          }
+          roundFinishReasons.push(synthFinishReason || "stop");
+        }
+      };
 
       let synthResult = await runSynthesisPass();
       let synthesisPasses = 1;
@@ -2416,7 +2465,10 @@ export async function runChatTurn(
     }
 
     const finalOutputTokens =
-      turnState.turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0);
+      (turnState.cumulativeOutputTokens ?? 0) > 0
+        ? turnState.cumulativeOutputTokens!
+        : (turnState.turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0));
+    const turnDurationMs = Math.max(1, Date.now() - turnStartMs);
     // TOKEN ECONOMICS (a): per-round prompt-token integral + per-job rollup.
     const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
 
@@ -2463,6 +2515,8 @@ export async function runChatTurn(
         tokensAfterCompaction: turnCompacted ? turnTokensAfter : undefined,
         compactionActions: turnCompacted ? turnCompactionActions : undefined,
         status: turnStatus || ("completed" as const),
+        turnStartMs,
+        durationMs: turnDurationMs,
         thinkingDurationMs:
           thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
         phaseTimings: {
@@ -2487,7 +2541,7 @@ export async function runChatTurn(
         // TOKEN ECONOMICS (d): read-dedup audit rides on the final record.
         readDedups: turnReadDedups.length > 0 ? turnReadDedups : undefined,
         tokenEconomics: buildJobTokenRollup({
-          rounds: round,
+          rounds: dispatchedRounds,
           promptTokens: finalPromptTokens,
           outputTokens: finalOutputTokens,
           compactions: turnCompactionCount,
@@ -2517,6 +2571,8 @@ export async function runChatTurn(
       content: cleanedContent,
       thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
       thinkingSegments: thinkingSegments.length > 0 ? thinkingSegments : undefined,
+      turnStartMs,
+      durationMs: turnDurationMs,
       thinkingDurationMs:
         thinkingEndMs !== null ? Math.max(0, thinkingEndMs - turnStartMs) : undefined,
       phaseTimings: {

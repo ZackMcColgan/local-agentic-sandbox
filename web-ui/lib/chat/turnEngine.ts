@@ -348,6 +348,7 @@ export interface AbortedAssistantMessageInput {
   requestedModel?: string;
   lastFinishReason?: string;
   turnOutputTokens?: number;
+  turnStartMs?: number;
   turnMicroElisions: ElisionMeta[];
   turnReadDedups: ReadDedupMeta[];
   nowIso?: string;
@@ -388,6 +389,11 @@ export function buildAbortedAssistantMessage(input: AbortedAssistantMessageInput
     diffs: turnDiffs.length > 0 ? turnDiffs : undefined,
     modelUsed: input.activeModel,
     selectedModel: input.requestedModel || input.activeModel,
+    turnStartMs: input.turnStartMs,
+    durationMs:
+      typeof input.turnStartMs === "number"
+        ? Math.max(1, Date.now() - input.turnStartMs)
+        : undefined,
     timestamp: input.nowIso ?? new Date().toISOString(),
     status: "incomplete" as const,
     isStopped: isExplicit ? true : undefined,

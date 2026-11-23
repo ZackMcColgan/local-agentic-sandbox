@@ -66,6 +66,15 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/chat/turnEngine") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("countingTruth.test.ts"),
+    tests: ["tests/countingTruth.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("repoStandards.test.ts") ||
       p.includes("SECURITY.md") ||
       p.includes("CONTRIBUTING.md") ||
