@@ -66,6 +66,7 @@ export interface ThreadMessage {
   attachments?: ThreadAttachment[];
   diffs?: TurnFileDiff[];
   modelUsed?: string;
+  turnStartMs?: number;
   durationMs?: number;
   thinkingDurationMs?: number;
   phaseTimings?: {

@@ -112,6 +112,7 @@ function resolveChatTurnPriority(
 }
 
 export async function POST(req: NextRequest) {
+  const turnStartMs = Date.now();
   const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
   const toolClientMap = new Map<
     string,
@@ -369,6 +370,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       assistantPersisted: false,
       lastFinishReason: undefined,
       turnOutputTokens: undefined,
+      cumulativeOutputTokens: 0,
       turnCreatedFiles: [],
       turnPreImages: new Map<string, string>(),
       turnHostDiffs: [],
@@ -400,7 +402,11 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           activeModel: turnState.activeModel,
           requestedModel,
           lastFinishReason: turnState.lastFinishReason,
-          turnOutputTokens: turnState.turnOutputTokens,
+          turnOutputTokens:
+            (turnState.cumulativeOutputTokens ?? 0) > 0
+              ? turnState.cumulativeOutputTokens
+              : turnState.turnOutputTokens,
+          turnStartMs,
           turnMicroElisions: turnState.turnMicroElisions,
           turnReadDedups: turnState.turnReadDedups,
         });
@@ -472,6 +478,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       },
       isExplicitStopped: () => explicitStopped,
       turnState,
+      turnStartMs,
       activeSessions,
       toolClientMap,
       tracer,

@@ -746,13 +746,24 @@ export class LlamaCppProvider implements LLMProvider {
           }
 
           const choice = parsed.choices?.[0];
-          if (!choice) continue;
-
-          const finishReason = choice.finish_reason || parsed.finish_reason;
           const usageOutputTokens = parsed.usage?.completion_tokens;
           // TOKEN ECONOMICS (a): same PR #63 usage extraction site now also carries
           // prompt_tokens so per-round prompt cost rides the existing plumbing.
           const usagePromptTokens = parsed.usage?.prompt_tokens;
+
+          if (!choice) {
+            // Standalone pre-EOF usage chunk (choices: [], usage: { prompt_tokens, completion_tokens })
+            if (typeof usageOutputTokens === "number" || typeof usagePromptTokens === "number") {
+              yield {
+                finish_reason: parsed.finish_reason || undefined,
+                outputTokens: usageOutputTokens,
+                promptTokens: usagePromptTokens,
+              };
+            }
+            continue;
+          }
+
+          const finishReason = choice.finish_reason || parsed.finish_reason;
 
           // Handle streaming delta reasoning
           const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
@@ -780,20 +791,26 @@ export class LlamaCppProvider implements LLMProvider {
             if (insideThinking) {
               if (content.includes("</think>")) {
                 const parts = content.split("</think>");
+                const after = parts.slice(1).join("</think>");
                 if (parts[0]) {
                   yield {
                     message: { thinking: parts[0] },
-                    finish_reason: finishReason || undefined,
-                    outputTokens: usageOutputTokens,
+                    ...(after
+                      ? {}
+                      : {
+                          finish_reason: finishReason || undefined,
+                          outputTokens: usageOutputTokens,
+                          promptTokens: usagePromptTokens,
+                        }),
                   };
                 }
                 insideThinking = false;
-                const after = parts.slice(1).join("</think>");
                 if (after) {
                   yield {
                     message: { content: after },
                     finish_reason: finishReason || undefined,
                     outputTokens: usageOutputTokens,
+                    promptTokens: usagePromptTokens,
                   };
                 }
               } else if (content) {
@@ -801,6 +818,7 @@ export class LlamaCppProvider implements LLMProvider {
                   message: { thinking: content },
                   finish_reason: finishReason || undefined,
                   outputTokens: usageOutputTokens,
+                  promptTokens: usagePromptTokens,
                 };
               }
             } else if (content) {
@@ -808,11 +826,16 @@ export class LlamaCppProvider implements LLMProvider {
                 message: { content },
                 finish_reason: finishReason || undefined,
                 outputTokens: usageOutputTokens,
+                promptTokens: usagePromptTokens,
               };
             }
-          } else if (finishReason) {
+          } else if (
+            finishReason ||
+            (!reasoning &&
+              (typeof usageOutputTokens === "number" || typeof usagePromptTokens === "number"))
+          ) {
             yield {
-              finish_reason: finishReason,
+              finish_reason: finishReason || undefined,
               outputTokens: usageOutputTokens,
               promptTokens: usagePromptTokens,
             };
