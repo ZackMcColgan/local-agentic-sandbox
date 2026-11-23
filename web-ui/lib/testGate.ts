@@ -66,6 +66,13 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("lib/microElision") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("prefixReusePreservation.test.ts"),
+    tests: ["tests/prefixReusePreservation.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/contextBudget") ||
       p.includes("lib/conversationCompaction") ||
       p.includes("lib/microElision") ||
