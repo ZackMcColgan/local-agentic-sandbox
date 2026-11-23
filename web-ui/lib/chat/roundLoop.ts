@@ -68,7 +68,12 @@ import {
 import { ROUND_MAX_TOKENS } from "@/lib/modelLimits";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
-import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
+import {
+  applyMicroElision,
+  computeMicroElisionTriggerTokens,
+  MICRO_ELISION_REARM_DELTA_TOKENS,
+  type ElisionMeta,
+} from "@/lib/microElision";
 import { evaluateMarkupRound, evaluateZeroTraceTripwire } from "@/lib/toolCallIntegrity";
 import { verifyEvidenceLinkedSummary } from "@/lib/evidenceLinkedSummaries";
 import { buildVerificationAdapters } from "@/lib/subagents/supervisor";
@@ -728,6 +733,7 @@ export async function runChatTurn(
       fallbackJobId: _job.id,
     });
     const chunkRunlogPath = path.join(chunkWorkspaceRoot, "docs/internal/queue-steer-runlog.md");
+    let nextMicroElisionFloorTokens = 0;
 
     while (true) {
       if (turnAbortController.signal.aborted) break;
@@ -762,19 +768,10 @@ export async function runChatTurn(
         `[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`
       );
 
-      // TOKEN ECONOMICS (c) + Fix D3 (F8c): MICRO-ELISION. Superseded tool
-      // results, superseded write/patch argument bodies, and file reads
-      // superseded by a later write are stubbed EVERY round, independent of the
-      // 85K fit trigger. The latest version of everything and all assistant
-      // prose stay byte-identical; full payloads remain in the thread traces.
-      const roundElision = applyMicroElision(conversationMessages, round + 1);
-      if (roundElision.stubbed > 0) {
-        turnMicroElisions.push(...roundElision.elisions);
-      }
-
       // Fix D1 + D2 (F8a/F8b): resolve this round's tool schemas and context
-      // window BEFORE fit/continuation checks so tool schemas are counted from
-      // round 0 and output headroom (window - ROUND_MAX_TOKENS) is reserved.
+      // window BEFORE elision/fit/continuation checks so tool schemas are
+      // counted from round 0 and output headroom (window - ROUND_MAX_TOKENS)
+      // is reserved.
       const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
       const roundToolSchemaTokens = estimateToolSchemaTokens(roundTools);
       const roundContextWindowTokens =
@@ -785,12 +782,46 @@ export async function runChatTurn(
           hasCompletedToolCalls: traces.length > 0,
         }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS;
 
-      const preFitRawEstimate = estimateTokens(conversationMessages) + roundToolSchemaTokens;
-      const preFitEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
+      // TOKEN ECONOMICS (c) + Fix D3 (F8c) + Prefix-Reuse Preservation:
+      // Defer in-place micro-elision while prompt tokens stay below the 70%
+      // pressure watermark (and rearm floor after a sweep) so earlier rounds
+      // remain byte-identical for engine KV/SSM prefix-cache reuse. Once
+      // pressure crosses the watermark, elide all accumulated superseded
+      // payloads in a single batch sweep before the 85% compaction trigger.
+      const preElisionEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
         lastMeasuredPromptTokens,
         lastMeasuredEstimateTokens,
         toolSchemaTokens: roundToolSchemaTokens,
       });
+      const microElisionTriggerTokens = computeMicroElisionTriggerTokens({
+        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        contextWindowTokens: roundContextWindowTokens,
+        outputReserveTokens: ROUND_MAX_TOKENS,
+        rearmFloorTokens: nextMicroElisionFloorTokens,
+      });
+      const roundElision = applyMicroElision(conversationMessages, round + 1, {
+        currentPromptTokens: preElisionEffectiveTokens,
+        minPromptTokens: microElisionTriggerTokens,
+      });
+      if (roundElision.stubbed > 0) {
+        turnMicroElisions.push(...roundElision.elisions);
+        const postElisionTokens = estimateEffectivePromptTokens(conversationMessages, {
+          lastMeasuredPromptTokens,
+          lastMeasuredEstimateTokens,
+          toolSchemaTokens: roundToolSchemaTokens,
+        });
+        nextMicroElisionFloorTokens = postElisionTokens + MICRO_ELISION_REARM_DELTA_TOKENS;
+      }
+
+      const preFitRawEstimate = estimateTokens(conversationMessages) + roundToolSchemaTokens;
+      const preFitEffectiveTokens =
+        roundElision.stubbed > 0
+          ? estimateEffectivePromptTokens(conversationMessages, {
+              lastMeasuredPromptTokens,
+              lastMeasuredEstimateTokens,
+              toolSchemaTokens: roundToolSchemaTokens,
+            })
+          : preElisionEffectiveTokens;
 
       // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
       const compaction = fitConversationToBudget(conversationMessages, {
@@ -900,6 +931,7 @@ export async function runChatTurn(
         if (compactedViaRungA) {
           lastMeasuredPromptTokens = undefined;
           lastMeasuredEstimateTokens = undefined;
+          nextMicroElisionFloorTokens = 0;
         }
 
         turnCompacted = true;

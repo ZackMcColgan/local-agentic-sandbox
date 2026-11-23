@@ -31,6 +31,21 @@ export const MICRO_ELISION_RECENT_WINDOW = 5;
  */
 export const MICRO_ELISION_MIN_RESULT_CHARS = 2000;
 
+/**
+ * Fraction of effective input budget at which batch micro-elision fires.
+ * Keeping prompts append-only below this watermark preserves engine KV/SSM
+ * prefix-cache reuse (avoiding per-round checkpoint collapse on hybrid models)
+ * while still reclaiming superseded payloads well before the 85% compaction trigger.
+ */
+export const MICRO_ELISION_PRESSURE_RATIO = 0.7;
+
+/**
+ * Minimum additional prompt tokens required after a batch elision fires before
+ * another batch elision may run, preventing round-by-round oscillation when
+ * post-elision prompt size stays near or above the base pressure threshold.
+ */
+export const MICRO_ELISION_REARM_DELTA_TOKENS = 10_000;
+
 /** Metadata preserved on every stub (audit identity of the elided result). */
 export interface ElisionMeta {
   /** Tool that produced the result or received the arguments. */
@@ -47,10 +62,65 @@ export interface ElisionMeta {
   kind?: "tool_result" | "tool_call_args";
 }
 
+/** Optional prefix-cache gating inputs for batch micro-elision. */
+export interface MicroElisionOptions {
+  /** Current effective prompt size (including tool schemas) before elision. */
+  currentPromptTokens?: number;
+  /** Minimum prompt tokens required before mutating earlier messages in-place. */
+  minPromptTokens?: number;
+}
+
+/** Inputs for computing the batch micro-elision pressure threshold. */
+export interface MicroElisionTriggerInput {
+  budgetTokens: number;
+  contextWindowTokens: number;
+  outputReserveTokens: number;
+  pressureRatio?: number;
+  rearmFloorTokens?: number;
+}
+
 /** Elision pass result: how many results/payloads were stubbed and their metadata. */
 export interface MicroElisionResult {
   stubbed: number;
   elisions: ElisionMeta[];
+  /** True when elision was deferred below minPromptTokens to preserve engine prefix reuse. */
+  deferredForPrefixCache?: boolean;
+}
+
+/**
+ * Computes the effective prompt token threshold at which batch micro-elision
+ * should fire, honoring output headroom and any post-sweep rearm floor.
+ */
+export function computeMicroElisionTriggerTokens(input: MicroElisionTriggerInput): number {
+  const effectiveInputCeiling = Math.max(0, input.contextWindowTokens - input.outputReserveTokens);
+  const effectiveBudget = Math.min(input.budgetTokens, effectiveInputCeiling);
+  const ratio = input.pressureRatio ?? MICRO_ELISION_PRESSURE_RATIO;
+  const baseTrigger = Math.floor(effectiveBudget * ratio);
+  const rearmFloor =
+    typeof input.rearmFloorTokens === "number" && Number.isFinite(input.rearmFloorTokens)
+      ? Math.max(0, Math.floor(input.rearmFloorTokens))
+      : 0;
+  return Math.max(baseTrigger, rearmFloor);
+}
+
+/**
+ * Returns true when micro-elision should defer in-place history mutation to
+ * preserve the engine's KV/SSM prefix cache. When options are omitted, returns
+ * false so direct callers retain unconditional elision semantics.
+ */
+export function shouldDeferMicroElisionForPrefixCache(options?: MicroElisionOptions): boolean {
+  if (!options) return false;
+  const { currentPromptTokens, minPromptTokens } = options;
+  if (
+    typeof currentPromptTokens !== "number" ||
+    !Number.isFinite(currentPromptTokens) ||
+    typeof minPromptTokens !== "number" ||
+    !Number.isFinite(minPromptTokens) ||
+    minPromptTokens <= 0
+  ) {
+    return false;
+  }
+  return currentPromptTokens < minPromptTokens;
 }
 
 /** Renders the stub text for an elided tool result (metadata verbatim). */
@@ -296,10 +366,14 @@ function findPairedCall(messages: ElisionMessage[], toolIdx: number): ElisionToo
  */
 export function applyMicroElision(
   messages: ElisionMessage[],
-  currentRound: number
+  currentRound: number,
+  options?: MicroElisionOptions
 ): MicroElisionResult {
   const elisions: ElisionMeta[] = [];
-  if (!Array.isArray(messages)) return { stubbed: 0, elisions };
+  if (!Array.isArray(messages)) return { stubbed: 0, elisions, deferredForPrefixCache: false };
+  if (shouldDeferMicroElisionForPrefixCache(options)) {
+    return { stubbed: 0, elisions, deferredForPrefixCache: true };
+  }
 
   // Pass 1: Track file write/patch mutations across assistant tool_calls.
   interface MutationRef {
@@ -461,7 +535,7 @@ export function applyMicroElision(
 
   // Pass 3: Existing recent-window micro-elision for older large tool results.
   if (toolIndices.length <= MICRO_ELISION_RECENT_WINDOW) {
-    return { stubbed: elisions.length, elisions };
+    return { stubbed: elisions.length, elisions, deferredForPrefixCache: false };
   }
 
   const staleIndices = toolIndices.slice(0, toolIndices.length - MICRO_ELISION_RECENT_WINDOW);
@@ -493,5 +567,5 @@ export function applyMicroElision(
     elisions.push(meta);
   }
 
-  return { stubbed: elisions.length, elisions };
+  return { stubbed: elisions.length, elisions, deferredForPrefixCache: false };
 }

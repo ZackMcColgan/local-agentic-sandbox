@@ -1003,7 +1003,7 @@ describe("Batch D — Context Economics (F8a–F8e)", () => {
               },
               done: true,
               done_reason: "stop",
-              prompt_eval_count: 2500,
+              prompt_eval_count: 72_000,
               eval_count: 100,
             })}\n`
           );
