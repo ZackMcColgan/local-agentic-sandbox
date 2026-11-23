@@ -165,3 +165,18 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Verification: snapshotIntervalFiveSeconds 9/0 (incl. streamPollGate run together), streamPollGate 6/0, chatLiveVisibility 8/0, chatThinkingPreservation 4/0, threadStoreCheapSweep/turnLiveness/uirLiveMeter/zombieStreamingCap/observedTurnLiveness/reconcilePollBackoff 47/0; npx tsc --noEmit clean; npm run test:gate PASSED 156/0 across 29 suites, 19.1s (<90s budget).
 - Assumption: the brief says gate on the EXISTING stream-active state. page.tsx has no dedicated stream-active boolean; the SSE transport signal is the shared `messages` state that ChatStream writes chunks into, so the gate derives "delivering" from a last-chunk timestamp refreshed on that channel rather than adding a new state.
 - Note: .gitignore and web-ui/Dockerfile CR-only churn in this worktree excluded from commits.
+
+## Board #130 (Perf P6) - measure prompt estimate once per round (kill repeated full-history scans)
+
+- Worktree: C:\Users\zackm\Desktop\repos\local-agentic-sandbox\.worktrees\perf-p6, branch feature/perf-p6-estimate-scans (off fresh origin/develop).
+- Test-first: web-ui/tests/estimateScanPerRound.test.ts (2 tests: counting observer proves <= 2 array scans per round on the standard path; golden math assertion estimateTokens still ceil(len/4)). Confirmed failing before implementation (setEstimateTokensObserver seam did not exist; standard path re-stringified the full history 8-14x per round).
+- Patch web-ui/lib/contextBudget.ts:
+  - Added setEstimateTokensObserver(fn|null) test-only seam; estimateTokens invokes it on every call (observer never changes the returned value).
+  - estimateEffectivePromptTokens accepts optional precomputedRawMessageTokens to reuse instead of re-stringifying.
+  - fitContextWindow accepts optional precomputedRawMessageTokens; reuses it only when consolidation is a no-op (no compactHistory, no stray-system merge), so the fitted array has identical tokens.
+  - fitConversationToBudget accepts optional precomputedRawMessageTokens; memoizes the raw working-array estimate with a dirty flag (markDirty) wired into every mutation rung (compaction, elide, drop, truncate) so each mutation re-scans exactly once and a standard no-mutation round reuses the single raw estimate.
+  - runChatToolLoop measures rawRoundTokens once per round and threads it through fitConversationToBudget, the continuation contextTokens, and the provider payload fitContextWindow.
+- Wired web-ui/lib/testGate.ts MAPPING_RULES with an additive rule only (contextBudget/conversationCompaction/roundLoop/provider/self -> estimateScanPerRound.test.ts); no existing rule edited or removed.
+- Provider n_keep only estimates the system-message string (not a full-history array scan), so it is not part of the repeated scans; behavior unchanged there.
+- Verification: estimateScanPerRound 2/0; golden suites contextEconomics, prefixReusePreservation, chatContextBudget, chatRoundBudget, chatWebResearchCap, conversationCompaction, hybridCompaction, llmProvider, microElision all UNMODIFIED and green (154 pass / 1 pre-existing skip); npx tsc --noEmit clean; npm run test:gate PASSED 363/0 (<90s budget).
+- Assumption: the brief's "at most 2 (one raw, one effective)" bound is enforced on the standard round path (no compaction/elision/directive mutations); mutation rungs re-scan once per mutation via the dirty flag, which is the intended behavior-preserving cost.
