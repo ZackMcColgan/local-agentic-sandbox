@@ -111,11 +111,13 @@ export class WorkerGitOps {
   private auditLogs: GitAuditLogEntry[] = [];
   private currentBranch = "";
   private hasCustomCommandRunner: boolean;
+  private hasExplicitRepoDir: boolean;
   private pushConfiguredExplicit?: boolean;
   private bootstrapFromOriginDevelop: boolean;
 
   constructor(options: WorkerGitOpsOptions) {
     this.runId = options.runId;
+    this.hasExplicitRepoDir = Boolean(options.repoDir);
     this.repoDir = options.repoDir || process.cwd();
     this.ledger = options.ledger;
     this.hasCustomCommandRunner = Boolean(options.commandRunner);
@@ -127,6 +129,10 @@ export class WorkerGitOps {
         try {
           const { stdout, stderr } = await execFileAsync(file, args, {
             cwd: this.repoDir,
+            env: {
+              ...process.env,
+              GIT_CEILING_DIRECTORIES: path.dirname(path.resolve(this.repoDir)),
+            },
             timeout: 120000,
           });
           return { exitCode: 0, stdout: stdout || "", stderr: stderr || "" };
@@ -139,6 +145,25 @@ export class WorkerGitOps {
           };
         }
       });
+  }
+
+  private assertSafeGitMutationTarget(): void {
+    if (this.hasCustomCommandRunner) return;
+    const isTestEnv = Boolean(
+      process.env.NODE_TEST_CONTEXT ||
+      process.env.FAST_GRAPH_TEST === "1" ||
+      process.env.FORCE_MOCK === "1"
+    );
+    if (isTestEnv && !this.hasExplicitRepoDir) {
+      throw new Error(
+        "WorkerGitOps: refusing to mutate git repository in test context without an explicit repoDir."
+      );
+    }
+    if (!fs.existsSync(path.join(this.repoDir, ".git"))) {
+      throw new Error(
+        `WorkerGitOps: refusing to mutate non-repository directory '${this.repoDir}' (missing .git).`
+      );
+    }
   }
 
   private assertSafeBranchName(branchName: string): void {
@@ -177,6 +202,7 @@ export class WorkerGitOps {
     eventMarkdown: string;
   }> {
     this.assertSafeBranchName(branchName);
+    this.assertSafeGitMutationTarget();
     let baseSha: string | undefined;
 
     // Workspace bootstrap safety check: ensure working tree is clean (no modified/staged tracked files)
@@ -311,6 +337,7 @@ export class WorkerGitOps {
     if (!commitMessage || !commitMessage.trim()) {
       throw new Error("Commit message is required");
     }
+    this.assertSafeGitMutationTarget();
 
     if (this.currentBranch && PROTECTED_BRANCHES.has(this.currentBranch.toLowerCase())) {
       throw new Error(

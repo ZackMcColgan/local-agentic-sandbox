@@ -191,9 +191,9 @@ export function createProductionStepExecutor(
         recorder: modelToUse,
       },
     });
+  const explicitRepoRoot = options?.repoRoot || process.env.WORKSPACE_DIR;
   const repoRoot =
-    options?.repoRoot ||
-    process.env.WORKSPACE_DIR ||
+    explicitRepoRoot ||
     (fs.existsSync("/workspace") && fs.existsSync(path.join("/workspace", ".git"))
       ? "/workspace"
       : fs.existsSync(path.join(process.cwd(), "deploy"))
@@ -207,7 +207,8 @@ export function createProductionStepExecutor(
     attempt: number,
     execCtx?: { repoRoot?: string }
   ): Promise<StepExecutorResult> => {
-    const activeRepoRoot = execCtx?.repoRoot || repoRoot;
+    const explicitActiveRepo = execCtx?.repoRoot || explicitRepoRoot;
+    const activeRepoRoot = explicitActiveRepo || repoRoot;
     console.log(`[executor] step start milestone=${milestone.id} attempt=${attempt}`);
     try {
       const builderModel = workerPool.getModelForRole("builder") || modelToUse;
@@ -450,21 +451,39 @@ export function createProductionStepExecutor(
           }
 
           // 3. Stage and commit changes to git using safe argv arrays (immune to shell injection)
-          try {
-            execFileSync("git", ["add", lastTargetFile], {
-              cwd: activeRepoRoot,
-              stdio: ["pipe", "pipe", "ignore"],
-            });
-            const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
-            execFileSync("git", ["commit", "-m", commitMsg], {
-              cwd: activeRepoRoot,
-              stdio: ["pipe", "pipe", "ignore"],
-            });
-          } catch (err: unknown) {
-            console.error(
-              `[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`,
-              err instanceof Error ? err.message : err
+          const isTestEnv = Boolean(
+            process.env.NODE_TEST_CONTEXT ||
+            process.env.FAST_GRAPH_TEST === "1" ||
+            process.env.FORCE_MOCK === "1"
+          );
+          if (isTestEnv && !explicitActiveRepo) {
+            throw new Error(
+              "Refusing to run git stage/commit in test context without an explicit isolated repoRoot or WORKSPACE_DIR."
             );
+          }
+          if (fs.existsSync(path.join(activeRepoRoot, ".git"))) {
+            try {
+              const gitEnv = {
+                ...process.env,
+                GIT_CEILING_DIRECTORIES: path.dirname(path.resolve(activeRepoRoot)),
+              };
+              execFileSync("git", ["add", lastTargetFile], {
+                cwd: activeRepoRoot,
+                env: gitEnv,
+                stdio: ["pipe", "pipe", "ignore"],
+              });
+              const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
+              execFileSync("git", ["commit", "-m", commitMsg], {
+                cwd: activeRepoRoot,
+                env: gitEnv,
+                stdio: ["pipe", "pipe", "ignore"],
+              });
+            } catch (err: unknown) {
+              console.error(
+                `[supervisor] Git stage/commit failed for milestone ${milestone.id} (file: ${lastTargetFile}):`,
+                err instanceof Error ? err.message : err
+              );
+            }
           }
 
           let finalSha = lastGitSha;

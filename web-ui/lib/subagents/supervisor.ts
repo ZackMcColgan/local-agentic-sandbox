@@ -519,17 +519,20 @@ export class OvernightSupervisor {
       throw new Error("No stepExecutor provided; refusing to fake completion.");
     }
 
-    const repoCandidates = [
-      options?.repoRoot,
-      (task as TaskManifest & { worktreePath?: string }).worktreePath,
-      process.env.WORKSPACE_DIR,
-      "/workspace",
-      process.cwd(),
-      path.resolve(process.cwd(), ".."),
-    ].filter(Boolean) as string[];
-    let repoRoot = options?.repoRoot || repoCandidates[0];
-    if (!options?.repoRoot) {
-      for (const d of repoCandidates) {
+    const explicitRepoRoot =
+      options?.repoRoot ||
+      (task as TaskManifest & { worktreePath?: string }).worktreePath ||
+      process.env.WORKSPACE_DIR;
+    const isTestEnv = Boolean(
+      process.env.NODE_TEST_CONTEXT ||
+      process.env.FAST_GRAPH_TEST === "1" ||
+      process.env.FORCE_MOCK === "1"
+    );
+    let repoRoot = explicitRepoRoot || "";
+    if (!repoRoot) {
+      const fallbackCandidates = ["/workspace", process.cwd(), path.resolve(process.cwd(), "..")];
+      repoRoot = fallbackCandidates[0];
+      for (const d of fallbackCandidates) {
         if (fs.existsSync(path.join(d, ".git"))) {
           repoRoot = d;
           break;
@@ -542,14 +545,9 @@ export class OvernightSupervisor {
       options?.gitOps ||
       new WorkerGitOps({
         runId: task.taskId,
-        repoDir: effectiveRepoRoot,
+        repoDir: explicitRepoRoot || !isTestEnv ? effectiveRepoRoot : undefined,
       });
 
-    const isTestEnv = Boolean(
-      process.env.NODE_TEST_CONTEXT ||
-      process.env.FAST_GRAPH_TEST === "1" ||
-      process.env.FORCE_MOCK === "1"
-    );
     const shouldRunGitOps =
       options?.gitOps !== undefined ||
       (!isTestEnv &&
@@ -557,7 +555,9 @@ export class OvernightSupervisor {
         (task.enableGitOps === true ||
           (task.enableGitOps !== false &&
             Boolean(process.env.WORKSPACE_DIR || fs.existsSync("/workspace/.git"))))) ||
-      (task.enableGitOps === true && fs.existsSync(path.join(repoRoot, ".git")));
+      (task.enableGitOps === true &&
+        Boolean(explicitRepoRoot || !isTestEnv) &&
+        fs.existsSync(path.join(repoRoot, ".git")));
 
     if (shouldRunGitOps && !task.gitOpsBranchCreated) {
       const branchToUse = task.branchName || `feat/task-${task.taskId.slice(0, 12)}`;
@@ -694,7 +694,16 @@ export class OvernightSupervisor {
                 touchActiveTurn(taskThreadId);
               }
               task.updatedAt = new Date().toISOString();
-              const res = await executor(milestone, attempt, { repoRoot: effectiveRepoRoot });
+              const hasExplicitOrIsolatedRepo = Boolean(
+                explicitRepoRoot || task.gitOpsBranchCreated
+              );
+              const res = await executor(
+                milestone,
+                attempt,
+                hasExplicitOrIsolatedRepo || !isTestEnv
+                  ? { repoRoot: effectiveRepoRoot }
+                  : undefined
+              );
               {
                 const stepRoundsArr = Array.isArray(res.roundPromptTokens)
                   ? res.roundPromptTokens.filter(
@@ -766,7 +775,7 @@ export class OvernightSupervisor {
                 milestone.completedAt = new Date().toISOString();
                 milestoneCompleted = true;
 
-                if (gitOps && res.targetFile) {
+                if (shouldRunGitOps && gitOps && res.targetFile) {
                   try {
                     const commitMsg = `feat: complete milestone ${milestone.id} - ${milestone.title.slice(0, 50)}`;
                     const commitRes = await gitOps.stageAndCommit([res.targetFile], commitMsg);

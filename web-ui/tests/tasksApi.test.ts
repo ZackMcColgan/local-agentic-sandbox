@@ -1,10 +1,48 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { POST, GET, DELETE } from "../app/api/tasks/route.js";
 
 describe("Phase 1 — Tasks API Route Suite", () => {
-  process.env.FAST_GRAPH_TEST = "1";
+  const prevWorkspaceDir = process.env.WORKSPACE_DIR;
+  const prevCheckpointDir = process.env.AGENT_CHECKPOINT_DIR;
+  const prevFastGraph = process.env.FAST_GRAPH_TEST;
+  let tmpRepo = "";
+  let tmpCheckpoints = "";
   let createdTaskId: string;
+
+  before(() => {
+    tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "tasks-api-repo-"));
+    tmpCheckpoints = fs.mkdtempSync(path.join(os.tmpdir(), "tasks-api-ckpt-"));
+    execFileSync("git", ["init"], { cwd: tmpRepo, stdio: "ignore" });
+    execFileSync("git", ["config", "user.name", "Test Runner"], { cwd: tmpRepo, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "test@example.com"], {
+      cwd: tmpRepo,
+      stdio: "ignore",
+    });
+    fs.writeFileSync(path.join(tmpRepo, "README.md"), "# Tasks API Temp Repo\n", "utf8");
+    execFileSync("git", ["add", "README.md"], { cwd: tmpRepo, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "chore: init"], { cwd: tmpRepo, stdio: "ignore" });
+
+    process.env.WORKSPACE_DIR = tmpRepo;
+    process.env.AGENT_CHECKPOINT_DIR = tmpCheckpoints;
+    process.env.FAST_GRAPH_TEST = "1";
+  });
+
+  after(() => {
+    if (prevWorkspaceDir === undefined) delete process.env.WORKSPACE_DIR;
+    else process.env.WORKSPACE_DIR = prevWorkspaceDir;
+    if (prevCheckpointDir === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
+    else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointDir;
+    if (prevFastGraph === undefined) delete process.env.FAST_GRAPH_TEST;
+    else process.env.FAST_GRAPH_TEST = prevFastGraph;
+
+    if (tmpRepo) fs.rmSync(tmpRepo, { recursive: true, force: true });
+    if (tmpCheckpoints) fs.rmSync(tmpCheckpoints, { recursive: true, force: true });
+  });
 
   it("POST /api/tasks creates task manifest with SPEC.md milestones", async () => {
     const req = new Request("http://localhost:3000/api/tasks", {
