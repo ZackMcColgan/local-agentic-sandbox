@@ -117,7 +117,11 @@ describe("Board #120 Repository Standards Sweep (community files, dependency wat
 
     for (const wf of [".github/workflows/ci.yml", ".github/workflows/chaos.yml"]) {
       const content = read(wf);
-      assert.match(content, /node-version-file:\s*"?\.nvmrc"?/, `${wf} must consume the .nvmrc pin`);
+      assert.match(
+        content,
+        /node-version-file:\s*"?\.nvmrc"?/,
+        `${wf} must consume the .nvmrc pin`
+      );
       assert.doesNotMatch(
         content,
         /node-version:\s*22\b/,
