@@ -1641,7 +1641,6 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/thoughtStreamDeltaOnly.test.ts"],
   },
   {
-  {
     // Board #129 Perf P5: mid-turn compaction uses the extraction digest (no
     // secondary summarization dispatch on the single engine slot), and the
     // turn's slot lease releases during tool waits so a queued turn dispatches.
