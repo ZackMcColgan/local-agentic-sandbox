@@ -46,12 +46,12 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
     assert.equal(msg1.content, "");
 
     // Later snapshot inside throttle window returns false
-    fakeNow += 500;
+    fakeNow += STREAM_SNAPSHOT_INTERVAL_MS - 500;
     const write2 = snap.maybeWrite("", "Analyzing user request... still thinking");
-    assert.equal(write2, false, "Throttled write must be skipped within 1s interval");
+    assert.equal(write2, false, "Throttled write must be skipped within the interval");
 
     // Past interval: grows cumulatively
-    fakeNow += 600;
+    fakeNow += 500;
     const write3 = snap.maybeWrite(
       "Here is the start of answer",
       "Analyzing user request... still thinking\nDone thinking."

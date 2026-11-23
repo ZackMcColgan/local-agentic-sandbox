@@ -13,7 +13,11 @@
 import type { ExecutionTraceItem } from "@/components/ExecutionTrace";
 import type { RoundNarrationSegment, ThinkingSegment } from "./activityTimeline";
 
-export const STREAM_SNAPSHOT_INTERVAL_MS = 1000;
+// PERF-P4 (#128): each snapshot write stringifies + persists the full thread
+// JSON (1.0-1.6 MB per write), so a 1s cadence produced >2.2 GB of writes over
+// a long job on the 1-vCPU event loop. The cadence is raised to 5s; round
+// boundaries still bypass the throttle via { force: true } (TURN-LIVENESS).
+export const STREAM_SNAPSHOT_INTERVAL_MS = 5000;
 export const STREAM_POLL_INTERVAL_MS = 1500;
 
 export interface StreamingSnapshotMessage {
