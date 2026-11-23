@@ -253,6 +253,46 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       });
     });
 
+    it("LlamaCppProvider.streamChat accumulates multi-index delta tool calls so parallel batches survive to the fanout partition", async () => {
+      globalThis.fetch = (async (_url: string | URL | Request, _init?: RequestInit) => {
+        return createMockSseResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"workspace_read_file","arguments":"{\\"path\\""}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_b","type":"function","function":{"name":"workspace_grep","arguments":"{\\"pattern\\""}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":": \\"a.ts\\"}"}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":": \\"TODO\\"}"}}]}}]}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }) as typeof globalThis.fetch;
+
+      const provider = new LlamaCppProvider();
+      const chunks: LLMStreamChunk[] = [];
+      for await (const chunk of provider.streamChat("http://127.0.0.1:8080", {
+        model: "qwen-27b",
+        messages: [{ role: "user", content: "Read a.ts and grep TODO" }],
+        tools: [
+          { type: "function", function: { name: "workspace_read_file" } },
+          { type: "function", function: { name: "workspace_grep" } },
+        ],
+      })) {
+        chunks.push(chunk);
+      }
+
+      const finalToolCalls = chunks[chunks.length - 1].message?.tool_calls;
+      assert.ok(finalToolCalls, "final chunk must carry accumulated tool calls");
+      assert.equal(
+        finalToolCalls.length,
+        2,
+        "index>0 deltas must NOT be dropped: fanout needs both calls"
+      );
+      assert.deepEqual(
+        finalToolCalls.map((tc) => tc.function.name),
+        ["workspace_read_file", "workspace_grep"],
+        "calls must be emitted in index order (emission order feeds partitionToolCallBatches)"
+      );
+      assert.deepEqual(finalToolCalls[0].function.arguments, { path: "a.ts" });
+      assert.deepEqual(finalToolCalls[1].function.arguments, { pattern: "TODO" });
+    });
+
     it("parses non-delta choices[0].message.tool_calls when server sends whole message block", async () => {
       globalThis.fetch = (async () => {
         return createMockSseResponse([
@@ -738,7 +778,7 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.equal(body.messages?.[3]?.tool_call_id, assistantMsg?.tool_calls?.[0]?.id);
     });
 
-    it("LlamaCppProvider.streamChat sends parallel_tool_calls: false when tools are present", async () => {
+    it("LlamaCppProvider.streamChat sends parallel_tool_calls: true when tools are present (runaway protection lives in the fanout partition: cap 8, read-only allowlist, writes strictly sequential)", async () => {
       let sentBody: CapturedRequestBody | null = null;
       globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
         sentBody = JSON.parse(String(init?.body || "{}")) as CapturedRequestBody;
@@ -760,8 +800,8 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.ok(sentBody, "Must send request body");
       assert.equal(
         (sentBody as CapturedRequestBody).parallel_tool_calls,
-        false,
-        "Must explicitly set parallel_tool_calls: false to prevent runaway loops"
+        true,
+        "Must explicitly set parallel_tool_calls: true so read-only fanout batches land in one round; runaway protection lives in the fanout partition (cap 8, read-only allowlist, writes strictly sequential)"
       );
     });
 
