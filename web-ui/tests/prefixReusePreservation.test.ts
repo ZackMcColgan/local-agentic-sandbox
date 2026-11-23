@@ -18,7 +18,6 @@ import {
   WEB_BUDGET_EXHAUSTED_DIRECTIVE,
   appendTrailingDirective,
   estimateTokens,
-  filterToolsForWebBudget,
   runChatToolLoop,
 } from "../lib/contextBudget";
 import { runSynthesisPass } from "../lib/chat/turnEngine";
