@@ -21,8 +21,16 @@
  *   record alongside any model summary (audit copy).
  */
 
-import { estimateTokens, CHAT_CONTEXT_BUDGET_TOKENS } from "./contextBudget";
-import { COMPACTION_THRESHOLD_RATIO, HYBRID_ESCALATION_RATIO } from "./modelLimits";
+import {
+  estimateTokens,
+  CHAT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+} from "./contextBudget";
+import {
+  COMPACTION_THRESHOLD_RATIO,
+  HYBRID_ESCALATION_RATIO,
+  ROUND_MAX_TOKENS,
+} from "./modelLimits";
 
 /** Single-source-of-truth ratio aliases (modelLimits leaf module); existing
  * import paths keep working byte-for-byte in behavior. */
@@ -273,6 +281,16 @@ export async function runHybridCompaction(
     /** Injectable deadlines (test seam); default to the pinned guardrails. */
     inactivityMs?: number;
     totalDeadlineMs?: number;
+    /** Provider-measured / calibrated prompt tokens (Fix D1). */
+    measuredPromptTokens?: number;
+    /** Tool-schema tokens included in prompt budget (Fix D1). */
+    toolSchemaTokens?: number;
+    /** Tool definitions array (used if toolSchemaTokens omitted). */
+    tools?: unknown[];
+    /** Physical model context window (Fix D2). */
+    contextWindowTokens?: number;
+    /** Output tokens reserved per round (defaults to ROUND_MAX_TOKENS, Fix D2). */
+    outputReserveTokens?: number;
   }
 ): Promise<HybridCompactionResult> {
   const strategy = options.strategy ?? resolveCompactionStrategy();
@@ -280,6 +298,11 @@ export async function runHybridCompaction(
     maxContentTokens: options.maxContentTokens,
     compactionThreshold: options.compactionThreshold,
     preserveRecentMessages: options.preserveRecentMessages,
+    measuredPromptTokens: options.measuredPromptTokens,
+    toolSchemaTokens: options.toolSchemaTokens,
+    tools: options.tools,
+    contextWindowTokens: options.contextWindowTokens,
+    outputReserveTokens: options.outputReserveTokens,
   });
 
   const digestIndex = base.messages[0]?.role === "system" ? 1 : 0;
@@ -304,8 +327,14 @@ export async function runHybridCompaction(
     };
   }
 
-  const maxTokens = options.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
-  const postExtractionRatio = base.tokensAfter / maxTokens;
+  const windowTokens = options.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+  const outputReserve = options.outputReserveTokens ?? ROUND_MAX_TOKENS;
+  const effectiveInputCeiling = Math.max(0, windowTokens - outputReserve);
+  const maxTokens = Math.min(
+    options.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS,
+    effectiveInputCeiling
+  );
+  const postExtractionRatio = maxTokens > 0 ? base.tokensAfter / maxTokens : 1;
   if (postExtractionRatio <= HYBRID_ESCALATION_THRESHOLD) {
     return {
       ...base,
@@ -585,7 +614,10 @@ export function summarizeTurnHistory(olderMessages: CompactionMessage[]): string
 
 /**
  * Checks if conversation utilization exceeds 85% of budget, and if so,
- * compacts older turns while preserving system prompt and recent turns.
+ * compacts older turns while preserving:
+ * - system prompt (index 0) verbatim
+ * - leading user message (the job brief) verbatim (re-anchored, never excerpted)
+ * - most recent turns verbatim
  */
 export function compactConversationHistory(
   messages: CompactionMessage[],
@@ -593,17 +625,44 @@ export function compactConversationHistory(
     maxContentTokens?: number;
     compactionThreshold?: number;
     preserveRecentMessages?: number;
+    /** Provider-measured / calibrated prompt tokens (Fix D1). */
+    measuredPromptTokens?: number;
+    /** Tool-schema tokens included in prompt budget (Fix D1). */
+    toolSchemaTokens?: number;
+    /** Tool definitions array (used if toolSchemaTokens omitted). */
+    tools?: unknown[];
+    /** Physical model context window (Fix D2). */
+    contextWindowTokens?: number;
+    /** Per-round output reserve (defaults to ROUND_MAX_TOKENS, Fix D2). */
+    outputReserveTokens?: number;
   }
 ): CompactionResult & { replacedMessages?: CompactionMessage[] } {
+  const schemaTokens =
+    options?.toolSchemaTokens ??
+    (Array.isArray(options?.tools) && options.tools.length > 0
+      ? estimateTokens(JSON.stringify(options.tools))
+      : 0);
+  const rawTotal = estimateTokens(messages) + schemaTokens;
+  const tokensBefore =
+    typeof options?.measuredPromptTokens === "number" &&
+    Number.isFinite(options.measuredPromptTokens) &&
+    options.measuredPromptTokens > 0
+      ? Math.max(rawTotal, Math.round(options.measuredPromptTokens))
+      : rawTotal;
+
   if (!Array.isArray(messages) || messages.length <= 3) {
-    const tokens = estimateTokens(messages);
-    return { compacted: false, messages, tokensBefore: tokens, tokensAfter: tokens };
+    return { compacted: false, messages, tokensBefore, tokensAfter: tokensBefore };
   }
 
-  const maxTokens = options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
+  const windowTokens = options?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+  const outputReserve = options?.outputReserveTokens ?? ROUND_MAX_TOKENS;
+  const effectiveInputCeiling = Math.max(0, windowTokens - outputReserve);
+  const maxTokens = Math.min(
+    options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS,
+    effectiveInputCeiling
+  );
   const thresholdRatio = options?.compactionThreshold ?? DEFAULT_COMPACTION_THRESHOLD;
   const thresholdTokens = Math.floor(maxTokens * thresholdRatio);
-  const tokensBefore = estimateTokens(messages);
 
   if (tokensBefore < thresholdTokens) {
     return { compacted: false, messages, tokensBefore, tokensAfter: tokensBefore };
@@ -619,8 +678,16 @@ export function compactConversationHistory(
     return { compacted: false, messages, tokensBefore, tokensAfter: tokensBefore };
   }
 
+  const firstUserIdx = messages.findIndex((m) => m?.role === "user");
   const olderMessages = messages.slice(startIdx, endIdx);
   const recentMessages = messages.slice(endIdx);
+
+  // If the only message eligible for compaction is the protected leading user
+  // brief, compacting would add a summary on top of the verbatim brief.
+  if (olderMessages.length === 1 && firstUserIdx === startIdx) {
+    return { compacted: false, messages, tokensBefore, tokensAfter: tokensBefore };
+  }
+
   const summaryContent = summarizeTurnHistory(olderMessages);
 
   const compactedMessages: CompactionMessage[] = [];
@@ -633,9 +700,19 @@ export function compactConversationHistory(
     content: summaryContent,
   });
 
+  // Fix D5 (F8e): preserve the leading user message (the job brief) VERBATIM
+  // through every compaction rung (re-anchored after the summary, never excerpted).
+  if (firstUserIdx !== -1 && firstUserIdx < endIdx) {
+    compactedMessages.push(messages[firstUserIdx]);
+  }
+
   compactedMessages.push(...recentMessages);
 
-  const tokensAfter = estimateTokens(compactedMessages);
+  const rawAfter = estimateTokens(compactedMessages) + schemaTokens;
+  const tokensAfter =
+    tokensBefore > rawTotal && rawTotal > 0
+      ? Math.max(rawAfter, Math.ceil(rawAfter * (tokensBefore / rawTotal)))
+      : rawAfter;
 
   return {
     compacted: true,

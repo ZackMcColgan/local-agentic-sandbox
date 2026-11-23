@@ -66,6 +66,18 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("lib/contextBudget") ||
+      p.includes("lib/conversationCompaction") ||
+      p.includes("lib/microElision") ||
+      p.includes("lib/modelLimits") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("contextEconomics.test.ts"),
+    tests: ["tests/contextEconomics.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/chat/roundLoop") ||
       p.includes("lib/chat/turnEngine") ||
       p.includes("app/api/chat/route") ||
