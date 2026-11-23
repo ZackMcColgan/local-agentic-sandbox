@@ -1640,6 +1640,29 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("thoughtStreamDeltaOnly.test.ts"),
     tests: ["tests/thoughtStreamDeltaOnly.test.ts"],
   },
+  {
+    // PERF-P4 (#128): snapshot cadence raised to 5s; full-thread poll suppressed
+    // while the SSE stream is actively delivering chunks.
+    match: (p) =>
+      p.includes("lib/streamSnapshot") ||
+      p.includes("lib/streamPollGate") ||
+      p.includes("app/page.tsx") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("snapshotIntervalFiveSeconds.test.ts"),
+    tests: [
+      "tests/snapshotIntervalFiveSeconds.test.ts",
+      "tests/chatLiveVisibility.test.ts",
+      "tests/chatThinkingPreservation.test.ts",
+    ],
+  },
+  {
+    // PERF-P4 (#128): poll-gate predicate extracted as a pure function.
+    match: (p) =>
+      p.includes("lib/streamPollGate") ||
+      p.includes("app/page.tsx") ||
+      p.includes("streamPollGate.test.ts"),
+    tests: ["tests/streamPollGate.test.ts"],
+  },
 ];
 
 /**

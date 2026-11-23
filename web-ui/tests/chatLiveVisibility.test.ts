@@ -30,13 +30,13 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
       () => fakeNow
     );
     assert.equal(snap.maybeWrite("first"), true, "first write must land immediately");
-    fakeNow += 500;
+    fakeNow += STREAM_SNAPSHOT_INTERVAL_MS - 1;
     assert.equal(
       snap.maybeWrite("first second"),
       false,
-      "write inside the 1s window must be skipped"
+      "write inside the throttle window must be skipped"
     );
-    fakeNow += 501;
+    fakeNow += 1;
     assert.equal(snap.maybeWrite("first second third"), true, "write past the window must land");
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -56,7 +56,7 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
     );
     fakeNow = 1000;
     snap.maybeWrite("alpha");
-    fakeNow = 2000;
+    fakeNow = 1000 + STREAM_SNAPSHOT_INTERVAL_MS;
     snap.maybeWrite("alpha beta");
 
     // Client B: independent ThreadStore instance against the same directory.
@@ -74,7 +74,7 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
     );
     assert.equal(mid.status, "active", "live registration must keep the thread honestly active");
 
-    fakeNow = 3000;
+    fakeNow = 1000 + 2 * STREAM_SNAPSHOT_INTERVAL_MS;
     snap.maybeWrite("alpha beta gamma");
     const mid2 = await reader.getThread(thread.id);
     assert.equal(
@@ -142,8 +142,8 @@ describe("CHAT-8 — live mid-turn streaming visibility", () => {
     assert.equal(isLiveStreamingMessage(null), false);
   });
 
-  it("intervals match the brief: ~1s server snapshot, ~1.5s client poll", () => {
-    assert.equal(STREAM_SNAPSHOT_INTERVAL_MS, 1000);
+  it("intervals match the brief: 5s server snapshot (PERF-P4), ~1.5s client poll", () => {
+    assert.equal(STREAM_SNAPSHOT_INTERVAL_MS, 5000);
     assert.equal(STREAM_POLL_INTERVAL_MS, 1500);
   });
 

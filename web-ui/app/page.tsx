@@ -8,6 +8,7 @@ import { TaskManifest, TaskScope } from "@/lib/subagents/types";
 import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
+import { isSseStreamDelivering, shouldPollLiveThread } from "@/lib/streamPollGate";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import type { NavView } from "@/components/NavigationDrawer";
 import type { SettingsView } from "@/components/SettingsView";
@@ -519,6 +520,15 @@ export default function Home() {
   const latestAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
   const isThreadLiveStreaming =
     isLiveStreamingMessage(latestAssistantMessage) || Boolean(observedActiveTurn);
+
+  // PERF-P4 (#128): track when the last streamed chunk landed. SSE chunks arrive
+  // through the shared `messages` state (ChatStream's setMessages), so the
+  // existing state channel is the transport signal — no new stream-active state.
+  const lastStreamChunkAtRef = useRef<number>(0);
+  useEffect(() => {
+    lastStreamChunkAtRef.current = Date.now();
+  }, [messages]);
+
   useEffect(() => {
     if (!selectedThreadId || !isThreadLiveStreaming) return;
     if (activeNavView !== "sessions") return;
@@ -535,6 +545,18 @@ export default function Home() {
     const pollLiveThread = async () => {
       if (!active) return;
       if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      // PERF-P4 (#128): while the SSE stream is actively delivering chunks the
+      // stream itself is the transport, so the full-thread poll is redundant
+      // churn on the 1-vCPU event loop. Suppress it and re-arm once the stream
+      // goes quiet; the effect tears down when the stream ends.
+      const sseStreamDelivering = isSseStreamDelivering(
+        lastStreamChunkAtRef.current,
+        Date.now()
+      );
+      if (!shouldPollLiveThread({ threadLiveStreaming: true, sseStreamDelivering })) {
+        scheduleNext(STREAM_POLL_INTERVAL_MS);
         return;
       }
       let shouldContinue = true;
