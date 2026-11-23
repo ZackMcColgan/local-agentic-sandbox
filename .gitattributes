@@ -1,0 +1,56 @@
+# Normalize line endings so Windows development and Linux CI agree on file bytes.
+# Development happens on Windows; CI and containers run Linux.
+* text=auto eol=lf
+
+# Explicit text types (belt and braces over the auto heuristic).
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+*.drawio text eol=lf
+Dockerfile text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+
+# Lockfiles are generated; keep them LF and never diff them in review.
+package-lock.json text eol=lf -diff
+
+# Shell scripts must stay LF even when checked out on Windows.
+*.sh text eol=lf
+
+# Binary artifacts.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.mp4 binary
+*.wav binary
+
+# Generated reports and eval output are never reviewed as diffs.
+playwright-report/** -diff linguist-generated=true
+test-results/** -diff linguist-generated=true
+coverage/** -diff linguist-generated=true
+.next/** -diff linguist-generated=true
+dist/** -diff linguist-generated=true
+build/** -diff linguist-generated=true

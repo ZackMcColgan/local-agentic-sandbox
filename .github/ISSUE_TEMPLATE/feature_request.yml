@@ -1,0 +1,41 @@
+name: Feature Request
+description: Propose a feature or enhancement for the sandbox platform
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Features land as board items and are worked through the queue-steer program.
+        Keep proposals scoped to one change.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this solves
+      description: What gap or friction does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: The concrete change, and which component it touches (web-ui/, host-bridge/, mcp-server/, browser-mcp/, deploy/).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: security
+    attributes:
+      label: Security / boundary impact
+      description: Does this touch container isolation, the egress mesh, the host-bridge approval gate, or Kubernetes RBAC? Say "none" if it does not.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we know it is done, including the phone check for UI work.
+    validations:
+      required: true

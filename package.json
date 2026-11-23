@@ -2,6 +2,9 @@
   "name": "local-agentic-sandbox-root",
   "version": "2.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "description": "Zero-trust air-gapped agentic sandbox orchestrating local LLMs and Model Context Protocol",
   "workspaces": [
     "mcp-server",

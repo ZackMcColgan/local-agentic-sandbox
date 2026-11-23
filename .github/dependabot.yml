@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # npm workspaces are resolved from the single root package-lock.json, so one
+  # npm entry at the repository root covers web-ui, mcp-server, browser-mcp,
+  # and host-bridge. Update PRs land on develop and still pass the normal audit
+  # and CI security boundary verification before any merge.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-prs-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+
+  # GitHub Actions pinning (actions/checkout, actions/setup-node, ...).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-prs-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps(actions)"

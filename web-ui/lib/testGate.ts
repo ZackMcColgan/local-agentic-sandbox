@@ -66,6 +66,18 @@ interface MappingRule {
 const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
+      p.includes("repoStandards.test.ts") ||
+      p.includes("SECURITY.md") ||
+      p.includes("CONTRIBUTING.md") ||
+      p.includes(".nvmrc") ||
+      p.includes(".gitattributes") ||
+      p.includes(".github/dependabot.yml") ||
+      p.includes(".github/PULL_REQUEST_TEMPLATE.md") ||
+      p.includes(".github/ISSUE_TEMPLATE/"),
+    tests: ["tests/repoStandards.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/subagents/supervisor") ||
       p.includes("lib/subagents/stepExecutor") ||
       p.includes("lib/git/workerGitOps") ||
