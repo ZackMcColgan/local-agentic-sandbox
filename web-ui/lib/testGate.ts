@@ -446,12 +446,12 @@ const MAPPING_RULES: MappingRule[] = [
   // job-queue-isolation: single-slot queue + per-job worktrees
   {
     match: (p) => p.includes("lib/jobQueue") || p.includes("lib/worktree"),
-    tests: ["tests/jobQueueIsolation.test.ts"],
+    tests: ["tests/jobQueueIsolation.test.ts", "tests/engineSlotReleaseDuringToolWait.test.ts"],
   },
   {
     // job-queue-isolation wiring: route serialization seam + route-level proof
     match: (p) => p.includes("lib/chatTurnGate") || p.includes("app/api/chat/route"),
-    tests: ["tests/jobQueueRoute.test.ts"],
+    tests: ["tests/jobQueueRoute.test.ts", "tests/engineSlotReleaseDuringToolWait.test.ts"],
   },
   {
     // PrioritySlotScheduler single-slot arbiter & preemption wiring
@@ -1639,6 +1639,20 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("lib/chat/turnEngine") ||
       p.includes("thoughtStreamDeltaOnly.test.ts"),
     tests: ["tests/thoughtStreamDeltaOnly.test.ts"],
+  },
+  {
+    // Board #129 Perf P5: mid-turn compaction uses the extraction digest (no
+    // secondary summarization dispatch on the single engine slot), and the
+    // turn's slot lease releases during tool waits so a queued turn dispatches.
+    match: (p) =>
+      p.includes("lib/conversationCompaction") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/jobQueue") ||
+      p.includes("lib/slotScheduler") ||
+      p.includes("lib/chatTurnGate") ||
+      p.includes("app/api/chat/route") ||
+      p.includes("engineSlotReleaseDuringToolWait.test.ts"),
+    tests: ["tests/engineSlotReleaseDuringToolWait.test.ts"],
   },
 ];
 
