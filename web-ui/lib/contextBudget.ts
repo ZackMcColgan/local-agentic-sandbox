@@ -295,9 +295,7 @@ export function estimateEffectivePromptTokens(
 let estimateTokensObserver: ((input: unknown) => void) | null = null;
 
 /** Install (or clear) a counting observer for estimateTokens. Test-only seam. */
-export function setEstimateTokensObserver(
-  fn: ((input: unknown) => void) | null
-): void {
+export function setEstimateTokensObserver(fn: ((input: unknown) => void) | null): void {
   estimateTokensObserver = fn;
 }
 
