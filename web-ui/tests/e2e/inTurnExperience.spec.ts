@@ -250,7 +250,7 @@ for (const width of PHONE_WIDTHS) {
       isMobile: true,
     });
 
-    test("persistent RUNNING pill stays visible while streaming and is replaced by DONE on completion", async ({
+    test("header now-line stays visible while streaming and transitions to Complete + DONE on completion", async ({
       page,
     }) => {
       await setupStubbedEngineRoutes(page, { threads: [] });
@@ -294,17 +294,19 @@ for (const width of PHONE_WIDTHS) {
       await composer.fill("run p4");
       await composer.press("Enter");
 
-      const runningPill = page.getByTestId("running-pill");
-      await expect(runningPill).toBeVisible();
-      await expect(runningPill).toContainText("RUNNING");
+      const nowLine = page.getByTestId("header-now-line");
+      await expect(nowLine).toBeVisible();
+      await expect(page.getByTestId("stop-button")).toBeVisible();
+      // Duplicate sticky RUNNING pill is retired (U2 Sibling 4)
+      await expect(page.getByTestId("running-pill")).toHaveCount(0);
 
-      // Scroll message list and verify pill remains visible
+      // Scroll message list and verify header now-line remains visible
       await page.evaluate(() => window.scrollTo(0, 0));
-      await expect(runningPill).toBeVisible();
+      await expect(nowLine).toBeVisible();
 
       releaseDone();
       await expect(page.getByText("Finished P4.")).toBeVisible();
-      await expect(runningPill).toBeHidden();
+      await expect(page.getByTestId("now-line-action")).toContainText("Complete");
       await expect(page.getByTestId("turn-done-chip")).toBeVisible();
       server.close();
     });

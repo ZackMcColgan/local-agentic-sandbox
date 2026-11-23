@@ -5,7 +5,7 @@ import type { ChatMessage } from "@/components/ChatStream";
 import { useLiveTraces } from "@/lib/hooks/useLiveTraces";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread } from "@/lib/threads/threadStore";
+import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { SimulationScenarioKey } from "@/lib/simulator";
@@ -71,23 +71,45 @@ export default function Home() {
 
   useEffect(() => {
     if (activeNavView !== "board") return;
-    fetch("/api/board")
-      .then((res) => (res.ok ? res.json() : { items: [] }))
-      .then((data) => {
-        if (Array.isArray(data.items)) {
-          setBoardItems(data.items);
-        }
-      })
-      .catch(() => {});
-    fetch("/api/board/control")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.control?.state) {
-          setBoardControlState(data.control.state);
-          setBoardStopAtBoundary(Boolean(data.control.stopAtBoundary));
-        }
-      })
-      .catch(() => {});
+    let active = true;
+    const refreshBoard = () => {
+      if (!active) return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetch("/api/board")
+        .then((res) => (res.ok ? res.json() : { items: [] }))
+        .then((data) => {
+          if (active && Array.isArray(data.items)) {
+            setBoardItems(data.items);
+          }
+        })
+        .catch(() => {});
+      fetch("/api/board/control")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (active && data?.control?.state) {
+            setBoardControlState(data.control.state);
+            setBoardStopAtBoundary(Boolean(data.control.stopAtBoundary));
+          }
+        })
+        .catch(() => {});
+    };
+    refreshBoard();
+    const interval = setInterval(refreshBoard, 4000);
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        refreshBoard();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    return () => {
+      active = false;
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+    };
   }, [activeNavView]);
 
   const handleBoardControlAction = async (action: BoardControlAction) => {
@@ -155,6 +177,8 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     getInitialWelcomeMessage(DEFAULT_PRIMARY_MODEL),
   ]);
+  const [observedActiveTurn, setObservedActiveTurn] = useState<ActiveTurnInfo | null>(null);
+  const [observedThreadUpdatedAt, setObservedThreadUpdatedAt] = useState<string | null>(null);
 
   // Synchronous-like hydration for theme support
   useEffect(() => {
@@ -463,12 +487,16 @@ export default function Home() {
         });
         if (res.ok) {
           const data = await res.json();
+          setObservedActiveTurn(data.activeTurn || null);
           if (data.thread) {
+            setObservedThreadUpdatedAt(data.thread.updatedAt || null);
             setSelectedModel((prev) => data.thread.model || prev);
             setReasoningEffort((prev) => data.thread.reasoningEffort || prev);
             if (Array.isArray(data.thread.messages)) {
               setMessages(data.thread.messages);
             }
+          } else {
+            setObservedThreadUpdatedAt(null);
           }
           if (data.task) {
             setActiveTask(data.task);
@@ -484,42 +512,115 @@ export default function Home() {
     loadSelectedThread();
   }, [selectedThreadId]);
 
-  // CHAT-8: live mid-turn visibility — poll the selected thread while its latest
-  // assistant message is "streaming", re-rendering partial content until the
-  // status flips to a terminal state.
+  // CHAT-8 / U2: live mid-turn visibility — poll the selected thread while its
+  // latest assistant message is "streaming" or an activeTurn presence exists.
+  // Resilient: re-arms in `finally` with bounded backoff on transient errors,
+  // and pauses while hidden or outside the Sessions view.
   const latestAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
-  const isThreadLiveStreaming = isLiveStreamingMessage(latestAssistantMessage);
+  const isThreadLiveStreaming =
+    isLiveStreamingMessage(latestAssistantMessage) || Boolean(observedActiveTurn);
   useEffect(() => {
     if (!selectedThreadId || !isThreadLiveStreaming) return;
+    if (activeNavView !== "sessions") return;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let consecutiveErrors = 0;
+
+    const scheduleNext = (delayMs: number) => {
+      if (!active) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(pollLiveThread, delayMs);
+    };
+
     const pollLiveThread = async () => {
+      if (!active) return;
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      let shouldContinue = true;
+      let nextDelay = STREAM_POLL_INTERVAL_MS;
       try {
         const res = await fetch(`/api/threads/${selectedThreadId}`, {
           cache: "no-store",
           headers: { "Cache-Control": "no-cache" },
         });
-        if (!res.ok || !active) return;
+        if (!active) return;
+        if (!res.ok) {
+          consecutiveErrors += 1;
+          nextDelay = Math.min(
+            STREAM_POLL_INTERVAL_MS * Math.pow(2, Math.min(consecutiveErrors, 4)),
+            15_000
+          );
+          return;
+        }
+        consecutiveErrors = 0;
         const data = await res.json();
+        if (!active) return;
+        const nextActiveTurn: ActiveTurnInfo | null = data?.activeTurn || null;
+        setObservedActiveTurn(nextActiveTurn);
+        if (data?.thread) {
+          if (typeof data.thread.updatedAt === "string") {
+            setObservedThreadUpdatedAt(data.thread.updatedAt);
+          }
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === selectedThreadId
+                ? {
+                    ...t,
+                    updatedAt: data.thread.updatedAt || t.updatedAt,
+                    status: data.thread.status || t.status,
+                    liveness: data.thread.liveness ?? t.liveness,
+                    hasStreamingMessage: Array.isArray(data.thread.messages)
+                      ? data.thread.messages.some(
+                          (m: ChatMessage) => m.role === "assistant" && m.status === "streaming"
+                        )
+                      : undefined,
+                  }
+                : t
+            )
+          );
+        }
         if (Array.isArray(data?.thread?.messages)) {
           setMessages(data.thread.messages);
           const lastAssistant = [...data.thread.messages]
             .reverse()
             .find((m: ChatMessage) => m.role === "assistant");
-          if (isLiveStreamingMessage(lastAssistant) && active) {
-            timer = setTimeout(pollLiveThread, STREAM_POLL_INTERVAL_MS);
-          }
+          shouldContinue = isLiveStreamingMessage(lastAssistant) || Boolean(nextActiveTurn);
+        } else {
+          shouldContinue = Boolean(nextActiveTurn);
         }
       } catch (err) {
+        consecutiveErrors += 1;
+        nextDelay = Math.min(
+          STREAM_POLL_INTERVAL_MS * Math.pow(2, Math.min(consecutiveErrors, 4)),
+          15_000
+        );
         console.warn("Live thread poll notice:", err);
+      } finally {
+        if (active && shouldContinue) {
+          scheduleNext(nextDelay);
+        }
       }
     };
-    timer = setTimeout(pollLiveThread, STREAM_POLL_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden && active) {
+        scheduleNext(0);
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    scheduleNext(STREAM_POLL_INTERVAL_MS);
     return () => {
       active = false;
       if (timer) clearTimeout(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
     };
-  }, [selectedThreadId, isThreadLiveStreaming]);
+  }, [selectedThreadId, isThreadLiveStreaming, activeNavView]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
   const activeTaskId = activeTask?.taskId;
@@ -917,6 +1018,8 @@ export default function Home() {
       isLoadingThreads={isLoadingThreads}
       selectedThreadId={selectedThreadId}
       currentThread={currentThread}
+      activeTurn={observedActiveTurn}
+      threadUpdatedAt={observedThreadUpdatedAt || currentThread?.updatedAt || null}
       messages={messages}
       setMessages={setMessages}
       draftComposerPrompt={draftComposerPrompt}

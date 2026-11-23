@@ -11,7 +11,7 @@ import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread } from "@/lib/threads/threadStore";
+import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   ArrowLeft,
@@ -75,6 +75,8 @@ export interface ViewShellProps {
   isLoadingThreads: boolean;
   selectedThreadId: string | null;
   currentThread: Thread | null;
+  activeTurn?: ActiveTurnInfo | null;
+  threadUpdatedAt?: string | null;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   draftComposerPrompt: string | null;
@@ -168,6 +170,8 @@ export function ViewShell({
   isLoadingThreads,
   selectedThreadId,
   currentThread,
+  activeTurn,
+  threadUpdatedAt,
   messages,
   setMessages,
   draftComposerPrompt,
@@ -440,6 +444,8 @@ export function ViewShell({
                   reasoningEffort={reasoningEffort}
                   threadId={currentThread?.id}
                   threadTitle={currentThread?.title || "New session"}
+                  activeTurn={activeTurn}
+                  threadUpdatedAt={threadUpdatedAt ?? currentThread?.updatedAt ?? null}
                   supervisorState={
                     currentThread
                       ? {

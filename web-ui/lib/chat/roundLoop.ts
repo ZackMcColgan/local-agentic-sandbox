@@ -19,6 +19,7 @@ import { appendNarrationChunk } from "@/lib/liveActivity";
 import { recordTurnOutputWrite, collectTurnAttachments } from "@/lib/threadOutputs";
 import {
   captureWorkspacePreImage,
+  coalesceTurnDiffs,
   collectTurnModifiedFileDiffs,
   TurnFileDiff,
 } from "@/lib/chatDiffs";
@@ -694,6 +695,8 @@ export async function runChatTurn(
     const roundPromptTokens: number[] = [];
     const roundGenerationMs: number[] = [];
     const thinkingSegments: Array<{ round: number; text: string }> = [];
+    const roundNarrations: Array<{ round: number; text: string }> = [];
+    let cumulativeOutputTokens = 0;
     let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
     // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
     // turnMicroElisions declared with the other turn state, so both persist
@@ -1058,10 +1061,12 @@ export async function runChatTurn(
             }
             lastWritingChunkMs = nowMs;
             const textChunk = chunk.message.content;
+            const isFirstChunkOfRound = fullRoundContent.length === 0;
             fullRoundContent += textChunk;
             turnState.accumulatedStreamedTokens = appendNarrationChunk(
               turnState.accumulatedStreamedTokens,
-              textChunk
+              textChunk,
+              { roundBoundary: isFirstChunkOfRound }
             );
             armRoundDeadline();
             // TURN SIZE LIMIT: per-round hard cap on streamed content. A single
@@ -1102,9 +1107,20 @@ export async function runChatTurn(
           throw roundErr;
         }
       } finally {
-        roundGenerationMs.push(Math.max(1, Date.now() - roundStreamStartMs));
+        const roundElapsedMs = Math.max(1, Date.now() - roundStreamStartMs);
+        roundGenerationMs.push(roundElapsedMs);
         if (roundPromptTokenCount !== undefined) {
           roundPromptTokens.push(roundPromptTokenCount);
+        }
+        if (roundOutputTokens > 0) {
+          cumulativeOutputTokens += roundOutputTokens;
+          void sendEvent({
+            type: "metrics",
+            outputTokens: cumulativeOutputTokens,
+            roundOutputTokens,
+            roundElapsedMs,
+            roundGenerationMs: [...roundGenerationMs],
+          }).catch(() => {});
         }
         roundDeadline.clear();
         if (activeThreadId) {
@@ -1347,7 +1363,18 @@ export async function runChatTurn(
       }
 
       if (fullRoundContent.trim()) {
-        carriedToolRoundProse = joinNarrationChunks(carriedToolRoundProse, fullRoundContent.trim());
+        const trimmedNarration = fullRoundContent.trim();
+        const narrationRound = round + 1;
+        roundNarrations.push({ round: narrationRound, text: trimmedNarration });
+        carriedToolRoundProse = carriedToolRoundProse
+          ? `${carriedToolRoundProse}\n\n${trimmedNarration}`
+          : trimmedNarration;
+        await sendEvent({
+          type: "round_narration",
+          round: narrationRound,
+          text: trimmedNarration,
+          roundNarrations: [...roundNarrations],
+        });
       }
       consecutiveMarkupFailures = 0;
 
@@ -2070,7 +2097,7 @@ export async function runChatTurn(
       const roundThought =
         accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
       streamSnapshot.maybeWrite(
-        turnState.accumulatedStreamedTokens,
+        "",
         roundThought,
         traces as unknown as Parameters<typeof streamSnapshot.maybeWrite>[2],
         {
@@ -2082,6 +2109,7 @@ export async function runChatTurn(
               ? turnState.cumulativeOutputTokens
               : undefined,
           thinkingSegments: thinkingSegments.length > 0 ? [...thinkingSegments] : undefined,
+          roundNarrations: roundNarrations.length > 0 ? [...roundNarrations] : undefined,
         }
       );
       if (activeThreadId) {
@@ -2348,20 +2376,12 @@ export async function runChatTurn(
 
     // SYNTHESIS-RETRY: honest end-of-turn stamp for a failed synthesis (retry exhausted).
     const EMPTY_SYNTHESIS_STAMP = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.] Work persisted above; the summary failed. The thread is resumable — resume this thread to continue.`;
+    // U1: Intermediate tool-round commentary is persisted separately in `roundNarrations`
+    // (attached to each round in the timeline), keeping `currentAssistantMessage.content`
+    // strictly for the model's closing summary words.
+    // Clean residual tool tags (also used for the per-segment TURN SIZE LIMIT check below).
     const finalSegmentContent = cleanResidualToolTags(currentAssistantMessage.content || "");
-    if (carriedToolRoundProse.trim()) {
-      const currentText = currentAssistantMessage.content || "";
-      if (!currentText.includes(carriedToolRoundProse.trim())) {
-        currentAssistantMessage = {
-          ...currentAssistantMessage,
-          content: currentText.trim()
-            ? `${carriedToolRoundProse.trim()}\n\n${currentText}`
-            : carriedToolRoundProse.trim(),
-        };
-      }
-    }
-    // Clean residual tool tags
-    let cleanedContent = cleanResidualToolTags(currentAssistantMessage.content || "");
+    let cleanedContent = finalSegmentContent;
     let turnStatus: "completed" | "incomplete" | undefined = undefined;
 
     // CHAT-7 honest pause markers keyed on the loop's stop reason.
@@ -2422,7 +2442,7 @@ export async function runChatTurn(
     // Gather turn attachments using exact write tracking
     const turnAttachments = collectTurnAttachments(activeThreadId, threadsDir, turnCreatedFiles);
     const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
-    const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
+    const turnDiffs = coalesceTurnDiffs([...turnHostDiffs, ...turnWorkspaceDiffs]);
 
     rootSpan?.end("ok", {
       tracesCount: traces.length,
@@ -2536,6 +2556,7 @@ export async function runChatTurn(
         roundPromptTokens: roundPromptTokens,
         roundGenerationMs: roundGenerationMs.length > 0 ? roundGenerationMs : undefined,
         thinkingSegments: thinkingSegments.length > 0 ? thinkingSegments : undefined,
+        roundNarrations: roundNarrations.length > 0 ? roundNarrations : undefined,
         // TOKEN ECONOMICS (c): micro-elision audit rides on the final record.
         microElisions: turnMicroElisions.length > 0 ? turnMicroElisions : undefined,
         // TOKEN ECONOMICS (d): read-dedup audit rides on the final record.
@@ -2571,6 +2592,7 @@ export async function runChatTurn(
       content: cleanedContent,
       thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
       thinkingSegments: thinkingSegments.length > 0 ? thinkingSegments : undefined,
+      roundNarrations: roundNarrations.length > 0 ? roundNarrations : undefined,
       turnStartMs,
       durationMs: turnDurationMs,
       thinkingDurationMs:
@@ -2636,7 +2658,7 @@ export async function runChatTurn(
           turnCreatedFiles
         );
         const turnWorkspaceDiffs = collectTurnModifiedFileDiffs(turnPreImages);
-        const turnDiffs = [...turnHostDiffs, ...turnWorkspaceDiffs];
+        const turnDiffs = coalesceTurnDiffs([...turnHostDiffs, ...turnWorkspaceDiffs]);
 
         const errorContent = turnState.accumulatedStreamedTokens.trim()
           ? `${turnState.accumulatedStreamedTokens}\n\n⚠️ [Turn error: ${friendlyMessage}]`

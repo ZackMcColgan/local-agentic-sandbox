@@ -331,10 +331,11 @@ describe("SVG Viewer Component Suite", () => {
     assert.ok(renderedText.includes("Preview"), "Preview tab present");
     assert.ok(renderedText.includes("Code"), "Code tab present");
 
-    // 4. Assert proof drawer is still collapsed by default while the SVG is fully visible
+    // 4. Assert ActivityTimeline renders the trace row cleanly while the SVG is fully visible
+    const timelineEl = container.querySelector('[data-testid="activity-timeline"]');
     assert.ok(
-      renderedText.includes("Expand Proof"),
-      "Proof drawer remains collapsed without hiding the SVG"
+      timelineEl !== null,
+      "ActivityTimeline renders the trace step without hiding the SVG"
     );
   });
 

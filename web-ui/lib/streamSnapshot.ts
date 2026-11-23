@@ -11,7 +11,7 @@
  */
 
 import type { ExecutionTraceItem } from "@/components/ExecutionTrace";
-import type { ThinkingSegment } from "./activityTimeline";
+import type { RoundNarrationSegment, ThinkingSegment } from "./activityTimeline";
 
 export const STREAM_SNAPSHOT_INTERVAL_MS = 1000;
 export const STREAM_POLL_INTERVAL_MS = 1500;
@@ -22,6 +22,7 @@ export interface StreamingSnapshotMessage {
   content: string;
   thought?: string;
   thinkingSegments?: ThinkingSegment[];
+  roundNarrations?: RoundNarrationSegment[];
   traces?: ExecutionTraceItem[];
   /** qa-7: per-round prompt tokens so far, so watching clients can show the
    * live context meter mid-turn instead of waiting for the turn to settle. */
@@ -44,6 +45,7 @@ export class ThrottledStreamSnapshot {
   private lastRoundGenerationMs: number[] | undefined;
   private lastOutputTokens: number | undefined;
   private lastThinkingSegments: ThinkingSegment[] | undefined;
+  private lastRoundNarrations: RoundNarrationSegment[] | undefined;
 
   constructor(
     private sink: StreamingSnapshotSink,
@@ -71,6 +73,7 @@ export class ThrottledStreamSnapshot {
       roundGenerationMs?: number[];
       outputTokens?: number;
       thinkingSegments?: ThinkingSegment[];
+      roundNarrations?: RoundNarrationSegment[];
     }
   ): boolean {
     if (!this.threadId) return false;
@@ -92,10 +95,14 @@ export class ThrottledStreamSnapshot {
     if (Array.isArray(opts?.thinkingSegments) && opts.thinkingSegments.length > 0) {
       this.lastThinkingSegments = [...opts.thinkingSegments];
     }
+    if (Array.isArray(opts?.roundNarrations) && opts.roundNarrations.length > 0) {
+      this.lastRoundNarrations = [...opts.roundNarrations];
+    }
     const hasContent = Boolean(content && content.trim());
     const hasThought = Boolean(thought && thought.trim());
     const hasTraces = Array.isArray(traces) && traces.length > 0;
-    if (!hasContent && !hasThought && !hasTraces) return false;
+    const hasNarrations = Boolean(this.lastRoundNarrations && this.lastRoundNarrations.length > 0);
+    if (!hasContent && !hasThought && !hasTraces && !hasNarrations) return false;
     const now = this.clock();
     if (!opts?.force && now - this.lastWriteMs < this.intervalMs) return false;
     this.lastWriteMs = now;
@@ -105,6 +112,7 @@ export class ThrottledStreamSnapshot {
       content: content || "",
       thought: hasThought ? thought : undefined,
       thinkingSegments: this.lastThinkingSegments,
+      roundNarrations: this.lastRoundNarrations,
       traces: hasTraces ? traces : undefined,
       roundPromptTokens: this.lastRoundPromptTokens,
       roundGenerationMs: this.lastRoundGenerationMs,

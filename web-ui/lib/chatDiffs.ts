@@ -304,3 +304,51 @@ export function collectTurnModifiedFileDiffs(
 
   return diffs;
 }
+
+/**
+ * Normalizes a file path for cross-tool / cross-platform coalescing.
+ */
+export function normalizeDiffFilePath(rawPath: string): string {
+  const slashes = rawPath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  if (/^[A-Za-z]:\//.test(slashes)) {
+    return slashes[0].toLowerCase() + slashes.slice(1);
+  }
+  return slashes;
+}
+
+/**
+ * Coalesces repeated per-file diffs within a single turn into one entry per
+ * normalized file path, summing +/- line counts and retaining the latest/combined
+ * unified diff state.
+ */
+export function coalesceTurnDiffs(diffs: TurnFileDiff[]): TurnFileDiff[] {
+  if (!Array.isArray(diffs) || diffs.length === 0) return [];
+  const byPath = new Map<string, TurnFileDiff>();
+  for (const entry of diffs) {
+    if (!entry || !entry.path) continue;
+    const key = normalizeDiffFilePath(entry.path);
+    const existing = byPath.get(key);
+    if (!existing) {
+      byPath.set(key, { ...entry });
+      continue;
+    }
+    const existingHasHunks = /^@@\s+-\d+/m.test(existing.diff);
+    const nextHasHunks = /^@@\s+-\d+/m.test(entry.diff);
+    const mergedDiff =
+      existing.diff && entry.diff && existing.diff !== entry.diff
+        ? existingHasHunks && nextHasHunks
+          ? `${existing.diff}\n${entry.diff}`
+          : entry.diff
+        : entry.diff || existing.diff;
+    byPath.set(key, {
+      ...existing,
+      ...entry,
+      path: entry.path || existing.path,
+      diff: mergedDiff,
+      addedLines: (existing.addedLines || 0) + (entry.addedLines || 0),
+      removedLines: (existing.removedLines || 0) + (entry.removedLines || 0),
+      truncated: Boolean(existing.truncated || entry.truncated) || undefined,
+    });
+  }
+  return Array.from(byPath.values());
+}

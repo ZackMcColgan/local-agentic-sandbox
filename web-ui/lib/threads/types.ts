@@ -11,7 +11,7 @@ import type { JobTokenRollup } from "../tokenEconomics";
 import type { ElisionMeta } from "../microElision";
 import type { ReadDedupMeta } from "../readDedup";
 import type { ChunkBudgetConfig } from "../jobChunking";
-import type { ThinkingSegment } from "../activityTimeline";
+import type { RoundNarrationSegment, ThinkingSegment } from "../activityTimeline";
 
 /** Result of turn-start conversation preparation (thread view + compaction report). */
 export interface TurnConversationPreparation {
@@ -62,6 +62,7 @@ export interface ThreadMessage {
   content: string;
   thought?: string;
   thinkingSegments?: ThinkingSegment[];
+  roundNarrations?: RoundNarrationSegment[];
   traces?: ExecutionTraceItem[];
   attachments?: ThreadAttachment[];
   diffs?: TurnFileDiff[];
@@ -131,6 +132,7 @@ export interface ThreadSummary {
   id: string;
   title: string;
   status: Thread["status"];
+  liveness?: ThreadLiveness;
   createdAt: string;
   updatedAt: string;
   model?: string;
@@ -140,6 +142,12 @@ export interface ThreadSummary {
   boardItemId?: string;
   error?: string;
   parkedReason?: string;
+  needsAttention?: boolean;
+  stalledReason?: string;
+  autoResumeCount?: number;
+  scope?: TaskScope;
+  hostAccess?: boolean;
+  traceCount?: number;
   messageCount: number;
   lastMessagePreview: string;
   hasDiffs: boolean;

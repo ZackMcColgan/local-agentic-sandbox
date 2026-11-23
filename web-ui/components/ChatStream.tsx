@@ -9,7 +9,6 @@ import {
   Sparkles,
   Loader2,
   ShieldAlert,
-  Check,
   RotateCcw,
   ChevronDown,
   Trash2,
@@ -35,24 +34,25 @@ import {
   shouldStopReconcilePoll,
 } from "../lib/reconcilePollPolicy";
 import { LiveRunBlock } from "./LiveRunBlock";
-import { hostDisconnectChipVisible, streamBannerKind } from "../lib/liveActivity";
+import {
+  appendNarrationChunk,
+  deriveEffectiveLastActivityMs,
+  hostDisconnectChipVisible,
+  streamBannerKind,
+} from "../lib/liveActivity";
 import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock } from "./ArtifactRenderers";
 // CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
 import { AgentMode } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";
-import {
-  parseThinkingAndContent,
-  formatHumanReadableTrace,
-  formatChatErrorMessage,
-  formatElapsedDuration,
-} from "../lib/chatUtils";
+import { parseThinkingAndContent, formatChatErrorMessage } from "../lib/chatUtils";
 import { CanvasProvider } from "./CanvasContext";
 import { ArtifactCanvasPane } from "./ArtifactCanvas";
 import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
+import type { ActiveTurnInfo } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
 import {
   parseSimulateCommand,
@@ -66,9 +66,11 @@ import { deduplicateStreamMessages } from "../lib/chat/streamMessages";
 export { deduplicateStreamMessages };
 import { ChatMessageItem, UserMessageContent } from "./chat/messageRender";
 import { NowLineBar } from "./NowLineBar";
+import { ActivityTimeline } from "./ActivityTimeline";
 import { CanvasDiffSheet } from "./CanvasDiffSheet";
 import type { TimelineWriteDiff } from "../lib/activityTimeline";
-import { computeFollowState } from "../lib/autoFollow";
+import { computeFollowState, shouldAutoScrollOnUpdate } from "../lib/autoFollow";
+import { computeLiveTokPerSec } from "../lib/turnSpeed";
 export { UserMessageContent };
 import { HostApprovalsPanel } from "./chat/approvals";
 import {
@@ -115,6 +117,7 @@ export interface ChatMessage {
   roundPromptTokens?: number[];
   roundGenerationMs?: number[];
   thinkingSegments?: Array<{ round: number; text: string }>;
+  roundNarrations?: Array<{ round: number; text: string }>;
   outputTokens?: number;
   compactionActions?: string[];
   status?: "completed" | "incomplete" | "error" | "streaming";
@@ -154,6 +157,8 @@ interface ChatStreamProps {
   setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   threadId?: string;
   threadTitle?: string;
+  activeTurn?: ActiveTurnInfo | null;
+  threadUpdatedAt?: string | null;
   supervisorState?: SupervisorBadgeInput;
   threadStatus?:
     "active" | "running" | "paused" | "stopped" | "completed" | "failed" | "needs_input";
@@ -215,6 +220,8 @@ export function ChatStream({
   setMessages: propsSetMessages,
   threadId,
   threadTitle,
+  activeTurn,
+  threadUpdatedAt,
   supervisorState,
   threadHostAccess,
   activeTask,
@@ -291,21 +298,18 @@ export function ChatStream({
   // ChatStream's own state so rows received before a stream cut stay on screen
   // even when the messages prop/setMessages cannot reflect them.
   const [liveTurnTraces, setLiveTurnTraces] = useState<ExecutionTraceItem[]>([]);
-  // Board trace grouping: only the latest window of live rows renders by
-  // default; older calls collapse behind an "earlier tool calls" row.
-  const [showAllLiveTraces, setShowAllLiveTraces] = useState(false);
-  // uir-1 Live Activity Header + stream banners: turn start, last observed
-  // stream activity, recovery timestamp, and the just-completed turn whose
-  // DONE chip replaces the activity header.
+  // uir-1 / U2: turn start, last observed stream activity, live measured tok/s,
+  // recovery timestamp, and the just-completed turn whose DONE chip renders.
   const turnStartedAtRef = useRef<number | null>(null);
   const [lastActivityAtMs, setLastActivityAtMs] = useState<number>(() => Date.now());
+  const [liveTokPerSec, setLiveTokPerSec] = useState<number | null>(null);
   const [recoveredAtMs, setRecoveredAtMs] = useState<number | null>(null);
   const [disconnectedAtMs, setDisconnectedAtMs] = useState<number | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState<number>(1);
   const [recoveredAfterSec, setRecoveredAfterSec] = useState<number>(1);
   const [completedTurnMsgId, setCompletedTurnMsgId] = useState<string | null>(null);
 
-  // Any stream-visible change counts as activity for the freshness readout.
+  // Any local stream-visible change counts as activity for the freshness readout.
   useEffect(() => {
     if (isLoading) setLastActivityAtMs(Date.now());
   }, [isLoading, streamStatus, messages, liveTurnTraces]);
@@ -535,8 +539,40 @@ export function ChatStream({
     return prev.map((msg) => (msg.id === id ? patch(msg) : msg));
   };
 
+  // U2: unified liveness for local turns and observed Board/cross-device turns.
+  const lastRunAssistant = [...messages]
+    .reverse()
+    .find(
+      (msg) => msg.role === "assistant" && msg.id !== "welcome" && msg.id !== "initial-welcome"
+    );
   const isTaskActive = activeTask?.status === "active";
-  const isGeneratingOrRunning = isLoading || isTaskActive;
+  const isTurnLive = Boolean(
+    isLoading ||
+    isTaskActive ||
+    activeTurn ||
+    (!isTransientDisconnected && lastRunAssistant?.status === "streaming")
+  );
+  const isGeneratingOrRunning = isTurnLive;
+
+  const lastTraceTimestamp =
+    lastRunAssistant?.traces && lastRunAssistant.traces.length > 0
+      ? lastRunAssistant.traces[lastRunAssistant.traces.length - 1]?.timestamp
+      : undefined;
+  const effectiveLastActivityAtMs = deriveEffectiveLastActivityMs({
+    isLocalStreaming: isLoading,
+    localLastActivityAtMs: lastActivityAtMs,
+    threadUpdatedAt,
+    lastTraceTimestamp,
+    activeTurnStartedAt: activeTurn?.startedAt,
+    assistantTimestamp: lastRunAssistant?.timestamp,
+  });
+  const parsedActiveTurnStartMs =
+    activeTurn?.startedAt && Number.isFinite(Date.parse(activeTurn.startedAt))
+      ? Date.parse(activeTurn.startedAt)
+      : null;
+  const effectiveStartedAtMs = isLoading
+    ? turnStartedAtRef.current
+    : (turnStartedAtRef.current ?? parsedActiveTurnStartMs);
 
   // qa-7 / UI-013: the context meter shows the latest round's ACTUAL prompt
   // tokens from the thread record (roundPromptTokens persisted per assistant
@@ -710,25 +746,25 @@ export function ChatStream({
 
   const tailMessage = messages[messages.length - 1];
   const lastMsg = tailMessage;
-  useEffect(() => {
-    if (
-      !isUserScrolledUp &&
-      isFollowPinnedRef.current &&
-      (isLoading || lastMsg?.role === "assistant")
-    ) {
-      scrollToBottom("auto");
-    }
-  }, [lastMsg?.content, lastMsg?.role, isLoading, isUserScrolledUp]);
+  const lastMsgTraceCount = lastMsg?.traces?.length ?? 0;
+  const lastMsgThinkingCount = lastMsg?.thinkingSegments?.length ?? 0;
+  const lastMsgNarrationCount = lastMsg?.roundNarrations?.length ?? 0;
+  const liveTurnTraceCount = liveTurnTraces.length;
 
   useEffect(() => {
-    if (!isFollowPinnedRef.current || isUserScrolledUp) {
+    if (!isFollowPinnedRef.current) {
       return;
     }
-    const el = chatContainerRef.current;
-    if (el) {
-      const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
-      if (distanceFromBottom <= 100) {
-        if (isLoading || isTaskActive) {
+    if (!isUserScrolledUp) {
+      const el = chatContainerRef.current;
+      if (
+        shouldAutoScrollOnUpdate({
+          isFollowPinned: isFollowPinnedRef.current,
+          isStreaming: isTurnLive,
+          isUserScrolledUp,
+        })
+      ) {
+        if (el) {
           isProgrammaticScrollRef.current = true;
           el.scrollTop = el.scrollHeight;
           if (programmaticScrollTimerRef.current) {
@@ -738,13 +774,32 @@ export function ChatStream({
             isProgrammaticScrollRef.current = false;
           }, 50);
         } else {
+          scrollRef.current?.scrollIntoView({ behavior: "auto" });
+        }
+        return;
+      }
+
+      if (el) {
+        const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+        if (distanceFromBottom <= 100) {
           scrollRef.current?.scrollIntoView({ behavior: "smooth" });
         }
+      } else {
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
       }
-    } else {
-      scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isLoading, isTaskActive, isUserScrolledUp]);
+  }, [
+    messages,
+    lastMsg?.content,
+    lastMsg?.thought,
+    lastMsg?.role,
+    lastMsgTraceCount,
+    lastMsgThinkingCount,
+    lastMsgNarrationCount,
+    liveTurnTraceCount,
+    isTurnLive,
+    isUserScrolledUp,
+  ]);
 
   const toggleProof = (proofKey: string) => {
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
@@ -1009,14 +1064,60 @@ export function ChatStream({
 
       for (const block of blocks) {
         const trimmed = block.trim();
+        if (trimmed.startsWith(":")) {
+          // SSE comment keepalive counts as heartbeat activity
+          setLastActivityAtMs(Date.now());
+          continue;
+        }
         if (!trimmed.startsWith("data:")) continue;
         const jsonStr = trimmed.replace(/^data:\s*/, "");
         if (!jsonStr) continue;
 
         try {
           const event = JSON.parse(jsonStr);
+          setLastActivityAtMs(typeof event.ts === "number" ? event.ts : Date.now());
 
-          if (event.type === "meta") {
+          if (event.type === "ping") {
+            continue;
+          } else if (event.type === "metrics") {
+            if (
+              typeof event.roundOutputTokens === "number" &&
+              typeof event.roundElapsedMs === "number"
+            ) {
+              setLiveTokPerSec((prev) =>
+                computeLiveTokPerSec(event.roundOutputTokens, event.roundElapsedMs, prev)
+              );
+            }
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                outputTokens:
+                  typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
+                roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                  ? event.roundGenerationMs
+                  : msg.roundGenerationMs,
+              }))
+            );
+          } else if (event.type === "round_narration") {
+            // U1: commit intermediate round commentary to the timeline and reset
+            // the live tail buffer so final summary text stays cleanly separated.
+            accumulatedRawContent = "";
+            setMessages((prev) =>
+              upsertAssistant(prev, (msg) => ({
+                ...msg,
+                content: "",
+                roundNarrations: Array.isArray(event.roundNarrations)
+                  ? event.roundNarrations
+                  : [
+                      ...(msg.roundNarrations || []),
+                      {
+                        round: typeof event.round === "number" ? event.round : 1,
+                        text: String(event.text || ""),
+                      },
+                    ],
+              }))
+            );
+          } else if (event.type === "meta") {
             if (event.model) currentModel = event.model;
             if (event.context) {
               setContextStats((prev) => ({
@@ -1081,7 +1182,10 @@ export function ChatStream({
               }))
             );
           } else if (event.type === "token") {
-            accumulatedRawContent += event.content || "";
+            accumulatedRawContent = appendNarrationChunk(
+              accumulatedRawContent,
+              event.content || ""
+            );
             const parsed = parseThinkingAndContent(accumulatedRawContent);
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
@@ -1129,7 +1233,13 @@ export function ChatStream({
             }
           } else if (event.type === "done") {
             const durationMs = Math.round(performance.now() - startTime);
-            const mergedRaw = mergeStreamedTokens(accumulatedRawContent, event.content);
+            const hasRoundNarrations =
+              Array.isArray(event.roundNarrations) && event.roundNarrations.length > 0;
+            const mergedRaw = hasRoundNarrations
+              ? typeof event.content === "string"
+                ? event.content
+                : accumulatedRawContent
+              : mergeStreamedTokens(accumulatedRawContent, event.content);
             const parsed = parseThinkingAndContent(mergedRaw);
             const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
             const finalModel = event.model || currentModel;
@@ -1168,6 +1278,7 @@ export function ChatStream({
                       roundPromptTokens: event.roundPromptTokens,
                       roundGenerationMs: event.roundGenerationMs,
                       thinkingSegments: event.thinkingSegments,
+                      roundNarrations: event.roundNarrations,
                       outputTokens: event.outputTokens,
                       timestamp: new Date().toISOString(),
                       compactedThisTurn: finalCompacted || undefined,
@@ -1210,6 +1321,9 @@ export function ChatStream({
                 thinkingSegments: Array.isArray(event.thinkingSegments)
                   ? event.thinkingSegments
                   : msg.thinkingSegments,
+                roundNarrations: Array.isArray(event.roundNarrations)
+                  ? event.roundNarrations
+                  : msg.roundNarrations,
                 outputTokens:
                   typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
                 status: finalStatus,
@@ -1696,7 +1810,7 @@ export function ChatStream({
     setStreamStatus("Connecting to model...");
     // UI-003 / UI-011b: fresh live-turn trace rows for this turn.
     setLiveTurnTraces([]);
-    setShowAllLiveTraces(false);
+    setLiveTokPerSec(null);
     // uir-1: a new turn starts the activity clock and retires the DONE chip.
     turnStartedAtRef.current = Date.now();
     setCompletedTurnMsgId(null);
@@ -1800,6 +1914,7 @@ export function ChatStream({
     } finally {
       setIsLoading(false);
       setStreamStatus(null);
+      setLiveTokPerSec(null);
       if (turnEndedNormally) {
         setLiveTurnTraces([]);
       }
@@ -2314,23 +2429,31 @@ export function ChatStream({
           </header>
 
           {(() => {
-            const lastAssistant = [...messages]
-              .reverse()
-              .find((msg) => msg.role === "assistant" && msg.id !== "welcome");
-            const hasRunTurn = Boolean(isLoading || lastAssistant);
+            const hasRunTurn = Boolean(isTurnLive || lastRunAssistant);
             const activeTraces =
-              isLoading && liveTurnTraces.length > 0 ? liveTurnTraces : lastAssistant?.traces || [];
+              isLoading && liveTurnTraces.length > 0
+                ? liveTurnTraces
+                : lastRunAssistant?.traces || [];
+            const hasOutcome = Boolean(
+              (lastRunAssistant?.content && lastRunAssistant.content.trim()) ||
+              (lastRunAssistant?.traces && lastRunAssistant.traces.length > 0) ||
+              lastRunAssistant?.status === "completed"
+            );
             return (
               <NowLineBar
                 hasRunTurn={hasRunTurn}
-                isStreaming={Boolean(isLoading || lastAssistant?.status === "streaming")}
+                isStreaming={isTurnLive}
                 streamStatus={streamStatus}
+                status={lastRunAssistant?.status ?? null}
+                isStopped={lastRunAssistant?.isStopped}
+                hasOutcome={hasOutcome}
                 traces={activeTraces}
-                startedAtMs={turnStartedAtRef.current}
-                lastActivityAtMs={lastActivityAtMs}
-                totalDurationMs={lastAssistant?.durationMs}
-                outputTokens={lastAssistant?.outputTokens}
-                roundGenerationMs={lastAssistant?.roundGenerationMs}
+                startedAtMs={effectiveStartedAtMs}
+                lastActivityAtMs={effectiveLastActivityAtMs}
+                totalDurationMs={lastRunAssistant?.durationMs}
+                outputTokens={lastRunAssistant?.outputTokens}
+                roundGenerationMs={lastRunAssistant?.roundGenerationMs}
+                liveTokPerSec={liveTokPerSec}
               />
             );
           })()}
@@ -2470,48 +2593,23 @@ export function ChatStream({
                 />
               ))}
 
-              {/* UI-003 / UI-011b: live tool-call trace rows for the current turn.
-            Rendered from ChatStream's own liveTurnTraces state so rows received
-            before a stream cut remain visible on the live screen. */}
-              {liveTurnTraces.length > 0 && (
-                <div className="w-full max-w-[840px]" data-testid="live-trace-rows">
-                  <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-[#121215] overflow-hidden">
-                    <div className="px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-200 border-b border-slate-200 dark:border-zinc-800">
-                      Live tool steps ({liveTurnTraces.length})
-                    </div>
-                    {liveTurnTraces.length > 8 && !showAllLiveTraces && (
-                      <button
-                        type="button"
-                        data-testid="earlier-calls-toggle"
-                        onClick={() => setShowAllLiveTraces(true)}
-                        className="w-full px-3.5 py-2 text-left text-xs font-mono text-slate-500 dark:text-zinc-400 bg-slate-100/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors border-b border-slate-200 dark:border-zinc-800 cursor-pointer"
-                      >
-                        ▸ {liveTurnTraces.length - 8} earlier tool calls (
-                        {liveTurnTraces.length - 8} ok) — Show all
-                      </button>
-                    )}
-                    {(showAllLiveTraces ? liveTurnTraces : liveTurnTraces.slice(-8)).map((t, i) => {
-                      const readable = formatHumanReadableTrace(t);
-                      return (
-                        <button
-                          key={`${t.tool}-${i}`}
-                          type="button"
-                          aria-label={`Tool: ${t.tool}`}
-                          className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-[12.8px] font-mono"
-                        >
-                          <span className="flex items-center gap-2 text-slate-700 dark:text-zinc-100">
-                            <Check size={12} className="text-emerald-400 shrink-0" />
-                            <span>{readable.title || t.tool}</span>
-                          </span>
-                          <span className="text-slate-400 dark:text-zinc-400">
-                            {readable.duration || ""}
-                          </span>
-                        </button>
-                      );
-                    })}
+              {/* Single timeline fallback when liveTurnTraces arrived before an assistant
+                  message exists in messages (e.g. severed stream before assistant row lands).
+                  Never duplicates traces already rendered on the tail assistant message. */}
+              {liveTurnTraces.length > 0 &&
+                !deduplicatedMessages.some(
+                  (m) =>
+                    m.role === "assistant" &&
+                    (m.status === "streaming" || m.id === activeAssistantMsgIdRef.current)
+                ) && (
+                  <div className="w-full max-w-[840px]">
+                    <ActivityTimeline
+                      traces={liveTurnTraces}
+                      isStreaming={isTurnLive}
+                      onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
+                    />
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Render LiveRunBlock if activeTask is present and not already embedded in an assistant message */}
               {activeTask && lastLinkedTaskMsgIndex === -1 && (
@@ -2559,29 +2657,6 @@ export function ChatStream({
                     </div>
                   );
                 })()}
-
-              {isLoading && (
-                <div className="sticky bottom-2 z-20 flex justify-center pointer-events-none">
-                  <div
-                    data-testid="running-pill"
-                    className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500 border border-transparent text-xs font-mono font-medium text-[#04120c] shadow-lg backdrop-blur-sm"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-[#04120c] animate-pulse" />
-                    <span>
-                      {`RUNNING${
-                        (messages[messages.length - 1]?.roundPromptTokens?.length ?? 0) > 0
-                          ? ` · Round ${messages[messages.length - 1]?.roundPromptTokens?.length}`
-                          : ""
-                      } · ${formatElapsedDuration(
-                        Math.max(
-                          0,
-                          Math.floor((Date.now() - (turnStartedAtRef.current ?? Date.now())) / 1000)
-                        )
-                      )}`}
-                    </span>
-                  </div>
-                </div>
-              )}
 
               {/* uir-1: in-thread stream banners — DISCONNECTED when the stream
             drops mid-turn, RECOVERED when the detached turn is reconciled.
@@ -2671,7 +2746,7 @@ export function ChatStream({
                 aria-label="Jump to bottom"
               >
                 <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
-                <span>{isLoading ? "Live" : "Latest"}</span>
+                <span>{isTurnLive ? "Live" : "Latest"}</span>
               </button>
             </div>
           )}

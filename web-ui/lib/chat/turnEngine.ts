@@ -511,10 +511,12 @@ export async function runSynthesisPass(
         await sendEvent({ type: "thought", thought: currentCumulativeThought });
       }
       if (chunk.message?.content) {
+        const isFirstChunk = passContent.length === 0;
         passContent += chunk.message.content;
         const nextStreamed = appendNarrationChunk(
           getAccumulatedStreamedTokens(),
-          chunk.message.content
+          chunk.message.content,
+          { roundBoundary: isFirstChunk }
         );
         setAccumulatedStreamedTokens(nextStreamed);
         passDeadline.arm();

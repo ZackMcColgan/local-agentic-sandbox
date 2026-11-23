@@ -97,7 +97,7 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
     assert.equal(hUnknown.badge, "sandbox");
   });
 
-  it("ChatStream renders distinct badges ('Host', 'Workspace', 'Web', 'Sandbox') per tool trace", () => {
+  it("ChatStream renders honest ActivityTimeline rows for host, workspace, web, and sandbox tool traces", () => {
     const messages: Record<string, unknown>[] = [
       {
         id: "msg-mixed-traces-1",
@@ -148,19 +148,18 @@ describe("FIX A — Tool-Card Tier Badge Honesty Suite", () => {
       })
     );
 
-    // Host badge & title
-    assert.ok(html.includes("<span>Host</span>"), "ChatStream must render Host badge");
-    assert.ok(html.includes("Host List Dir"), "ChatStream must render Host List Dir title");
-
-    // Workspace badge & title
-    assert.ok(html.includes("<span>Workspace</span>"), "ChatStream must render Workspace badge");
-    assert.ok(html.includes("Read README.md"), "ChatStream must render Read README.md title");
-
-    // Web badge
-    assert.ok(html.includes("<span>Web</span>"), "ChatStream must render Web badge");
-
-    // Sandbox badge
-    assert.ok(html.includes("<span>Sandbox</span>"), "ChatStream must render Sandbox badge");
+    // Each trace renders once in the single ActivityTimeline with honest verb-first labels
+    assert.ok(html.includes('aria-label="Tool: host_list_dir"'), "Host tool row rendered");
+    assert.ok(
+      html.includes('aria-label="Tool: workspace_read_file"'),
+      "Workspace tool row rendered"
+    );
+    assert.ok(html.includes("Read README.md"), "Workspace read target rendered");
+    assert.ok(html.includes('aria-label="Tool: search_web"'), "Web search tool row rendered");
+    assert.ok(
+      html.includes('aria-label="Tool: execute_sandboxed_python"'),
+      "Sandbox python tool row rendered"
+    );
   });
 });
 

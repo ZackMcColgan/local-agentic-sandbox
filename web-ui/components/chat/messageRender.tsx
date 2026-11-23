@@ -4,15 +4,11 @@ import React, { useState } from "react";
 import NextImage from "next/image";
 import {
   Sparkles,
-  Terminal,
-  ShieldCheck,
   Copy,
   Check,
   ChevronDown,
   ChevronUp,
-  Globe,
   FileText,
-  FolderGit2,
   FileCode,
   ExternalLink,
   Download,
@@ -37,13 +33,11 @@ import {
 } from "../../lib/svgUtils";
 import { isMarkupOnlyToolCall, TURN_TOOL_MARKUP_MARKER } from "../../lib/toolCallIntegrity";
 import {
-  formatHumanReadableTrace,
   getServedByNote,
   extractFileWriteDiffsFromTraces,
   formatElapsedDuration,
   formatMessageTimestamp,
-  displayRepoPath,
-  displayBasename,
+  coalesceTurnDiffs,
 } from "../../lib/chatUtils";
 import { CanvasDiffCard, CanvasFileOpenButton } from "../ArtifactCanvas";
 import { TaskManifest } from "../../lib/subagents/types";
@@ -52,7 +46,7 @@ import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
 import { StintCard } from "../StintCard";
 import { sumRoundGenerationMs } from "../../lib/turnSpeed";
-import type { TimelineWriteDiff } from "../../lib/activityTimeline";
+import { mergeLiveAndSettledTraces, type TimelineWriteDiff } from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
@@ -162,15 +156,11 @@ export function ChatMessageItem({
   isStoppingTask,
   activeAssistantMsgId,
   completedTurnMsgId,
-  expandedTraces,
-  expandedProofs,
   hasResolvedDetachedTurn,
   activeModel,
   onPreviewImage,
   onCopyToClipboard,
   onRetry,
-  onToggleProof,
-  onToggleTraces,
   onStopTask,
   onRunControlAction,
   onDeployRun,
@@ -326,15 +316,24 @@ export function ChatMessageItem({
               const isStreamingThis = Boolean(
                 m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
               );
-              const turnTraces =
-                isStreamingThis && (!m.traces || m.traces.length === 0)
-                  ? liveTurnTraces
-                  : m.traces || [];
+              const turnTraces = mergeLiveAndSettledTraces(
+                m.traces,
+                isStreamingThis ? liveTurnTraces : undefined
+              );
               const hasThought = Boolean(m.thought && m.thought.trim());
+              const hasNarrations = Boolean(
+                Array.isArray(m.roundNarrations) && m.roundNarrations.length > 0
+              );
               const showDoneChip = Boolean(
                 !isStreamingThis && completedTurnMsgId === m.id && typeof m.durationMs === "number"
               );
-              if (!hasThought && !isStreamingThis && !showDoneChip && turnTraces.length === 0)
+              if (
+                !hasThought &&
+                !hasNarrations &&
+                !isStreamingThis &&
+                !showDoneChip &&
+                turnTraces.length === 0
+              )
                 return null;
 
               const recordedGenMs = sumRoundGenerationMs(m.roundGenerationMs);
@@ -348,7 +347,7 @@ export function ChatMessageItem({
                       data-testid="turn-done-chip"
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-[11px] font-mono font-medium text-emerald-800 dark:text-emerald-300 w-fit"
                     >
-                      <span>{`✓ DONE · ${m.traces?.length ?? 0} ${(m.traces?.length ?? 0) === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
+                      <span>{`✓ DONE · ${turnTraces.length} ${turnTraces.length === 1 ? "trace" : "traces"} · ${formatElapsedDuration(Math.round((m.durationMs as number) / 1000))}`}</span>
                     </div>
                   )}
                   {!(Array.isArray(m.thinkingSegments) && m.thinkingSegments.length > 0) &&
@@ -361,10 +360,12 @@ export function ChatMessageItem({
                       />
                     )}
                   {(turnTraces.length > 0 ||
+                    hasNarrations ||
                     (Array.isArray(m.thinkingSegments) && m.thinkingSegments.length > 0)) && (
                     <ActivityTimeline
                       traces={turnTraces}
                       thinkingSegments={m.thinkingSegments}
+                      roundNarrations={m.roundNarrations}
                       roundGenerationMs={m.roundGenerationMs}
                       isStreaming={isStreamingThis}
                       hasContent={Boolean(m.content && m.content.trim())}
@@ -375,126 +376,12 @@ export function ChatMessageItem({
               );
             })()}
 
-          {/* Inline Expandable Sandbox & Telemetry Badges */}
+          {/* Inline Completion Verification Badge */}
           {!isUser && m.completionStamp === "completed-unverified" && (
             <div className="mb-2">
               <CompletionVerificationBadge stamp={m.completionStamp} gaps={m.verificationGaps} />
             </div>
           )}
-          {!isUser &&
-            m.traces &&
-            m.traces.length > 0 &&
-            (() => {
-              const hasManyTraces = m.traces.length > 3;
-              const isTracesExpanded = !!expandedTraces[m.id];
-              const visibleTraces =
-                hasManyTraces && !isTracesExpanded ? m.traces.slice(0, 2) : m.traces;
-
-              return (
-                <div className="mt-2.5 space-y-2 w-full">
-                  {visibleTraces.map((trace, tIdx) => {
-                    const proofKey = `${m.id}-${tIdx}`;
-                    const isExpanded = !!expandedProofs[proofKey];
-                    const human = formatHumanReadableTrace(trace);
-
-                    return (
-                      <div
-                        key={tIdx}
-                        className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden shadow-xs transition-all"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onToggleProof(proofKey)}
-                          aria-label={`Tool: ${trace.tool}`}
-                          className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-slate-100/80 dark:hover:bg-zinc-850/80 transition-colors text-xs font-mono"
-                        >
-                          <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-2">
-                            {human.badge === "browser" && (
-                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
-                                <Globe className="h-3.5 w-3.5" />
-                                <span>Web</span>
-                              </span>
-                            )}
-                            {human.badge === "host" && (
-                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-semibold shrink-0">
-                                <Terminal className="h-3.5 w-3.5" />
-                                <span>Host</span>
-                              </span>
-                            )}
-                            {human.badge === "workspace" && (
-                              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold shrink-0">
-                                <FolderGit2 className="h-3.5 w-3.5" />
-                                <span>Workspace</span>
-                              </span>
-                            )}
-                            {human.badge === "sandbox" && (
-                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
-                                <ShieldCheck className="h-3.5 w-3.5" />
-                                <span>Sandbox</span>
-                              </span>
-                            )}
-                            <span className="text-slate-400 dark:text-zinc-400 shrink-0">•</span>
-                            <span className="text-slate-700 dark:text-zinc-200 font-medium font-sans line-clamp-2 sm:truncate">
-                              {human.title}
-                            </span>
-                            {human.duration && (
-                              <>
-                                <span className="text-slate-400 dark:text-zinc-400 shrink-0">
-                                  •
-                                </span>
-                                <span className="text-slate-500 dark:text-zinc-400 shrink-0">
-                                  {human.duration}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-sans font-medium shrink-0 ml-auto">
-                            <span className="sm:hidden">{isExpanded ? "Hide" : "Proof"}</span>
-                            <span className="hidden sm:inline">
-                              {isExpanded ? "Hide Details (Proof)" : "Details · Expand Proof"}
-                            </span>
-                            {isExpanded ? (
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            )}
-                          </div>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="border-t border-slate-200 dark:border-zinc-800 bg-slate-950 p-3 font-mono text-[11px] text-slate-300">
-                            <pre className="p-2 rounded bg-zinc-900 text-emerald-300 overflow-x-auto whitespace-pre-wrap">
-                              {trace.args ? JSON.stringify(trace.args, null, 2) : ""}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {hasManyTraces && (
-                    <button
-                      type="button"
-                      onClick={() => onToggleTraces(m.id)}
-                      className="w-full py-1.5 px-3 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      {isTracesExpanded ? (
-                        <>
-                          <ChevronUp className="h-3.5 w-3.5" />
-                          <span>Collapse tool steps</span>
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3.5 w-3.5" />
-                          <span>Show all {m.traces.length} tool steps</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
 
           {/* Inline Live Run Block if this message is the designated task host */}
           {isTaskHostMessage && activeTask && (
@@ -542,7 +429,10 @@ export function ChatMessageItem({
                     </div>
                   )}
                   {renderedContent ? (
-                    <div className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans">
+                    <div
+                      data-testid="assistant-summary-content"
+                      className="text-[15px] leading-[1.6] max-w-[72ch] text-[#1d1b20] dark:text-[#e6e0e9] font-sans"
+                    >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -822,7 +712,7 @@ export function ChatMessageItem({
             </div>
           )}
 
-          {/* Chat Diff Cards for File Writes & Patches */}
+          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline) */}
           {(() => {
             if (isUser) return null;
 
@@ -836,7 +726,10 @@ export function ChatMessageItem({
               totalDiffLines?: number;
               omittedLines?: number;
             };
-            const normalizeDiffPath = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+            const normalizeDiffPath = (p: string) => {
+              const s = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+              return /^[A-Za-z]:\//.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+            };
             const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map(
               (d) => ({
                 path: d.path,
@@ -847,7 +740,9 @@ export function ChatMessageItem({
                 truncated: d.diffPreview.includes("more lines"),
               })
             );
-            const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs) ? m.diffs : [];
+            const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs)
+              ? coalesceTurnDiffs(m.diffs)
+              : [];
             const mergedMap = new Map<string, TurnDiffEntry>();
             for (const d of traceDiffs) {
               mergedMap.set(normalizeDiffPath(d.path), d);
@@ -866,9 +761,6 @@ export function ChatMessageItem({
 
             return (
               <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                {/* UI-024: the canvas gets the FULL diff (diffFull ?? the
-              stored diff for server-side turn diffs); the inline
-              cards below keep the capped preview. */}
                 <CanvasDiffCard
                   diffs={fileDiffs.map((d) => ({
                     path: d.path,
@@ -880,74 +772,6 @@ export function ChatMessageItem({
               </div>
             );
           })()}
-
-          {/* Grounded File Citation Card matching Mockup 4 */}
-          {m.traces &&
-            m.traces.some((t) => {
-              const traceItem = t as ExecutionTraceItem & { name?: string };
-              return (
-                traceItem.tool?.includes("file") ||
-                Boolean(traceItem.args?.path) ||
-                (Boolean(traceItem.name) && String(traceItem.name).includes(".ts"))
-              );
-            }) && (
-              <div className="flex flex-wrap gap-2 pt-1 max-w-sm">
-                {m.traces
-                  .filter((t) => {
-                    const traceItem = t as ExecutionTraceItem & { name?: string };
-                    return (
-                      Boolean(traceItem.args?.path) ||
-                      (Boolean(traceItem.name) && String(traceItem.name).includes(".ts"))
-                    );
-                  })
-                  .slice(0, 3)
-                  .map((t, cIdx) => {
-                    const traceItem = t as ExecutionTraceItem & { name?: string };
-                    const pathLabel =
-                      typeof traceItem.args?.path === "string"
-                        ? traceItem.args.path
-                        : traceItem.name;
-                    if (!pathLabel) return null;
-                    return (
-                      <div
-                        key={cIdx}
-                        className="flex items-center justify-between w-full p-3 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 shadow-xs text-xs font-mono text-slate-800 dark:text-zinc-200"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <div className="min-w-0">
-                            <div className="font-semibold truncate">
-                              {displayBasename(pathLabel)}
-                            </div>
-                            <div className="text-[10px] text-zinc-400 truncate">
-                              {displayRepoPath(pathLabel)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 ml-2">
-                          <a
-                            href={resolveSvgUrl(pathLabel)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                            title="Open file"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => onCopyToClipboard(pathLabel, `${m.id}-${cIdx}`)}
-                            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                            title="Copy path"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
 
           {/* Stint card on completed turns */}
           {!isTaskHostMessage &&

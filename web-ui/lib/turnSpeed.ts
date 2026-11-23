@@ -69,6 +69,9 @@ export interface NowLineInput {
   hasRunTurn: boolean;
   isStreaming: boolean;
   streamStatus?: string | null;
+  status?: "completed" | "incomplete" | "error" | "streaming" | null;
+  isStopped?: boolean;
+  hasOutcome?: boolean;
   traces?: TimelineTraceInput[];
   startedAtMs?: number | null;
   lastActivityAtMs?: number | null;
@@ -79,9 +82,12 @@ export interface NowLineInput {
   liveTokPerSec?: number | null;
 }
 
+export type NowLineOutcomeTone = "active" | "complete" | "stopped" | "error" | "incomplete";
+
 export interface NowLineState {
   visible: boolean;
   isStreaming: boolean;
+  outcomeTone: NowLineOutcomeTone;
   actionLabel: string;
   elapsedLabel: string | null;
   tokensLabel: string | null;
@@ -111,6 +117,7 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
     return {
       visible: false,
       isStreaming: false,
+      outcomeTone: "incomplete",
       actionLabel: "",
       elapsedLabel: null,
       tokensLabel: null,
@@ -119,8 +126,11 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
     };
   }
 
-  let actionLabel = input.isStreaming ? "Thinking…" : "Complete";
+  let outcomeTone: NowLineOutcomeTone = "complete";
+  let actionLabel = "Complete";
   if (input.isStreaming) {
+    outcomeTone = "active";
+    actionLabel = "Thinking…";
     const traces = input.traces || [];
     const lastTrace = traces.length > 0 ? traces[traces.length - 1] : null;
     if (lastTrace) {
@@ -134,6 +144,18 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
       const cleaned = input.streamStatus.trim();
       actionLabel = cleaned.endsWith("…") ? cleaned : `${cleaned}…`;
     }
+  } else if (input.isStopped) {
+    outcomeTone = "stopped";
+    actionLabel = "Stopped";
+  } else if (input.status === "error") {
+    outcomeTone = "error";
+    actionLabel = "Failed";
+  } else if (input.status === "incomplete") {
+    outcomeTone = "incomplete";
+    actionLabel = "Incomplete";
+  } else if (input.hasOutcome === false) {
+    outcomeTone = "incomplete";
+    actionLabel = "Ended";
   }
 
   const effectiveStartMs =
@@ -183,6 +205,7 @@ export function deriveNowLineState(input: NowLineInput): NowLineState {
   return {
     visible: true,
     isStreaming: input.isStreaming,
+    outcomeTone,
     actionLabel,
     elapsedLabel,
     tokensLabel,
