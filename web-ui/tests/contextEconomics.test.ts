@@ -755,6 +755,7 @@ describe("Batch D — Context Economics (F8a–F8e)", () => {
     let origMcpUrl: string | undefined;
     let origBrowserMcpUrl: string | undefined;
     let origCompactionStrategy: string | undefined;
+    let origMidTurnHybrid: string | undefined;
     let server: http.Server | null = null;
 
     beforeEach(() => {
@@ -766,12 +767,14 @@ describe("Batch D — Context Economics (F8a–F8e)", () => {
       origMcpUrl = process.env.MCP_SERVER_URL;
       origBrowserMcpUrl = process.env.BROWSER_MCP_URL;
       origCompactionStrategy = process.env.COMPACTION_STRATEGY;
+      origMidTurnHybrid = process.env.MID_TURN_HYBRID_COMPACTION;
       process.env.THREADS_DIR = tmpThreadsDir;
       process.env.LLM_ENGINE = "ollama";
       delete process.env.LLAMACPP_BASE_URL;
       process.env.MCP_SERVER_URL = "http://127.0.0.1:59997/mcp/sse";
       process.env.BROWSER_MCP_URL = "http://127.0.0.1:59996/browser/sse";
       delete process.env.COMPACTION_STRATEGY;
+      delete process.env.MID_TURN_HYBRID_COMPACTION;
     });
 
     afterEach(async () => {
@@ -793,6 +796,8 @@ describe("Batch D — Context Economics (F8a–F8e)", () => {
       else process.env.BROWSER_MCP_URL = origBrowserMcpUrl;
       if (origCompactionStrategy === undefined) delete process.env.COMPACTION_STRATEGY;
       else process.env.COMPACTION_STRATEGY = origCompactionStrategy;
+      if (origMidTurnHybrid === undefined) delete process.env.MID_TURN_HYBRID_COMPACTION;
+      else process.env.MID_TURN_HYBRID_COMPACTION = origMidTurnHybrid;
       fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
     });
 
@@ -1065,6 +1070,10 @@ describe("Batch D — Context Economics (F8a–F8e)", () => {
 
     it("D4 e2e: single-turn job with COMPACTION_STRATEGY=hybrid compacts mid-turn via the hybrid rung and updates persisted record", async () => {
       process.env.COMPACTION_STRATEGY = "hybrid";
+      // Board #129 P5-A: mid-turn hybrid dispatch is now opt-in (single-slot
+      // engine defaults to the synchronous extraction digest). This test pins
+      // the opt-in rung explicitly.
+      process.env.MID_TURN_HYBRID_COMPACTION = "1";
       const brief =
         "HYBRID_SINGLE_TURN_BRIEF: inspect web-ui/lib/contextBudget.ts commit 86c8901c6433617cb9abe5db97123a0f52f58c89 https://github.com/test/repo and report results.";
       let mainDispatches = 0;
