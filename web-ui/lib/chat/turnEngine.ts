@@ -512,8 +512,10 @@ export async function runSynthesisPass(
             ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
             : passThinking;
         maybeWriteSnapshot(getAccumulatedStreamedTokens(), currentCumulativeThought);
+        // PERF-P3: per-token delta only. The cumulative thought reaches the
+        // client via the throttled snapshot and the terminal `done` event;
+        // re-sending the full cumulative string per token was O(T^2) SSE bytes.
         await sendEvent({ type: "thinking", content: chunk.message.thinking });
-        await sendEvent({ type: "thought", thought: currentCumulativeThought });
       }
       if (chunk.message?.content) {
         const isFirstChunk = passContent.length === 0;

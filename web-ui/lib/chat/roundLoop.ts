@@ -1087,6 +1087,10 @@ export async function runChatTurn(
       let roundThinking = "";
       let roundFinishReason: string | undefined = undefined;
       let roundSizeCapped = false;
+      // PERF-P3: at most one cumulative `thought` event per round — either a
+      // throttled snapshot flush or the round-boundary emission, whichever
+      // fires first. Per-token thinking rides the `thinking` delta only.
+      let thoughtEventThisRound = false;
       const toolCallsFromMessage: LlmToolCall[] = [];
       const roundStreamStartMs = Date.now();
       let roundOutputTokens = 0;
@@ -1136,17 +1140,25 @@ export async function runChatTurn(
             const liveSegments = roundThinking.trim()
               ? [...thinkingSegments, { round: currentRoundNumber, text: roundThinking.trim() }]
               : [...thinkingSegments];
-            streamSnapshot.maybeWrite(
+            const snapshotFlushed = streamSnapshot.maybeWrite(
               turnState.accumulatedStreamedTokens,
               currentCumulativeThought,
               undefined,
               { thinkingSegments: liveSegments }
             );
-            await sendEvent({
-              type: "thought",
-              thought: currentCumulativeThought,
-              thinkingSegments: liveSegments,
-            });
+            // PERF-P3: per-token delta only. The cumulative `thought` event is
+            // re-joined and re-sent ONLY on a throttled snapshot flush (≤1/sec)
+            // or at the round boundary (below) — never per token, which was
+            // O(T^2) SSE bytes across a long turn.
+            await sendEvent({ type: "thinking", content: chunk.message.thinking });
+            if (snapshotFlushed && !thoughtEventThisRound) {
+              thoughtEventThisRound = true;
+              await sendEvent({
+                type: "thought",
+                thought: currentCumulativeThought,
+                thinkingSegments: liveSegments,
+              });
+            }
           }
           if (chunk.message?.content) {
             const nowMs = Date.now();
@@ -1236,6 +1248,18 @@ export async function runChatTurn(
         accumulatedThoughts.push(trimmedThinking);
         thinkingSegments.push({ round: currentRoundNumber, text: trimmedThinking });
         thinkingEndMs = Date.now();
+        // PERF-P3 round boundary: exactly one cumulative `thought` event per
+        // round. Per-token deltas ride the `thinking` event above; a throttled
+        // snapshot flush may have already carried this round's thought, so the
+        // boundary emission is gated by thoughtEventThisRound.
+        if (!thoughtEventThisRound) {
+          thoughtEventThisRound = true;
+          await sendEvent({
+            type: "thought",
+            thought: accumulatedThoughts.join("\n\n"),
+            thinkingSegments: [...thinkingSegments],
+          });
+        }
       }
 
       if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
@@ -1477,12 +1501,8 @@ export async function runChatTurn(
       }
       consecutiveMarkupFailures = 0;
 
-      if (accumulatedThoughts.length > 0) {
-        await sendEvent({
-          type: "thought",
-          thought: accumulatedThoughts.join("\n\n"),
-        });
-      }
+      // PERF-P3: the cumulative `thought` event for this round was already
+      // emitted at the round boundary above; delta-only per token.
 
       round++;
       lastRoundTools = toolCalls.map((tc) => tc.function?.name || "");

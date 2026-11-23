@@ -1631,6 +1631,15 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("app/api/traces/route") || p.includes("tracesRoute.test.ts"),
     tests: ["tests/tracesRoute.test.ts"],
   },
+  {
+    // PERF-P3: thought stream delta-only. Thinking tokens emit only the
+    // `thinking` delta; cumulative `thought` fires at round boundaries only.
+    match: (p) =>
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/chat/turnEngine") ||
+      p.includes("thoughtStreamDeltaOnly.test.ts"),
+    tests: ["tests/thoughtStreamDeltaOnly.test.ts"],
+  },
 ];
 
 /**
