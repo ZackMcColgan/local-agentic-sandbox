@@ -45,7 +45,7 @@ describe("Board #130 — estimateTokens measured once per round (Perf P6)", () =
 
     try {
       let roundIndex = 0;
-      const streamLlmChat = async function* (payload: Record<string, unknown>) {
+      const streamLlmChat = async function* (_payload: Record<string, unknown>) {
         roundIndex++;
         if (roundIndex === 1) {
           yield {
