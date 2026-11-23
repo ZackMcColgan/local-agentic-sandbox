@@ -320,7 +320,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       });
     });
 
-    it("forces synthesis on the final round: omits tools from payload, appends directive, and finishes with text", async () => {
+    it("forces synthesis on the final round: keeps tools in payload with tool_choice: 'none', appends directive, and finishes with text", async () => {
       const capturedPayloads: CapturedChatPayload[] = [];
       const messages: ContextMessage[] = [
         { role: "system", content: "You are an autonomous AI engineering assistant." },
@@ -334,8 +334,12 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         capturedPayloads.push(JSON.parse(JSON.stringify(payload)) as CapturedChatPayload);
         callCount++;
 
-        // If tools are present, the model aggressively attempts more tool calls
-        if (Array.isArray(payload.tools) && payload.tools.length > 0) {
+        // If tools are active (tool_choice !== 'none'), the model aggressively attempts more tool calls
+        if (
+          Array.isArray(payload.tools) &&
+          payload.tools.length > 0 &&
+          payload.tool_choice !== "none"
+        ) {
           yield {
             message: {
               content: "",
@@ -350,7 +354,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
             },
           };
         } else {
-          // On final round without tools, model produces text synthesis
+          // On final round with tool_choice: 'none', model produces text synthesis
           yield {
             message: {
               content: "Synthesized final answer from gathered data.",
@@ -391,20 +395,27 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         );
       }
 
-      // Final round (round === MAX_ROUNDS - 1) MUST omit tools
-      const finalPayload = capturedPayloads[MAX_ROUNDS - 1];
-      assert.equal(
+      // Final round (round === MAX_ROUNDS - 1) keeps tools and suppresses calls with tool_choice: 'none'
+      const finalPayload = capturedPayloads[MAX_ROUNDS - 1] as CapturedChatPayload & {
+        tool_choice?: string;
+      };
+      assert.deepEqual(
         finalPayload.tools,
-        undefined,
-        "Final round payload MUST omit tools so model cannot call more tools"
+        capturedPayloads[0].tools,
+        "Final round payload keeps tools byte-identical to preserve cached prefix"
+      );
+      assert.equal(
+        finalPayload.tool_choice,
+        "none",
+        "Final round payload sets tool_choice: 'none' so model cannot call more tools"
       );
 
-      // Final round MUST contain the synthesis directive in system message at index 0
+      // Final round MUST keep system message at index 0 untouched and deliver synthesis directive via trailing message
       const synthesisMsg = finalPayload.messages[0];
       assert.equal(synthesisMsg?.role, "system");
       assert.ok(
-        synthesisMsg?.content.includes(FINAL_ROUND_SYNTHESIS_DIRECTIVE),
-        `Final round payload must include the synthesis directive in system message`
+        finalPayload.messages.some((m) => m.content.includes(FINAL_ROUND_SYNTHESIS_DIRECTIVE)),
+        `Final round payload must include the synthesis directive`
       );
       // Invariant: zero system messages at index > 0
       const midSystem = finalPayload.messages.filter((m, idx) => idx > 0 && m.role === "system");
@@ -415,7 +426,7 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
     });
 
-    it("verifies chat/route.ts forces synthesis from the budget decision and omits tools", () => {
+    it("verifies chat/route.ts forces synthesis from the budget decision and suppresses tools via tool_choice: 'none'", () => {
       const chatRoutePath = path.resolve(__dirname, "../app/api/chat/route.ts");
       const content =
         fs.readFileSync(chatRoutePath, "utf8") +
@@ -445,8 +456,8 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       );
 
       assert.ok(
-        content.includes("!isFinalRound"),
-        "chat/route.ts must omit tools from payload on the final round"
+        content.includes("isFinalRound") && content.includes('tool_choice = "none"'),
+        "chat/route.ts must suppress tool calls on the final round via tool_choice = 'none'"
       );
     });
   });

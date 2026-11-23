@@ -136,13 +136,10 @@ describe("Agent Grounding Gate & Web Headroom Scaling Suite", () => {
       // The gate should have rejected round 0 and forced round 1
       assert.ok(callCount >= 2, `Expected at least 2 rounds, got ${callCount}`);
       // Verify grounding directive was injected into conversationMessages
-      const systemMsg = messages.find(
-        (m) =>
-          m.role === "system" &&
-          typeof m.content === "string" &&
-          m.content.includes("GROUNDING ENFORCEMENT")
+      const directiveMsg = messages.find(
+        (m) => typeof m.content === "string" && m.content.includes("GROUNDING ENFORCEMENT")
       );
-      assert.ok(systemMsg, "Expected GROUNDING ENFORCEMENT directive to be injected");
+      assert.ok(directiveMsg, "Expected GROUNDING ENFORCEMENT directive to be injected");
     });
   });
 });

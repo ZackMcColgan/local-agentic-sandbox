@@ -68,6 +68,9 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("lib/microElision") ||
       p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/chat/turnEngine") ||
+      p.includes("lib/contextBudget") ||
+      p.includes("lib/llm/provider") ||
       p.includes("prefixReusePreservation.test.ts"),
     tests: ["tests/prefixReusePreservation.test.ts"],
   },

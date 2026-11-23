@@ -320,6 +320,35 @@ export function estimateTokens(input: unknown): number {
 }
 
 /**
+ * Appends a dynamic mid-turn directive as a trailing user message after the
+ * cached prefix without mutating messages[0] (preserving the engine KV/SSM
+ * system+tools prefix cache). Idempotent for identical directive strings.
+ */
+export function appendTrailingDirective<T extends { role?: string; content?: unknown }>(
+  messages: T[],
+  directive: string
+): T[] {
+  if (!directive || !directive.trim()) {
+    return messages;
+  }
+  const trimmed = directive.trim();
+  for (let i = 1; i < messages.length; i++) {
+    const content =
+      typeof messages[i]?.content === "string"
+        ? (messages[i].content as string)
+        : JSON.stringify(messages[i]?.content || "");
+    if (content.includes(trimmed)) {
+      return messages;
+    }
+  }
+  messages.push({
+    role: "user",
+    content: trimmed,
+  } as unknown as T);
+  return messages;
+}
+
+/**
  * Merges a system directive into messages[0] if it is a system message,
  * or inserts a system message at index 0 if not present.
  * Guarantees role === "system" never appears at index > 0.
@@ -754,7 +783,7 @@ export async function runChatToolLoop(
       conversationMessages.push(...fitResult.messages);
     }
     if (fitResult.highWater) {
-      mergeSystemDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+      appendTrailingDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
     }
 
     // CHAT-7: continuation is governed by context headroom, with maxToolRounds acting
@@ -773,17 +802,18 @@ export async function runChatToolLoop(
 
     const isFinalRound = decision.forceSynthesis === true;
     if (isFinalRound) {
-      mergeSystemDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
+      appendTrailingDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
     if (isArtifactRequest) {
-      mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+      appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 
+    const roundTools = llmTools;
     const payload: Record<string, unknown> = {
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
-        tools: isFinalRound ? undefined : llmTools,
+        tools: roundTools,
         isArtifactTurn: isArtifactRequest,
       }),
       keep_alive: -1,
@@ -796,8 +826,11 @@ export async function runChatToolLoop(
       }),
     };
 
-    if (llmTools.length > 0 && !isFinalRound) {
-      payload.tools = llmTools;
+    if (roundTools.length > 0) {
+      payload.tools = roundTools;
+      if (isFinalRound) {
+        payload.tool_choice = "none";
+      }
     }
 
     let fullRoundContent = "";
@@ -821,7 +854,7 @@ export async function runChatToolLoop(
       ) {
         hasExecutedWebSearch = true;
         groundingRoundPending = true;
-        mergeSystemDirective(
+        appendTrailingDirective(
           conversationMessages,
           "[GROUNDING ENFORCEMENT]: You must use 'search_web' to check current/real-time information before answering this question. Invoke 'search_web' now."
         );
@@ -844,9 +877,20 @@ export async function runChatToolLoop(
     });
 
     for (const toolCall of toolCallsFromMessage) {
-      const toolResult = await executeTool(toolCall);
       const toolName = toolCall.function?.name || toolCall.name || "";
-      if (isWebResearchTool(toolName)) webResearchCalls++;
+      if (isWebResearchTool(toolName)) {
+        if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
+          conversationMessages.push({
+            role: "tool",
+            name: toolName,
+            content: WEB_BUDGET_EXHAUSTED_DIRECTIVE,
+          });
+          appendTrailingDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
+          continue;
+        }
+        webResearchCalls++;
+      }
+      const toolResult = await executeTool(toolCall);
       const isFileReadTool = toolName === "workspace_read_file" || toolName === "host_read_file";
       conversationMessages.push({
         role: "tool",

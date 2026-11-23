@@ -43,7 +43,7 @@ import {
   filterToolsForWebBudget,
   buildSynthesisDirective,
   shouldRunPostToolSynthesis,
-  mergeSystemDirective,
+  appendTrailingDirective,
   hasArtifactCreationIntent,
   resolveRoundModelOptions,
   OUTPUT_HEADROOM_THINKING_DIRECTIVE,
@@ -768,11 +768,12 @@ export async function runChatTurn(
         `[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`
       );
 
-      // Fix D1 + D2 (F8a/F8b): resolve this round's tool schemas and context
-      // window BEFORE elision/fit/continuation checks so tool schemas are
-      // counted from round 0 and output headroom (window - ROUND_MAX_TOKENS)
-      // is reserved.
-      const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
+      // Fix D1 + D2 (F8a/F8b) + Phase 1 (P1): keep roundTools byte-stable across
+      // all rounds of a turn (even after webResearchCalls reaches MAX_WEB_RESEARCH_CALLS;
+      // filterToolsForWebBudget is retained for standalone callers while excess web
+      // calls in the turn loop are rejected at dispatch time).
+      void filterToolsForWebBudget;
+      const roundTools = llmTools;
       const roundToolSchemaTokens = estimateToolSchemaTokens(roundTools);
       const roundContextWindowTokens =
         resolveRoundModelOptions({
@@ -966,7 +967,7 @@ export async function runChatTurn(
       }
 
       if (compaction.highWater) {
-        mergeSystemDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+        appendTrailingDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
       }
 
       const postFitEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
@@ -1027,12 +1028,12 @@ export async function runChatTurn(
       // CHAT-7: forced synthesis only on the last permitted round (backstop boundary).
       // Budget-exhausted research-extension rounds keep tools — they are still gathering data.
       const isFinalRound = continuation.forceSynthesis === true;
-      // Final round forced synthesis: prompt model to synthesize answer and omit tools
+      // Final round forced synthesis: prompt model to synthesize answer and suppress tool calls via tool_choice: "none"
       if (isFinalRound) {
-        mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
+        appendTrailingDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
       }
       if (isArtifactRequest) {
-        mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+        appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
       }
 
       const roundOptions = resolveRoundModelOptions({
@@ -1062,7 +1063,7 @@ export async function runChatTurn(
         model: turnState.activeModel,
         messages: fitContextWindow(conversationMessages, {
           contextWindowTokens: roundOptions.num_ctx,
-          tools: isFinalRound ? undefined : roundTools,
+          tools: roundTools,
           isArtifactTurn: isArtifactRequest,
         }),
         keep_alive: -1,
@@ -1071,8 +1072,11 @@ export async function runChatTurn(
         options: roundOptions,
       };
 
-      if (roundTools.length > 0 && !isFinalRound) {
+      if (roundTools.length > 0) {
         llmPayload.tools = roundTools;
+        if (isFinalRound) {
+          llmPayload.tool_choice = "none";
+        }
       }
 
       const dispatchedEstimateTokens =
@@ -1392,7 +1396,7 @@ export async function runChatTurn(
         ) {
           groundingEnforced = true;
           groundingDirectivePending = true;
-          mergeSystemDirective(
+          appendTrailingDirective(
             conversationMessages,
             `[GROUNDING ENFORCEMENT]: You need current/real-time information before answering. Formulate the web search query YOURSELF: concise, the information need only. Resolve references from the conversation ("the day" means today, "there"/"it" means the place or topic already discussed -- carry place names like "Spanish Fort AL" forward). Never use the user's instructions, formatting requests, or meta-questions as the query. Only invoke search_web when you genuinely need external data -- do not search questions about the conversation itself. Invoke 'search_web' with your formulated query now. Do not hallucinate or claim you searched without invoking 'search_web'.`
           );
@@ -1627,7 +1631,7 @@ export async function runChatTurn(
           typeof toolArgs?.content === "string" &&
           /<svg[\s>][\s\S]*?<\/svg>/i.test(toolArgs.content)
         ) {
-          mergeSystemDirective(
+          appendTrailingDirective(
             conversationMessages,
             "[DELIVERABLE SAVED]: You have already saved the complete SVG diagram via workspace_write_file, and the UI automatically renders it inline for the user. Now respond with a concise 2-3 sentence summary of the diagram's contents and do NOT call more tools or repeat the <svg> markup in your text response."
           );
@@ -1636,7 +1640,7 @@ export async function runChatTurn(
         if (isWebResearchTool(toolName, target.tier)) {
           if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
             webBudgetNoticeAdded = true;
-            mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
+            appendTrailingDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
           }
         }
 
@@ -1663,7 +1667,7 @@ export async function runChatTurn(
             model: turnState.activeModel,
             reasoning_effort: effectiveReasoningEffort,
           });
-          mergeSystemDirective(
+          appendTrailingDirective(
             conversationMessages,
             "[AUTO-ESCALATION]: Execution engine encountered 2 consecutive failures. Escalating session to Primary Reasoning Engine for deep architectural root-cause diagnosis and code synthesis."
           );
@@ -1905,7 +1909,7 @@ export async function runChatTurn(
                 message: evalResult.message,
               }),
             });
-            mergeSystemDirective(
+            appendTrailingDirective(
               conversationMessages,
               `[QUERY REVISION REQUIRED]: ${evalResult.message}`
             );
@@ -2221,7 +2225,7 @@ export async function runChatTurn(
         shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
       ) {
         honestAbortInjected = true;
-        mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+        appendTrailingDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
         await sendEvent({
           type: "trace",
           trace: {
@@ -2260,7 +2264,7 @@ export async function runChatTurn(
       shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
     ) {
       honestAbortInjected = true;
-      mergeSystemDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+      appendTrailingDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
       await sendEvent({
         type: "trace",
         trace: {
@@ -2293,10 +2297,11 @@ export async function runChatTurn(
       }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
       ROUND_MAX_TOKENS
     );
+    const synthToolSchemaTokens = estimateToolSchemaTokens(llmTools);
     const synthMeasuredInput = estimateEffectivePromptTokens(conversationMessages, {
       lastMeasuredPromptTokens,
       lastMeasuredEstimateTokens,
-      toolSchemaTokens: 0,
+      toolSchemaTokens: synthToolSchemaTokens,
     });
     const hasOutputHeadroomForSynthesis = !(
       toolLoopStopReason === "budget" && synthMeasuredInput > synthWindowCeiling
@@ -2356,7 +2361,7 @@ export async function runChatTurn(
       });
 
       if (isArtifactRequest) {
-        mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+        appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
       }
 
       const synthOptions = resolveRoundModelOptions({
@@ -2380,6 +2385,7 @@ export async function runChatTurn(
             llmBaseUrl: getLlmBaseUrl(),
             activeModel: turnState.activeModel,
             conversationMessages,
+            tools: llmTools,
             isArtifactRequest,
             turnAbortSignal: turnAbortController.signal,
             synthOptions,
