@@ -124,3 +124,15 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Patch web-ui/lib/llm/provider.ts: (1) requestBody.parallel_tool_calls = true when tools present (was hardcoded false); (2) removed the "if (idx > 0) continue" runaway guard in the delta tool-call accumulator - it silently discarded every parallel call, so enabling the flag alone would have changed nothing.
 - Verification: llmProvider.test.ts + parallelReadOnlyFanout.test.ts 46 pass / 0 fail; npm run test:gate PASSED: 140 tests, 0 failed, 20.63s (<90s budget).
 - Note: .gitignore and web-ui/Dockerfile show CR-only diffs in this worktree (line-ending churn from a prior attempt); excluded from commits.
+
+## Board #127 (Perf P3) - thought stream delta-only
+
+- Worktree: C:\Users\zackm\Desktop\repos\perf-wt, branch feature/perf-p3-thought-stream (off fresh origin/develop).
+- Client claim verified: web-ui/components/ChatStream.tsx handles delta `thinking` events (line ~1177, appends event.content to msg.thought) and round-boundary `thought` events (line ~1167, replaces msg.thought + thinkingSegments); the terminal `done` event carries the final thought. So per-token cumulative `thought` events are NOT required by the client - item proceeds.
+- Test-first: web-ui/tests/thoughtStreamDeltaOnly.test.ts (3 tests) - N thinking tokens produce N `thinking` deltas and at most one `thought` per round; synthesis pass emits deltas only, never a cumulative `thought`. Confirmed failing for the stated reason before the fix (roundLoop emitted 0 thinking deltas + per-token cumulative thought; synthesis emitted 3 cumulative thought events).
+- Patch web-ui/lib/chat/roundLoop.ts: per thinking token now emits ONLY the `thinking` delta; cumulative `thought` fires at most once per round - either a throttled snapshot flush (streamSnapshot.maybeWrite returns true, <=1/sec) or the round boundary, deduped via thoughtEventThisRound. Removed the redundant post-round thought emit.
+- Patch web-ui/lib/chat/turnEngine.ts (runSynthesisPass): removed the per-token cumulative `thought` sendEvent; thinking tokens emit only the `thinking` delta; cumulative thought reaches the client via the throttled snapshot and the terminal `done` event.
+- Wired new test into web-ui/lib/testGate.ts MAPPING_RULES (additive rule matching lib/chat/roundLoop, lib/chat/turnEngine, thoughtStreamDeltaOnly.test.ts).
+- Verification: thoughtStreamDeltaOnly 3/0; chatThinkingPreservation 4/0; chatTurnEngine 5/0; chatRoundLoop 3/0; chatStreaming 10/0; chatStreamTokenPreservation 11/0; activityTimeline 22/0; chatReasoningAndProgress 19/0; thinkingPanel 6/0; chatLiveVisibility 8/0; turnSurvival 12/0; npx tsc --noEmit clean; npm run test:gate PASSED 82/0 (<90s budget).
+- Assumption: the brief permits cumulative `thought` at "round boundaries / snapshot flushes"; the flush-gated event carries the cumulative-so-far prefix (not the full round text), which ChatStream.tsx accepts since the round-boundary/done events supply the full thought.
+- Note: .gitignore and web-ui/Dockerfile CR-only churn excluded from commits.
