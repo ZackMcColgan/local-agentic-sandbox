@@ -144,8 +144,11 @@ test.describe("Simulation Mode & State Invariants Suite @chaos", () => {
     const thinkingHeader = page.locator('[data-testid="thinking-panel"]').first();
     await expect(thinkingHeader).toBeVisible();
 
-    // 2. Failed command step is visible
-    const toolStep1 = page.locator("text=Execute Sandboxed Command").first();
+    // 2. Failed command step is visible. The activity timeline renders the
+    // step as a verb-first row carrying the command itself (the retired
+    // trace-card title "Execute Sandboxed Command" no longer exists), and
+    // the sqlite3 invocation appears only in that step's row.
+    const toolStep1 = page.locator("text=sqlite3 /data/analytics.db").first();
     await expect(toolStep1).toBeVisible();
 
     // 3. Fallback tool step is visible
