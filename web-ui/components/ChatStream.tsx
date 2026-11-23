@@ -547,7 +547,10 @@ export function ChatStream({
     );
   const isTaskActive = activeTask?.status === "active";
   const isTurnLive = Boolean(
-    isLoading || isTaskActive || activeTurn || lastRunAssistant?.status === "streaming"
+    isLoading ||
+    isTaskActive ||
+    activeTurn ||
+    (!isTransientDisconnected && lastRunAssistant?.status === "streaming")
   );
   const isGeneratingOrRunning = isTurnLive;
 
