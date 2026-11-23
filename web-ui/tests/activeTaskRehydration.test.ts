@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { OvernightSupervisor } from "../lib/subagents/supervisor";
 import { TaskManifest } from "../lib/subagents/types";
@@ -108,8 +110,27 @@ test("Fix 4 — Active Task Rehydration & Refresh Durability Suite", async (t) =
   await t.test(
     "POST /api/tasks releases activeWorkers slot when async execution settles",
     async () => {
-      const tmpWorkspace = path.join(testCheckpointDir, "ws-settle");
-      fs.mkdirSync(tmpWorkspace, { recursive: true });
+      const tmpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), "rehydration-ws-settle-"));
+      execFileSync("git", ["init"], { cwd: tmpWorkspace, stdio: "ignore" });
+      execFileSync("git", ["config", "user.name", "Test Runner"], {
+        cwd: tmpWorkspace,
+        stdio: "ignore",
+      });
+      execFileSync("git", ["config", "user.email", "test@example.com"], {
+        cwd: tmpWorkspace,
+        stdio: "ignore",
+      });
+      fs.writeFileSync(path.join(tmpWorkspace, "README.md"), "# Temp test repo\n", "utf8");
+      execFileSync("git", ["add", "README.md"], { cwd: tmpWorkspace, stdio: "ignore" });
+      execFileSync("git", ["commit", "-m", "chore: init temp repo"], {
+        cwd: tmpWorkspace,
+        stdio: "ignore",
+      });
+      const initialTempHead = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: tmpWorkspace,
+        encoding: "utf8",
+      }).trim();
+
       const prevEnv = {
         AGENT_CHECKPOINT_DIR: process.env.AGENT_CHECKPOINT_DIR,
         WORKSPACE_DIR: process.env.WORKSPACE_DIR,
@@ -166,11 +187,36 @@ test("Fix 4 — Active Task Rehydration & Refresh Durability Suite", async (t) =
           undefined,
           "Supervisor registry must also release abort controller"
         );
+
+        // Verify real git milestone commit landed inside the isolated temp repo
+        const finalTempHead = execFileSync("git", ["rev-parse", "HEAD"], {
+          cwd: tmpWorkspace,
+          encoding: "utf8",
+        }).trim();
+        assert.notStrictEqual(
+          finalTempHead,
+          initialTempHead,
+          "Expected milestone commit to advance HEAD in isolated temp repo"
+        );
+        const latestSubject = execFileSync("git", ["log", "-n", "1", "--format=%s"], {
+          cwd: tmpWorkspace,
+          encoding: "utf8",
+        }).trim();
+        assert.ok(
+          latestSubject.includes("feat: complete milestone M1 - Create hello.txt"),
+          `Expected milestone commit in temp repo, got: ${latestSubject}`
+        );
+        assert.strictEqual(
+          fs.existsSync(path.join(tmpWorkspace, "hello.txt")),
+          true,
+          "Expected hello.txt inside isolated temp repo"
+        );
       } finally {
         Object.entries(prevEnv).forEach(([k, v]) => {
           if (v === undefined) delete process.env[k];
           else process.env[k] = v;
         });
+        fs.rmSync(tmpWorkspace, { recursive: true, force: true });
       }
     }
   );

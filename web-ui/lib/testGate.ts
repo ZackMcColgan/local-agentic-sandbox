@@ -65,6 +65,17 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    match: (p) =>
+      p.includes("lib/subagents/supervisor") ||
+      p.includes("lib/subagents/stepExecutor") ||
+      p.includes("lib/git/workerGitOps") ||
+      p.includes("app/api/tasks/route") ||
+      p.includes("activeTaskRehydration.test.ts") ||
+      p.includes("tasksApi.test.ts") ||
+      p.includes("testGitIsolationGuard.test.ts"),
+    tests: ["tests/testGitIsolationGuard.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/activityTimeline") || p.includes("activityTimeline.test.ts"),
     tests: ["tests/activityTimeline.test.ts"],
   },

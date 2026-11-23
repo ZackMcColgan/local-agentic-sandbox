@@ -169,10 +169,15 @@ export async function POST(req: Request) {
 
       (async () => {
         try {
-          const executor = createProductionStepExecutor({ signal: abortController.signal });
+          const explicitRepoRoot = process.env.WORKSPACE_DIR || undefined;
+          const executor = createProductionStepExecutor({
+            signal: abortController.signal,
+            ...(explicitRepoRoot ? { repoRoot: explicitRepoRoot } : {}),
+          });
           const result = await supervisor.executeTaskWithRecovery(manifest, {
             stepExecutor: executor,
             signal: abortController.signal,
+            ...(explicitRepoRoot ? { repoRoot: explicitRepoRoot } : {}),
           });
           tasksRegistry.set(taskId, result);
           supervisor.saveCheckpoint(result);
