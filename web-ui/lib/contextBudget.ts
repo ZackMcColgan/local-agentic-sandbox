@@ -1164,6 +1164,7 @@ export function fitConversationToBudget(
     if (compactRes.compacted) {
       workingMessages = compactRes.messages.map((m) => ({ ...m }));
       actions.push("compaction");
+      markDirty();
     }
   }
 
@@ -1181,6 +1182,7 @@ export function fitConversationToBudget(
             content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
           };
           anyElided = true;
+          markDirty();
           if (measureWorking(workingMessages) <= budgetTokens) {
             break;
           }
@@ -1221,6 +1223,7 @@ export function fitConversationToBudget(
       if (candidateIdx === -1) break;
       workingMessages.splice(candidateIdx, 1);
       anyDropped = true;
+      markDirty();
 
       ({ firstUserIdx, latestUserIdx } = findProtectedUserIndices(workingMessages));
     }
@@ -1261,6 +1264,7 @@ export function fitConversationToBudget(
       ...workingMessages[longestIdx],
       content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER,
     };
+    markDirty();
     if (!actions.includes("truncate_oversize")) {
       actions.push("truncate_oversize");
     }
