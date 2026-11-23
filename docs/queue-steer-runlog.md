@@ -53,6 +53,16 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
   636 pass / 0 fail / 2 skip in 67.2s (<90s budget); suite count grew from 409 to 638 as
   develop advanced (Board #54/#56/#59 slices merged in), `tests/retryAfter.test.ts` still
   selected. No code change required; job remains COMPLETE.
+- Auto-resume attempt 1/2 (2026-11-23 re-verification): deliverable is MERGED, not open.
+  PR #217 state = MERGED (`gh pr list --state all`), merge commit `5130bb3` on develop;
+  `web-ui/lib/retryAfter.mjs` and `web-ui/tests/retryAfter.test.ts` present on
+  `origin/develop` (14-test suite incl. HTTP-date cases). Targeted gate in the host
+  checkout `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` ->
+  14 pass / 0 fail in 9.8s (<90s budget). Environment gap logged: a fresh worktree off
+  `origin/develop` has no `node_modules`, so `scripts/test-gate.js` fails with
+  `Cannot find module .../node_modules/tsx/dist/cli.mjs` until deps are installed there;
+  verification was run in the host checkout instead. No code change required; job
+  remains COMPLETE and nothing further to bank for this job.
 
 ## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
