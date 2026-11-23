@@ -625,4 +625,25 @@ describe("activityTimeline — pure row model", () => {
     assert.equal(delRow.verb, "Deleted");
     assert.equal(delRow.label, "Deleted old.ts");
   });
+
+  it("renders the simulated failed sandboxed command as an error row carrying the command", () => {
+    // Mirrors the chat-tools simulator fixture (lib/simulator/scenarios.ts):
+    // e2e Scenario 4 asserts this step is visible via its command text.
+    const row = traceToTimelineRow(
+      {
+        tool: "execute_sandboxed_command",
+        args: { command: "sqlite3 /data/analytics.db 'SELECT COUNT(*) FROM orders'" },
+        result: {
+          exitCode: 1,
+          stderr:
+            "Error: unable to open database file: /data/analytics.db: No such file or directory",
+        },
+        durationMs: 412,
+        tier: "sandbox",
+      },
+      0
+    );
+    assert.equal(row.status, "error");
+    assert.ok(row.label.includes("sqlite3 /data/analytics.db"), row.label);
+  });
 });
