@@ -21,10 +21,7 @@ export const STREAM_POLL_QUIET_WINDOW_MS = STREAM_POLL_INTERVAL_MS;
  * never-set clock (no chunks ever recorded) counts as quiet so a turn that
  * never streamed still polls.
  */
-export function isSseStreamDelivering(
-  lastChunkAtMs: number,
-  nowMs: number
-): boolean {
+export function isSseStreamDelivering(lastChunkAtMs: number, nowMs: number): boolean {
   if (!Number.isFinite(lastChunkAtMs) || !Number.isFinite(nowMs)) return false;
   if (lastChunkAtMs <= 0) return false;
   return nowMs - lastChunkAtMs < STREAM_POLL_QUIET_WINDOW_MS;

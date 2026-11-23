@@ -551,10 +551,7 @@ export default function Home() {
       // stream itself is the transport, so the full-thread poll is redundant
       // churn on the 1-vCPU event loop. Suppress it and re-arm once the stream
       // goes quiet; the effect tears down when the stream ends.
-      const sseStreamDelivering = isSseStreamDelivering(
-        lastStreamChunkAtRef.current,
-        Date.now()
-      );
+      const sseStreamDelivering = isSseStreamDelivering(lastStreamChunkAtRef.current, Date.now());
       if (!shouldPollLiveThread({ threadLiveStreaming: true, sseStreamDelivering })) {
         scheduleNext(STREAM_POLL_INTERVAL_MS);
         return;
