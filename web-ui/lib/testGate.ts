@@ -88,6 +88,15 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/contextBudget") ||
+      p.includes("lib/conversationCompaction") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("estimateScanPerRound.test.ts"),
+    tests: ["tests/estimateScanPerRound.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/chat/roundLoop") ||
       p.includes("lib/chat/turnEngine") ||
       p.includes("app/api/chat/route") ||

@@ -258,9 +258,15 @@ export interface PromptTokenCalibration {
  */
 export function estimateEffectivePromptTokens(
   messages: unknown,
-  calibration?: PromptTokenCalibration
+  calibration?: PromptTokenCalibration & {
+    /** Pre-computed estimateTokens(messages) to reuse instead of re-stringifying (Perf P6). */
+    precomputedRawMessageTokens?: number;
+  }
 ): number {
-  const rawMessageTokens = estimateTokens(messages);
+  const rawMessageTokens =
+    typeof calibration?.precomputedRawMessageTokens === "number"
+      ? calibration.precomputedRawMessageTokens
+      : estimateTokens(messages);
   const schemaTokens =
     calibration?.toolSchemaTokens ?? estimateToolSchemaTokens(calibration?.tools);
   const rawTotal = rawMessageTokens + schemaTokens;
@@ -281,8 +287,20 @@ export function estimateEffectivePromptTokens(
 /**
  * Conservative token estimator: Math.ceil(text.length / 4).
  * Handles string, message object, or message arrays.
+ *
+ * Perf P6 (#130): an optional observer seam records every invocation so tests can
+ * prove full-history (array) scans are measured once per round rather than
+ * re-stringified across the fit ladder, continuation check, and provider payload.
  */
+let estimateTokensObserver: ((input: unknown) => void) | null = null;
+
+/** Install (or clear) a counting observer for estimateTokens. Test-only seam. */
+export function setEstimateTokensObserver(fn: ((input: unknown) => void) | null): void {
+  estimateTokensObserver = fn;
+}
+
 export function estimateTokens(input: unknown): number {
+  if (estimateTokensObserver) estimateTokensObserver(input);
   if (!input) return 0;
   if (typeof input === "string") {
     return Math.ceil(input.length / 4);
@@ -471,6 +489,12 @@ export interface FitContextOptions {
   outputHeadroomTokens?: number;
   toolSchemaTokens?: number;
   compactHistory?: boolean;
+  /**
+   * Pre-computed estimateTokens(messages) to reuse instead of re-stringifying the
+   * full history (Perf P6 #130). Used only when the consolidation pass is a no-op
+   * (no compaction, no stray-system merge), so the fitted array has identical tokens.
+   */
+  precomputedRawMessageTokens?: number;
 }
 
 /**
@@ -508,6 +532,7 @@ export function fitContextWindow(
   }
 
   const nonSystemMessages: ContextMessage[] = [];
+  let straySystemMerged = false;
   for (let i = 0; i < source.length; i++) {
     const m = source[i];
     if (i === 0 && hasLeadingSystem) {
@@ -519,6 +544,7 @@ export function fitContextWindow(
         consolidatedSystemContent = consolidatedSystemContent
           ? `${consolidatedSystemContent}\n\n${extra.trim()}`
           : extra.trim();
+        straySystemMerged = true;
       }
     } else {
       nonSystemMessages.push({ ...m });
@@ -533,6 +559,17 @@ export function fitContextWindow(
     });
   }
   working.push(...nonSystemMessages);
+
+  // Perf P6 (#130): reuse the precomputed raw-message estimate when the
+  // consolidation pass produced an identical token count (no compaction, no
+  // stray-system merge). This avoids re-stringifying the full history.
+  const consolidationWasNoop =
+    !options?.compactHistory &&
+    options?.precomputedRawMessageTokens !== undefined &&
+    !straySystemMerged;
+  const rawTokens = consolidationWasNoop
+    ? options!.precomputedRawMessageTokens!
+    : estimateTokens(working);
 
   // Detect whether this turn is an artifact-creation request
   let lastUserContent = "";
@@ -579,10 +616,10 @@ export function fitContextWindow(
 
   let evictedCount = 0;
 
-  if (estimateTokens(working) <= maxTokens) {
+  if (rawTokens <= maxTokens) {
     const res: FittedMessages = working;
     res.evictedCount = 0;
-    res.estimatedTokens = estimateTokens(working);
+    res.estimatedTokens = rawTokens;
     return res;
   }
 
@@ -774,9 +811,15 @@ export async function runChatToolLoop(
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
 
   while (true) {
+    // Perf P6 (#130): measure the raw full-history estimate ONCE per round and
+    // thread it through the fit ladder, continuation check, and provider payload
+    // fit so those helpers reuse it instead of re-stringifying the history.
+    const rawRoundTokens = estimateTokens(conversationMessages);
+
     // Fit conversation to budget first through the compaction/elision ladder
     const fitResult = fitConversationToBudget(conversationMessages, {
       budgetTokens: maxContentTokens,
+      precomputedRawMessageTokens: rawRoundTokens,
     });
     if (fitResult.compacted) {
       conversationMessages.length = 0;
@@ -786,11 +829,17 @@ export async function runChatToolLoop(
       appendTrailingDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
     }
 
+    // After a no-op fit the raw estimate is still valid; after compaction/elision
+    // the history changed, so re-measure once.
+    const contextTokens = fitResult.compacted
+      ? estimateTokens(conversationMessages)
+      : rawRoundTokens;
+
     // CHAT-7: continuation is governed by context headroom, with maxToolRounds acting
     // as an explicit (optional) backstop override rather than a normal work ceiling.
     const decision = canContinueToolLoop({
       round,
-      contextTokens: estimateTokens(conversationMessages),
+      contextTokens,
       budgetTokens: maxContentTokens,
       lastRoundTools,
       webResearchCalls,
@@ -815,6 +864,7 @@ export async function runChatToolLoop(
         maxContentTokens,
         tools: roundTools,
         isArtifactTurn: isArtifactRequest,
+        precomputedRawMessageTokens: contextTokens,
       }),
       keep_alive: -1,
       options: resolveRoundModelOptions({
@@ -1027,6 +1077,12 @@ export function fitConversationToBudget(
     contextWindowTokens?: number;
     /** Per-round output reserve (defaults to ROUND_MAX_TOKENS, Fix D2). */
     outputReserveTokens?: number;
+    /**
+     * Pre-computed estimateTokens(messages) to reuse instead of re-stringifying the
+     * full history (Perf P6 #130). Valid only when the caller measured the exact
+     * messages array passed in; the ladder's working copies diverge after compaction.
+     */
+    precomputedRawMessageTokens?: number;
   }
 ): FitConversationResult {
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -1051,24 +1107,46 @@ export function fitConversationToBudget(
   const thresholdRatio = options?.compactionThreshold ?? COMPACTION_THRESHOLD_RATIO;
   const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
   const schemaTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
-  const rawInitialTotal = estimateTokens(messages) + schemaTokens;
+  const rawInitialMessageTokens =
+    typeof options?.precomputedRawMessageTokens === "number"
+      ? options.precomputedRawMessageTokens
+      : estimateTokens(messages);
+  const rawInitialTotal = rawInitialMessageTokens + schemaTokens;
   const baselineEstimate = options?.lastMeasuredEstimateTokens ?? rawInitialTotal;
   const initialTokens = estimateEffectivePromptTokens(messages, {
     lastMeasuredPromptTokens: options?.measuredPromptTokens,
     lastMeasuredEstimateTokens: options?.lastMeasuredEstimateTokens,
     toolSchemaTokens: schemaTokens,
+    precomputedRawMessageTokens: rawInitialMessageTokens,
   });
 
-  const measureWorking = (msgs: ContextMessage[]): number =>
-    estimateEffectivePromptTokens(msgs, {
+  let workingMessages = messages.map((m) => ({ ...m }));
+  const actions: CompactionAction[] = [];
+
+  // Perf P6 (#130): memoize the raw message-token estimate for the working array.
+  // The ladder mutates workingMessages in place (splice / content replace); those
+  // mutations mark the cache dirty so the next measure re-scans exactly once. On a
+  // standard round (no compaction, no elision, no drop) the array never changes, so
+  // the whole ladder reuses the single raw estimate instead of re-stringifying.
+  let rawWorkingTokens = rawInitialMessageTokens;
+  let rawWorkingDirty = false;
+  const markDirty = () => {
+    rawWorkingDirty = true;
+  };
+
+  const measureWorking = (msgs: ContextMessage[]): number => {
+    if (rawWorkingDirty) {
+      rawWorkingTokens = estimateTokens(msgs);
+      rawWorkingDirty = false;
+    }
+    return estimateEffectivePromptTokens(msgs, {
       lastMeasuredPromptTokens: options?.measuredPromptTokens,
       lastMeasuredEstimateTokens:
         options?.measuredPromptTokens !== undefined ? baselineEstimate : undefined,
       toolSchemaTokens: schemaTokens,
+      precomputedRawMessageTokens: rawWorkingTokens,
     });
-
-  let workingMessages = messages.map((m) => ({ ...m }));
-  const actions: CompactionAction[] = [];
+  };
 
   // Rung (a): Compaction alone if above threshold or budget
   if (initialTokens >= thresholdTokens) {
@@ -1084,6 +1162,7 @@ export function fitConversationToBudget(
     if (compactRes.compacted) {
       workingMessages = compactRes.messages.map((m) => ({ ...m }));
       actions.push("compaction");
+      markDirty();
     }
   }
 
@@ -1101,6 +1180,7 @@ export function fitConversationToBudget(
             content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
           };
           anyElided = true;
+          markDirty();
           if (measureWorking(workingMessages) <= budgetTokens) {
             break;
           }
@@ -1141,6 +1221,7 @@ export function fitConversationToBudget(
       if (candidateIdx === -1) break;
       workingMessages.splice(candidateIdx, 1);
       anyDropped = true;
+      markDirty();
 
       ({ firstUserIdx, latestUserIdx } = findProtectedUserIndices(workingMessages));
     }
@@ -1181,6 +1262,7 @@ export function fitConversationToBudget(
       ...workingMessages[longestIdx],
       content: orig.slice(0, targetChars) + TOOL_TRUNCATION_MARKER,
     };
+    markDirty();
     if (!actions.includes("truncate_oversize")) {
       actions.push("truncate_oversize");
     }
