@@ -237,10 +237,7 @@ describe("PERF-P3 — thought stream is delta-only per token, cumulative thought
       thinkingEvents.length >= 3,
       `Delta thinking events must cover every thinking token, got ${thinkingEvents.length}`
     );
-    assert.ok(
-      thoughtEvents.length >= 1,
-      "Round-boundary thought events must still be emitted"
-    );
+    assert.ok(thoughtEvents.length >= 1, "Round-boundary thought events must still be emitted");
     assert.ok(
       thoughtEvents.length <= 2,
       `At most one thought event per round (2 rounds), got ${thoughtEvents.length}`
