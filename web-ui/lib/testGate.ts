@@ -1046,6 +1046,15 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/roundToolFanout.test.ts"],
   },
   {
+    // Board #125 Perf P2: parallel read-only fanout partition + single-round trace contract
+    match: (p) =>
+      p.includes("lib/chat/toolFanout") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("parallelReadOnlyFanout.test.ts"),
+    tests: ["tests/parallelReadOnlyFanout.test.ts"],
+  },
+  {
     match: (p) =>
       p.includes("lib/chat/roundLoop") ||
       p.includes("app/api/chat/route") ||

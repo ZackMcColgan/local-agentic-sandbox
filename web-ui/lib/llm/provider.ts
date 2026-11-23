@@ -610,7 +610,11 @@ export class LlamaCppProvider implements LLMProvider {
     }
     if (payload.tools && payload.tools.length > 0) {
       requestBody.tools = payload.tools;
-      requestBody.parallel_tool_calls = false;
+      // Board #125 (Perf P2): allow the model to emit multiple tool calls per round so
+      // read-only fanout batches land in one round instead of paying the per-round engine
+      // floor once per file. Runaway protection lives in the fanout partition machinery
+      // (lib/chat/toolFanout.ts: TOOL_FANOUT_CAP, read-only allowlist, writes as barriers).
+      requestBody.parallel_tool_calls = true;
     }
     if (payload.tool_choice !== undefined) {
       requestBody.tool_choice = payload.tool_choice;
@@ -853,8 +857,9 @@ export class LlamaCppProvider implements LLMProvider {
               | undefined;
             for (const tc of choice.delta.tool_calls) {
               const idx = tc.index ?? 0;
-              // Guard against runaway multi-index degenerate loops: only track primary tool call (index 0)
-              if (idx > 0) continue;
+              // Board #125 (Perf P2): multi-index deltas are legitimate parallel tool
+              // calls (parallel_tool_calls: true). Runaway protection lives in the
+              // fanout partition (cap + read-only allowlist), not in dropping indices.
               if (!toolCallsAccumulator.has(idx)) {
                 toolCallsAccumulator.set(idx, {
                   id: tc.id || "",

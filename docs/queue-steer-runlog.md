@@ -104,3 +104,13 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Test-first: web-ui/tests/jobQueueRoute.test.ts - new test asserts chat route source has no repoRoot: resolveJobRepoRoot()/createJobWorktree, and serializeTurn without repoRoot runs runTurn with null worktree and creates no .git/worktrees dir. Red before fix.
 - Patch: web-ui/app/api/chat/route.ts - dropped repoRoot from serializeTurn options, renamed chatTurnWorktreeSeq -> chatTurnSeq, updated comment to record the #63 rationale.
 - Verification: jobQueueRoute.test.ts 11 pass / 0 fail; npm run test:gate PASSED: 370 tests, 0 failed (budget 240s, took ~48s).
+
+## Board #125 (Perf P2) - enable parallel tool calls for read-only fanout
+
+- Worktree: C:\Users\zackm\Desktop\repos\perf-p2-wt, branch feature/perf-p2-parallel-tools (off develop).
+- Test-first (commit 8f7b6fd, banked by prior attempt): web-ui/tests/parallelReadOnlyFanout.test.ts pins partitionToolCallBatches (read-only batch + write barrier + cap 8) and a roundLoop contract proving 3 read-only calls produce 3 traces in ONE round; wired into web-ui/lib/testGate.ts manifest.
+- Contract test flipped in web-ui/tests/llmProvider.test.ts: streamChat must send parallel_tool_calls: true when tools are present (runaway protection lives in the fanout partition, not the request flag).
+- New test added: multi-index delta tool_calls must survive accumulation (index 1 deltas no longer dropped) so parallel batches reach partitionToolCallBatches in emission order.
+- Patch web-ui/lib/llm/provider.ts: (1) requestBody.parallel_tool_calls = true when tools present (was hardcoded false); (2) removed the "if (idx > 0) continue" runaway guard in the delta tool-call accumulator - it silently discarded every parallel call, so enabling the flag alone would have changed nothing.
+- Verification: llmProvider.test.ts + parallelReadOnlyFanout.test.ts 46 pass / 0 fail; npm run test:gate PASSED: 140 tests, 0 failed, 20.63s (<90s budget).
+- Note: .gitignore and web-ui/Dockerfile show CR-only diffs in this worktree (line-ending churn from a prior attempt); excluded from commits.
