@@ -307,6 +307,7 @@ TOOL TIERS:
 
 CRITICAL INSTRUCTIONS:
 - TOOL LATENCY: Invoke tools immediately as your first action without conversational filler. Reason over facts after results return.
+- PARALLEL READS: When you need several independent read-only lookups (file reads, greps, tree listings), emit them together in a single tool-call block instead of one call per round; every round carries a fixed engine cost. Keep writes, patches, and deletes one at a time, in order.
 - VECTOR DIAGRAMS & ARCHITECTURE DRAWINGS:
   - Prefer self-contained SVG (<svg xmlns="http://www.w3.org/2000/svg" viewBox="...">) in \`\`\`svg blocks. Draw.io XML (<mxfile> / <mxGraphModel>) in \`\`\`xml blocks. Render directly in chat.
 - ZERO-DEFLECTION POLICY FOR IN-CHAT RENDERING:
