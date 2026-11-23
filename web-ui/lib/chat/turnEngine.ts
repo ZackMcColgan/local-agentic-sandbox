@@ -420,6 +420,7 @@ export interface RunSynthesisPassParams {
   llmBaseUrl: string;
   activeModel: string;
   conversationMessages: Parameters<typeof fitContextWindow>[0];
+  tools?: unknown[];
   isArtifactRequest: boolean;
   turnAbortSignal: AbortSignal;
   synthOptions: {
@@ -455,6 +456,7 @@ export async function runSynthesisPass(
     llmBaseUrl,
     activeModel,
     conversationMessages,
+    tools,
     isArtifactRequest,
     turnAbortSignal,
     synthOptions,
@@ -477,11 +479,14 @@ export async function runSynthesisPass(
   const passDeadline = createRoundDeadline(passAbortController, deadlines);
 
   try {
+    const hasTools = Array.isArray(tools) && tools.length > 0;
     for await (const chunk of streamChat(llmBaseUrl, {
       model: activeModel,
       messages: fitContextWindow(conversationMessages, {
         isArtifactTurn: isArtifactRequest,
+        tools: hasTools ? tools : undefined,
       }),
+      ...(hasTools ? { tools, tool_choice: "none" as const } : {}),
       signal: AbortSignal.any([turnAbortSignal, passAbortController.signal]),
       reasoning_effort: synthOptions.reasoning_effort,
       options: synthOptions,

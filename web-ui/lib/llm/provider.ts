@@ -65,6 +65,7 @@ export interface LLMChatRequest {
   model?: string;
   messages: LLMChatMessage[];
   tools?: unknown[];
+  tool_choice?: "auto" | "none" | "required" | Record<string, unknown>;
   keep_alive?: string | number;
   reasoning_effort?: "low" | "medium" | "xhigh";
   signal?: AbortSignal;
@@ -610,6 +611,9 @@ export class LlamaCppProvider implements LLMProvider {
     if (payload.tools && payload.tools.length > 0) {
       requestBody.tools = payload.tools;
       requestBody.parallel_tool_calls = false;
+    }
+    if (payload.tool_choice !== undefined) {
+      requestBody.tool_choice = payload.tool_choice;
     }
     if (payload.options?.temperature !== undefined) {
       requestBody.temperature = payload.options.temperature;
