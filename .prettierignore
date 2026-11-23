@@ -10,4 +10,6 @@ package-lock.json
 *.min.css
 *.svg
 *.drawio
+.gitattributes
+.nvmrc
 deploy/helm/**/templates/**

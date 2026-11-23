@@ -1,5 +1,9 @@
 # local-agentic-sandbox
 
+![CI](https://img.shields.io/github/actions/workflow/status/ZackMcColgan/local-agentic-sandbox/ci.yml?branch=develop&label=CI)
+![Node](https://img.shields.io/badge/node-22.19.0-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 **A local autonomous AI coding platform.** Hand it an engineering task in the evening, and it plans the work, writes the code in small verified patches, runs the tests, opens the pull request, deploys itself, and proves the result — overnight, on one consumer PC, with no cloud inference, no API keys in the cluster, and no per-token meter.
 
 ![Desktop operator UI showing a completed session, tool trace proofs, and source-cited explanation](docs/images/ui-desktop.png)
