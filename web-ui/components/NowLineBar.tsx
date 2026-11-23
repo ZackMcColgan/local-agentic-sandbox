@@ -20,29 +20,30 @@ export function NowLineBar(props: NowLineBarProps) {
   const state = deriveNowLineState({ ...props, nowMs: effectiveNowMs });
   if (!state.visible) return null;
 
+  const dotClass = state.stallLabel
+    ? "bg-amber-500"
+    : state.isStreaming
+      ? "bg-emerald-500 animate-pulse"
+      : state.outcomeTone === "error"
+        ? "bg-rose-500"
+        : state.outcomeTone === "stopped" || state.outcomeTone === "incomplete"
+          ? "bg-zinc-400"
+          : "bg-emerald-500";
+
+  const labelClass = state.isStreaming
+    ? "text-emerald-700 dark:text-emerald-400"
+    : state.outcomeTone === "error"
+      ? "text-rose-700 dark:text-rose-400"
+      : "text-zinc-700 dark:text-zinc-300";
+
   return (
     <div
       data-testid="header-now-line"
       className="w-full bg-zinc-50 dark:bg-black border-b border-zinc-200 dark:border-zinc-900 px-3 py-1.5 flex items-center justify-between gap-3 text-[11px] font-mono shrink-0"
     >
       <div className="flex items-center gap-2 min-w-0">
-        <span
-          className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-            state.stallLabel
-              ? "bg-amber-500"
-              : state.isStreaming
-                ? "bg-emerald-500 animate-pulse"
-                : "bg-emerald-500"
-          }`}
-        />
-        <span
-          data-testid="now-line-action"
-          className={`truncate ${
-            state.isStreaming
-              ? "text-emerald-700 dark:text-emerald-400"
-              : "text-zinc-700 dark:text-zinc-300"
-          }`}
-        >
+        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotClass}`} />
+        <span data-testid="now-line-action" className={`truncate ${labelClass}`}>
           {state.actionLabel}
         </span>
         {state.stallLabel && (

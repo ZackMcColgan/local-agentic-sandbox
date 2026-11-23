@@ -97,6 +97,47 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/testGitIsolationGuard.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("observedTurnLiveness.test.ts") ||
+      p.includes("lib/liveActivity") ||
+      p.includes("lib/turnSpeed") ||
+      p.includes("components/NowLineBar") ||
+      p.includes("components/ChatStream") ||
+      p.includes("components/NavigationDrawer") ||
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/threads/types") ||
+      p.includes("app/page"),
+    tests: ["tests/observedTurnLiveness.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("roundNarrationAssembly.test.ts") ||
+      p.includes("lib/liveActivity") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/chat/turnEngine") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("lib/activityTimeline") ||
+      p.includes("components/ActivityTimeline") ||
+      p.includes("components/chat/messageRender"),
+    tests: ["tests/roundNarrationAssembly.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("coalescedFileDiffPipeline.test.ts") ||
+      p.includes("lib/activityTimeline") ||
+      p.includes("lib/chatDiffs") ||
+      p.includes("lib/chatUtils") ||
+      p.includes("lib/stintDerivation") ||
+      p.includes("components/ActivityTimeline") ||
+      p.includes("components/CanvasDiffSheet") ||
+      p.includes("components/LiveActivityHeader") ||
+      p.includes("components/chat/messageRender") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/api/files/route"),
+    tests: ["tests/coalescedFileDiffPipeline.test.ts", "tests/uirHeaderActivity.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/activityTimeline") || p.includes("activityTimeline.test.ts"),
     tests: ["tests/activityTimeline.test.ts"],
   },
@@ -436,7 +477,6 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("NavigationDrawer.tsx") ||
       p.includes("DiffViewer.tsx") ||
       p.includes("ExecutionTrace.tsx") ||
-      p.includes("LiveActivityHeader.tsx") ||
       p.includes("MorningReportView.tsx") ||
       p.includes("darkTextFloor.test.ts") ||
       p.includes("overlayMutualExclusion.test.ts") ||
@@ -667,9 +707,9 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/uirHeaderActivity.test.ts",
     ],
   },
-  // uir-0/uir-1: Live Activity Header, live-activity helpers, header diet
+  // uir-0/uir-1: live-activity helpers, header diet
   {
-    match: (p) => p.includes("lib/liveActivity") || p.includes("components/LiveActivityHeader"),
+    match: (p) => p.includes("lib/liveActivity"),
     tests: [
       "tests/uirHeaderActivity.test.ts",
       "tests/chatLiveVisibility.test.ts",
@@ -790,8 +830,7 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("components/ChatStream") ||
       p.includes("components/ThinkingPanel") ||
-      p.includes("components/LiveRunBlock") ||
-      p.includes("components/LiveActivityHeader"),
+      p.includes("components/LiveRunBlock"),
     tests: ["tests/parityChatSurfaces.test.ts"],
   },
   // Board parity PR3 (FINAL-DESIGN): sessions sidebar + drawer + rail —

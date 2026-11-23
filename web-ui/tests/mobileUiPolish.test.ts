@@ -67,14 +67,10 @@ test("ChatStream.tsx implements 390px mobile header, trace collapsing, error car
     "Workspace toggle label must be hidden on mobile (< sm:)"
   );
 
-  // Tool trace list collapsing when traces > 3
+  // Tool trace timeline surface (U3: single ActivityTimeline with collapsible groups)
   assert.ok(
-    content.includes("Show all ") && content.includes("tool steps"),
-    "ChatStream must support collapsing tool trace cards when > 3 steps exist"
-  );
-  assert.ok(
-    content.includes("Collapse tool steps"),
-    "ChatStream must support toggling back to collapsed state"
+    content.includes("<ActivityTimeline"),
+    "ChatStream/messageRender must render tool steps through ActivityTimeline"
   );
 
   // Engine error card with formatChatErrorMessage and Retry button
@@ -217,11 +213,11 @@ test("SvgViewer and svgUtils scale viewBox SVGs to full width and ChatStream pla
   const messageRenderPath = path.resolve(__dirname, "../components/chat/messageRender.tsx");
   const chatStreamContent = fs.readFileSync(messageRenderPath, "utf-8");
 
-  const tracesIndex = chatStreamContent.indexOf("formatHumanReadableTrace");
+  const tracesIndex = chatStreamContent.indexOf("<ActivityTimeline");
   const markdownIndex = chatStreamContent.includes("wrapRawSvgInMarkdown(m.content)")
     ? chatStreamContent.indexOf("wrapRawSvgInMarkdown(m.content)")
     : chatStreamContent.indexOf("wrapRawSvgInMarkdown(renderedContent)");
-  assert.ok(tracesIndex !== -1, "ChatStream must contain formatHumanReadableTrace for tool traces");
+  assert.ok(tracesIndex !== -1, "ChatStream must render ActivityTimeline for tool traces");
   assert.ok(markdownIndex !== -1, "ChatStream must contain wrapRawSvgInMarkdown(m.content)");
   assert.ok(
     tracesIndex < markdownIndex,

@@ -7,11 +7,16 @@
  */
 
 export type TimelineToolKind =
-  "read" | "search" | "write" | "shell" | "web" | "subagent" | "thinking" | "other";
+  "read" | "search" | "write" | "shell" | "web" | "subagent" | "thinking" | "narration" | "other";
 
 export type TimelineRowStatus = "running" | "success" | "error";
 
 export interface ThinkingSegment {
+  round: number;
+  text: string;
+}
+
+export interface RoundNarrationSegment {
   round: number;
   text: string;
 }
@@ -52,6 +57,11 @@ export interface TimelineRow {
   isGroup?: boolean;
   rawTraceIndex?: number;
   thinkingText?: string;
+  narrationText?: string;
+  toolName?: string;
+  traceArgs?: Record<string, unknown>;
+  traceResult?: unknown;
+  editCount?: number;
   round?: number;
 }
 
@@ -121,7 +131,8 @@ export function classifyToolKind(tool: string): TimelineToolKind {
     t.includes("patch") ||
     t.includes("create_file") ||
     t.includes("delete_path") ||
-    t.includes("replace_in_file")
+    t.includes("replace_in_file") ||
+    t.includes("replace_string")
   ) {
     return "write";
   }
@@ -333,6 +344,55 @@ function countDiffLines(diffText: string): { addedLines: number; removedLines: n
   return { addedLines, removedLines };
 }
 
+function normalizeTimelinePath(rawPath: string): string {
+  const slashes = rawPath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  if (/^[A-Za-z]:\//.test(slashes)) {
+    return slashes[0].toLowerCase() + slashes.slice(1);
+  }
+  return slashes;
+}
+
+function buildReplacementUnifiedDiff(
+  oldText: string,
+  newText: string
+): { diffText: string; addedLines: number; removedLines: number } {
+  const oldNorm = oldText.replace(/\r\n/g, "\n");
+  const newNorm = newText.replace(/\r\n/g, "\n");
+  const oldLines = oldNorm.length > 0 ? oldNorm.split("\n") : [];
+  const newLines = newNorm.length > 0 ? newNorm.split("\n") : [];
+
+  let prefix = 0;
+  while (
+    prefix < oldLines.length &&
+    prefix < newLines.length &&
+    oldLines[prefix] === newLines[prefix]
+  ) {
+    prefix++;
+  }
+  let oldEnd = oldLines.length - 1;
+  let newEnd = newLines.length - 1;
+  while (oldEnd >= prefix && newEnd >= prefix && oldLines[oldEnd] === newLines[newEnd]) {
+    oldEnd--;
+    newEnd--;
+  }
+
+  const removed = oldLines.slice(prefix, oldEnd + 1);
+  const added = newLines.slice(prefix, newEnd + 1);
+  const hunkLines: string[] = [
+    `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
+    ...oldLines.slice(0, prefix).map((l) => ` ${l}`),
+    ...removed.map((l) => `-${l}`),
+    ...added.map((l) => `+${l}`),
+    ...oldLines.slice(oldEnd + 1).map((l) => ` ${l}`),
+  ];
+
+  return {
+    diffText: hunkLines.join("\n"),
+    addedLines: added.length,
+    removedLines: removed.length,
+  };
+}
+
 /**
  * Extracts file path, +/− line stats, and optional unified diff text from a write trace.
  */
@@ -371,8 +431,46 @@ export function extractWriteDiffFromTrace(
     removedLines = removedLines ?? counted.removedLines;
   }
 
+  // Support host_replace_string (oldString/newString) and patch-style pairs when both old and new strings are provided
+  if (!diffText && trace.args) {
+    const oldText =
+      typeof trace.args.oldString === "string"
+        ? trace.args.oldString
+        : typeof trace.args.search === "string"
+          ? trace.args.search
+          : typeof trace.args.oldText === "string"
+            ? trace.args.oldText
+            : typeof trace.args.target === "string"
+              ? trace.args.target
+              : undefined;
+    const newText =
+      typeof trace.args.newString === "string"
+        ? trace.args.newString
+        : typeof trace.args.replace === "string"
+          ? trace.args.replace
+          : typeof trace.args.newText === "string"
+            ? trace.args.newText
+            : typeof trace.args.replacement === "string"
+              ? trace.args.replacement
+              : undefined;
+
+    if (
+      oldText !== undefined &&
+      newText !== undefined &&
+      (oldText.length > 0 || newText.length > 0)
+    ) {
+      const built = buildReplacementUnifiedDiff(oldText, newText);
+      diffText = built.diffText;
+      addedLines = addedLines ?? built.addedLines;
+      removedLines = removedLines ?? built.removedLines;
+    }
+  }
+
   const hasReplacementArg = Boolean(
-    trace.args && typeof trace.args.replacement === "string" && trace.args.replacement.length > 0
+    trace.args &&
+    ((typeof trace.args.replacement === "string" && trace.args.replacement.length > 0) ||
+      typeof trace.args.oldString === "string" ||
+      typeof trace.args.newString === "string")
   );
   const fullWrittenContent =
     trace.args && typeof trace.args.content === "string" && trace.args.content.length > 0
@@ -390,7 +488,12 @@ export function extractWriteDiffFromTrace(
   }
 
   if (addedLines === undefined && removedLines === undefined) {
-    const content = readStringArg(trace.args, ["content", "newContent", "replacement"]);
+    const content = readStringArg(trace.args, [
+      "content",
+      "newContent",
+      "replacement",
+      "newString",
+    ]);
     if (content) {
       addedLines = content.split("\n").length;
       removedLines = 0;
@@ -404,6 +507,84 @@ export function extractWriteDiffFromTrace(
     ...(diffText ? { diffText } : {}),
     ...(synthesized ? { synthesized: true } : {}),
   };
+}
+
+/**
+ * Coalesces repeated TimelineWriteDiff entries for the same normalized file path
+ * into one entry with summed +/- and merged/latest diff text.
+ */
+export function coalesceTimelineWriteDiffs(diffs: TimelineWriteDiff[]): TimelineWriteDiff[] {
+  if (!Array.isArray(diffs) || diffs.length === 0) return [];
+  const byPath = new Map<string, TimelineWriteDiff>();
+  for (const diff of diffs) {
+    if (!diff || !diff.filePath) continue;
+    const key = normalizeTimelinePath(diff.filePath);
+    const existing = byPath.get(key);
+    if (!existing) {
+      byPath.set(key, { ...diff });
+      continue;
+    }
+    const mergedDiffText =
+      existing.diffText && diff.diffText && existing.diffText !== diff.diffText
+        ? !existing.synthesized && !diff.synthesized
+          ? `${existing.diffText}\n${diff.diffText}`
+          : diff.diffText
+        : diff.diffText || existing.diffText;
+    byPath.set(key, {
+      filePath: diff.filePath,
+      addedLines: (existing.addedLines || 0) + (diff.addedLines || 0),
+      removedLines: (existing.removedLines || 0) + (diff.removedLines || 0),
+      ...(mergedDiffText ? { diffText: mergedDiffText } : {}),
+      ...(existing.synthesized && diff.synthesized ? { synthesized: true } : {}),
+    });
+  }
+  return Array.from(byPath.values());
+}
+
+function traceSignature(trace: TimelineTraceInput): string {
+  let argsKey = "";
+  if (trace.args) {
+    try {
+      argsKey = JSON.stringify(trace.args);
+    } catch {
+      argsKey = "";
+    }
+  }
+  return `${trace.tool || ""}|${trace.timestamp || ""}|${argsKey}`;
+}
+
+/**
+ * Merges settled message traces with live preview traces without duplicating any
+ * tool call that appears in both.
+ */
+export function mergeLiveAndSettledTraces<T extends TimelineTraceInput>(
+  settledTraces?: T[],
+  liveTraces?: T[]
+): T[] {
+  const settled = Array.isArray(settledTraces) ? settledTraces : [];
+  const live = Array.isArray(liveTraces) ? liveTraces : [];
+  if (live.length === 0) return settled;
+  if (settled.length === 0) return live;
+
+  const seenCounts = new Map<string, number>();
+  for (const t of settled) {
+    const sig = traceSignature(t);
+    seenCounts.set(sig, (seenCounts.get(sig) ?? 0) + 1);
+  }
+
+  const extra: T[] = [];
+  const liveSeen = new Map<string, number>();
+  for (const t of live) {
+    const sig = traceSignature(t);
+    const seenInLive = (liveSeen.get(sig) ?? 0) + 1;
+    liveSeen.set(sig, seenInLive);
+    const settledCount = seenCounts.get(sig) ?? 0;
+    if (seenInLive > settledCount) {
+      extra.push(t);
+    }
+  }
+
+  return extra.length > 0 ? [...settled, ...extra] : settled;
 }
 
 /**
@@ -456,6 +637,10 @@ export function traceToTimelineRow(
     ...(errorSummary ? { errorSummary } : {}),
     ...(writeDiff ? { writeDiff } : {}),
     rawTraceIndex: index,
+    toolName: trace.tool,
+    ...(trace.args ? { traceArgs: trace.args } : {}),
+    ...(trace.result !== undefined ? { traceResult: trace.result } : {}),
+    ...(typeof trace.round === "number" ? { round: trace.round } : {}),
   };
 }
 
@@ -576,13 +761,53 @@ export function foldTimelineRows(rows: TimelineRow[]): TimelineRow[] {
 
 export interface BuildActivityTimelineOptions {
   thinkingSegments?: ThinkingSegment[];
+  roundNarrations?: RoundNarrationSegment[];
   isStreaming?: boolean;
   roundGenerationMs?: number[];
 }
 
 /**
+ * Coalesces repeated file write rows across a turn into ONE row per normalized
+ * file path, summing +/- line counts and keeping the latest edit state.
+ */
+function coalesceWriteTimelineRows(rows: TimelineRow[]): TimelineRow[] {
+  const writeIndexByPath = new Map<string, number>();
+  const out: TimelineRow[] = [];
+
+  for (const row of rows) {
+    if (row.kind !== "write" || !row.writeDiff?.filePath) {
+      out.push(row);
+      continue;
+    }
+    const key = normalizeTimelinePath(row.writeDiff.filePath);
+    const existingIdx = writeIndexByPath.get(key);
+    if (existingIdx === undefined) {
+      writeIndexByPath.set(key, out.length);
+      out.push({ ...row, editCount: 1 });
+      continue;
+    }
+    const existing = out[existingIdx];
+    const [mergedDiff] = coalesceTimelineWriteDiffs([existing.writeDiff!, row.writeDiff]);
+    const combinedDuration =
+      (existing.durationMs ?? 0) + (row.durationMs ?? 0) > 0
+        ? (existing.durationMs ?? 0) + (row.durationMs ?? 0)
+        : undefined;
+    out[existingIdx] = {
+      ...existing,
+      ...row,
+      id: existing.id,
+      durationMs: combinedDuration,
+      writeDiff: mergedDiff,
+      editCount: (existing.editCount ?? 1) + 1,
+    };
+  }
+
+  return out;
+}
+
+/**
  * End-to-end pure transform from raw traces (and optional per-round thinking
- * segments) to folded timeline rows.
+ * segments and round narration commentary) to folded, write-coalesced timeline rows.
  */
 export function buildActivityTimeline(
   traces: TimelineTraceInput[] | undefined,
@@ -593,14 +818,18 @@ export function buildActivityTimeline(
   const validSegments = Array.isArray(options?.thinkingSegments)
     ? options.thinkingSegments.filter((s) => s && typeof s.text === "string" && s.text.trim())
     : [];
+  const validNarrations = Array.isArray(options?.roundNarrations)
+    ? options.roundNarrations.filter((n) => n && typeof n.text === "string" && n.text.trim())
+    : [];
 
-  if (validSegments.length === 0) {
+  if (validSegments.length === 0 && validNarrations.length === 0) {
     if (safeTraces.length === 0) return [];
     const rows = safeTraces.map((t, idx) => traceToTimelineRow(t, idx, nowMs));
-    return foldTimelineRows(rows);
+    return coalesceWriteTimelineRows(foldTimelineRows(rows));
   }
 
   const segmentsByRound = new Map<number, ThinkingSegment[]>();
+  const narrationsByRound = new Map<number, RoundNarrationSegment[]>();
   const roundSet = new Set<number>();
   for (const seg of validSegments) {
     const r = typeof seg.round === "number" && Number.isFinite(seg.round) ? seg.round : 1;
@@ -608,6 +837,13 @@ export function buildActivityTimeline(
     const list = segmentsByRound.get(r) ?? [];
     list.push(seg);
     segmentsByRound.set(r, list);
+  }
+  for (const nar of validNarrations) {
+    const r = typeof nar.round === "number" && Number.isFinite(nar.round) ? nar.round : 1;
+    roundSet.add(r);
+    const list = narrationsByRound.get(r) ?? [];
+    list.push(nar);
+    narrationsByRound.set(r, list);
   }
 
   const tracesByRound = new Map<number, Array<{ trace: TimelineTraceInput; index: number }>>();
@@ -630,6 +866,7 @@ export function buildActivityTimeline(
 
   for (const r of orderedRounds) {
     const segs = segmentsByRound.get(r) ?? [];
+    const nars = narrationsByRound.get(r) ?? [];
     const roundTraces = tracesByRound.get(r) ?? [];
     const recordedGenMs =
       r >= 1 &&
@@ -645,7 +882,8 @@ export function buildActivityTimeline(
         Boolean(options?.isStreaming) &&
         r === lastRound &&
         sIdx === segs.length - 1 &&
-        roundTraces.length === 0;
+        roundTraces.length === 0 &&
+        nars.length === 0;
       const segDurationMs = sIdx === 0 ? recordedGenMs : undefined;
       const prevRow = result.length > 0 ? result[result.length - 1] : null;
       if (prevRow && prevRow.kind === "thinking") {
@@ -674,6 +912,24 @@ export function buildActivityTimeline(
         });
       }
     }
+    if (nars.length > 0) {
+      const combinedNarration = nars
+        .map((n) => n.text.trim())
+        .filter(Boolean)
+        .join("\n\n");
+      if (combinedNarration) {
+        result.push({
+          id: `narration-round-${r}`,
+          kind: "narration",
+          status: "success",
+          verb: "Note",
+          target: `Round ${r}`,
+          label: `Round ${r}`,
+          narrationText: combinedNarration,
+          round: r,
+        });
+      }
+    }
     if (roundTraces.length > 0) {
       const actionRows = roundTraces.map(({ trace, index }) =>
         traceToTimelineRow(trace, index, nowMs)
@@ -682,5 +938,5 @@ export function buildActivityTimeline(
     }
   }
 
-  return result;
+  return coalesceWriteTimelineRows(result);
 }

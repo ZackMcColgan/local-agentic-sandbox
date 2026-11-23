@@ -105,19 +105,86 @@ export function pickMostRecentlyActiveThread<
   return best;
 }
 
+export interface EffectiveLastActivityInput {
+  isLocalStreaming: boolean;
+  localLastActivityAtMs: number;
+  threadUpdatedAt?: string | null;
+  lastTraceTimestamp?: string | null;
+  activeTurnStartedAt?: string | null;
+  assistantTimestamp?: string | null;
+}
+
+function parseIsoTimestampMs(value?: string | null): number | null {
+  if (!value || typeof value !== "string") return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
- * UI-010: Separate adjacent status/narration chunks with a newline when the
- * existing text ends with sentence-ending punctuation and the next chunk
- * starts with an uppercase letter, without splitting mid-word BPE tokens.
+ * Unified last-activity derivation for both locally started and observed (polled) turns.
+ * Observed turns derive liveness from the polled server record (`thread.updatedAt`,
+ * latest trace timestamp, or `activeTurn.startedAt`) rather than a stale client-side
+ * mount timestamp, so advancing rounds never stall-stamp while genuinely silent ones do.
  */
-export function appendNarrationChunk(existing: string, chunk: string): string {
+export function deriveEffectiveLastActivityMs(input: EffectiveLastActivityInput): number {
+  const serverTimestamps = [
+    parseIsoTimestampMs(input.threadUpdatedAt),
+    parseIsoTimestampMs(input.lastTraceTimestamp),
+    parseIsoTimestampMs(input.activeTurnStartedAt),
+    parseIsoTimestampMs(input.assistantTimestamp),
+  ].filter((v): v is number => v !== null);
+
+  if (input.isLocalStreaming) {
+    return serverTimestamps.length > 0
+      ? Math.max(input.localLastActivityAtMs, ...serverTimestamps)
+      : input.localLastActivityAtMs;
+  }
+
+  if (serverTimestamps.length > 0) {
+    return Math.max(...serverTimestamps);
+  }
+  return input.localLastActivityAtMs;
+}
+
+/**
+ * Joins per-round narration segments with unconditional paragraph breaks (`\n\n`).
+ */
+export function joinRoundNarrationSegments(segments: string[]): string {
+  return segments
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter((s) => s.length > 0)
+    .join("\n\n");
+}
+
+/**
+ * UI-010 / U1: Separate narration chunks with real paragraph breaks (`\n\n`).
+ * At explicit round boundaries (`roundBoundary: true`), always inserts `\n\n`
+ * regardless of trailing punctuation. Within a stream, separates sentence- or
+ * colon-terminated clauses followed by a new capitalized sentence without
+ * splitting mid-word BPE tokens, URLs, or times.
+ */
+export function appendNarrationChunk(
+  existing: string,
+  chunk: string,
+  opts?: { roundBoundary?: boolean }
+): string {
   if (!chunk) return existing;
   if (!existing) return chunk;
+  if (opts?.roundBoundary) {
+    const left = existing.replace(/[ \t\n]+$/, "");
+    const right = chunk.replace(/^\n+/, "");
+    if (!left) return right;
+    if (!right) return left;
+    return `${left}\n\n${right}`;
+  }
   if (existing.endsWith("\n") || chunk.startsWith("\n")) {
     return existing + chunk;
   }
-  if (/[.!?]["')\]]*$/.test(existing) && /^[A-Z]/.test(chunk)) {
-    return `${existing}\n${chunk}`;
+  if (
+    (/(?:[.!?]["')\]]*|[A-Za-z0-9`)]):$/.test(existing) || /[.!?]["')\]]*$/.test(existing)) &&
+    /^[A-Z]/.test(chunk)
+  ) {
+    return `${existing}\n\n${chunk}`;
   }
   return existing + chunk;
 }

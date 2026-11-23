@@ -11,7 +11,6 @@ import {
   streamBannerKind,
   formatThoughtLabel,
 } from "../lib/liveActivity";
-import { LiveActivityHeader } from "../components/LiveActivityHeader";
 import { NowLineBar } from "../components/NowLineBar";
 import { ThinkingPanel } from "../components/ThinkingPanel";
 
@@ -104,120 +103,14 @@ describe("uir-0/uir-1 — liveActivity pure helpers", () => {
   });
 });
 
-describe("uir-1 — LiveActivityHeader rendering", () => {
+describe("uir-1 — LiveActivityHeader retired in favor of NowLineBar + ActivityTimeline", () => {
   const NOW = 1_700_000_000_000;
 
-  it("hero readout is elapsed time only, with Round/traces mono meta and no percentages", () => {
-    const html = renderToString(
-      React.createElement(LiveActivityHeader, {
-        startedAtMs: NOW - 862_000,
-        lastActivityAtMs: NOW - 2_000,
-        nowMs: NOW,
-        round: 74,
-        traceCount: 73,
-        phaseLabel: "Writing code — host_run_file_write",
-        activityLabel: null,
-        isStreaming: true,
-      })
-    );
-    assert.ok(html.includes('data-testid="live-activity-header"'), "header testid present");
-    assert.ok(html.includes('data-testid="live-activity-elapsed"'), "elapsed testid present");
-    assert.ok(html.includes("14m 22s"), "elapsed hero shows 14m 22s");
-    assert.ok(html.includes("Round 74 · 73 traces"), "mono meta shows Round N · M traces");
-    // Parity PR2: the tool half of the phase line renders in its own mono
-    // muted span (board styling), so the full label is asserted on the
-    // tag-stripped rendered text — same semantic guarantee.
-    const renderedText = html.replace(/<[^>]+>/g, "");
-    assert.ok(
-      renderedText.includes("Writing code — host_run_file_write"),
-      "phase label in words with tool"
-    );
-    assert.ok(html.includes("Live"), "freshness shows Live");
-    assert.ok(!html.includes("%"), "no percentage anywhere in the activity header");
-  });
-
-  it("shows the STALLED chip when no activity has arrived for over 45s", () => {
-    const html = renderToString(
-      React.createElement(LiveActivityHeader, {
-        startedAtMs: NOW - 300_000,
-        lastActivityAtMs: NOW - 90_000,
-        nowMs: NOW,
-        traceCount: 12,
-        phaseLabel: "Running command — run_command",
-        activityLabel: null,
-        isStreaming: true,
-      })
-    );
-    assert.ok(html.includes('data-testid="live-activity-stalled"'), "stalled chip testid present");
-    assert.ok(
-      html.includes("STALLED · No heartbeat for 90s"),
-      "stalled chip carries the silent duration"
-    );
-  });
-
-  it("omits the Round meta segment when the round is not known (never fabricates it)", () => {
-    const html = renderToString(
-      React.createElement(LiveActivityHeader, {
-        startedAtMs: NOW - 5_000,
-        lastActivityAtMs: NOW - 1_000,
-        nowMs: NOW,
-        traceCount: 1,
-        phaseLabel: "Starting turn…",
-        activityLabel: null,
-        isStreaming: true,
-      })
-    );
-    assert.ok(html.includes("1 trace"), "trace meta present with singular form");
-    assert.ok(!html.includes("Round "), "no Round segment when round is unknown");
-  });
-
-  it("pulse track uses emerald-500 to cyan-400 gradient", () => {
-    const html = renderToString(
-      React.createElement(LiveActivityHeader, {
-        startedAtMs: NOW - 5_000,
-        lastActivityAtMs: NOW - 1_000,
-        nowMs: NOW,
-        traceCount: 1,
-        phaseLabel: "Starting turn…",
-        activityLabel: null,
-        isStreaming: true,
-      })
-    );
-    assert.ok(html.includes("from-emerald-500"), "pulse gradient starts at emerald-500");
-    assert.ok(html.includes("to-cyan-400"), "pulse gradient ends at cyan-400");
-  });
-
-  it("Fix 1: LiveActivityHeader retires its duplicate trace list (renders 0 live-trace-row elements)", () => {
-    const html = renderToString(
-      React.createElement(LiveActivityHeader, {
-        startedAtMs: NOW - 15_000,
-        lastActivityAtMs: NOW - 1_000,
-        nowMs: NOW,
-        traceCount: 2,
-        traces: [
-          {
-            tool: "workspace_read_file",
-            args: { path: "a.ts" },
-            result: "ok",
-            durationMs: 20,
-            timestamp: new Date(NOW - 5_000).toISOString(),
-          },
-          {
-            tool: "workspace_run_command",
-            args: { command: "npm test" },
-            result: "",
-            durationMs: 0,
-            timestamp: new Date(NOW - 1_000).toISOString(),
-          },
-        ],
-        phaseLabel: "Running command — workspace_run_command",
-        activityLabel: null,
-        isStreaming: true,
-      })
-    );
-    assert.ok(
-      !html.includes('data-testid="live-trace-row"'),
-      "legacy panel must not duplicate tool call rows"
+  it("U17: orphaned LiveActivityHeader.tsx is deleted", () => {
+    assert.equal(
+      fs.existsSync(path.join(webUiRoot, "components/LiveActivityHeader.tsx")),
+      false,
+      "Orphaned LiveActivityHeader.tsx must not exist"
     );
   });
 
@@ -331,8 +224,8 @@ describe("uir-0 — header diet in ChatStream", () => {
     );
     assert.ok(
       chatStreamSrc.includes("<NowLineBar") &&
-        chatStreamSrc.includes("lastActivityAtMs={lastActivityAtMs}"),
-      "NowLineBar receives lastActivityAtMs for stall detection"
+        chatStreamSrc.includes("lastActivityAtMs={effectiveLastActivityAtMs}"),
+      "NowLineBar receives effectiveLastActivityAtMs for stall detection"
     );
     assert.ok(
       src.includes('data-testid="turn-transient-disconnected"'),
@@ -355,17 +248,8 @@ describe("uir-0 — header diet in ChatStream", () => {
     assert.ok(page.includes("onOpenSettings"), "page wires onOpenSettings into ChatStream");
   });
 
-  it("LiveActivityHeader indeterminate bar reads emerald on mobile and handles reduced-motion", () => {
-    const headerSrc = readSrc("components/LiveActivityHeader.tsx");
+  it("globals.css provides a reduced-motion fallback for .live-activity-pulse", () => {
     const cssSrc = readSrc("app/globals.css");
-    assert.ok(
-      headerSrc.includes("bg-emerald-500/20"),
-      "indeterminate track uses emerald tint instead of pure grey"
-    );
-    assert.ok(
-      headerSrc.includes("h-[3px]"),
-      "indeterminate track is 3px tall for mobile legibility"
-    );
     assert.ok(
       cssSrc.includes("prefers-reduced-motion: reduce") && cssSrc.includes(".live-activity-pulse"),
       "globals.css provides a reduced-motion fallback for .live-activity-pulse"

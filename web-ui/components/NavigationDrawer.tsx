@@ -474,10 +474,14 @@ export function NavigationDrawer({
                     )}
                   </button>
                   <div className="flex items-center gap-1 shrink-0 ml-1.5">
-                    {thread.status === "active" && (
+                    {(thread.status === "running" ||
+                      thread.status === "active" ||
+                      (thread as { hasStreamingMessage?: boolean }).hasStreamingMessage ||
+                      thread.liveness === "alive") && (
                       <span
-                        className="h-2 w-2 rounded-full bg-cyan-400 shrink-0 animate-pulse"
-                        title="Active"
+                        data-testid="drawer-thread-live-dot"
+                        className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"
+                        title="Live"
                       />
                     )}
                     {onDeleteThread && (

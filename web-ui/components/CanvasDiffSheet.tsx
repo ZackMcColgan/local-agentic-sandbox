@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { ArrowLeft } from "lucide-react";
-import type { TimelineWriteDiff } from "../lib/activityTimeline";
+import { ArrowLeft, ExternalLink } from "lucide-react";
+import { coalesceTimelineWriteDiffs, type TimelineWriteDiff } from "../lib/activityTimeline";
+import { resolveFileOpenUrl } from "../lib/chatUtils";
 
 export interface DiffRenderedLine {
   kind: "hunk" | "add" | "del" | "ctx";
@@ -56,7 +57,9 @@ export function CanvasDiffSheet({
   onSelectDiff,
   onClose,
 }: CanvasDiffSheetProps) {
+  const uniqueDiffs = coalesceTimelineWriteDiffs(allDiffs);
   const lines = currentDiff.diffText ? parseUnifiedDiffWithLineNumbers(currentDiff.diffText) : [];
+  const openFileHref = resolveFileOpenUrl(currentDiff.filePath);
 
   return (
     <div
@@ -86,20 +89,35 @@ export function CanvasDiffSheet({
           )}
           <span className="text-emerald-400">+{currentDiff.addedLines}</span>
           <span className="text-rose-400">−{currentDiff.removedLines}</span>
+          {openFileHref && (
+            <a
+              href={openFileHref}
+              target="_blank"
+              rel="noreferrer"
+              data-testid="canvas-diff-open-file"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-zinc-800 text-[11px] font-sans text-zinc-300 hover:text-emerald-400 hover:border-zinc-700"
+              title="Open file"
+            >
+              <ExternalLink className="h-3 w-3" />
+              <span>Open file</span>
+            </a>
+          )}
         </div>
       </div>
 
       {/* File switcher chips when multiple files changed in the same turn */}
-      {allDiffs.length > 1 && (
+      {uniqueDiffs.length > 1 && (
         <div
           data-testid="canvas-diff-file-chips"
           className="flex items-center gap-1.5 px-3 py-2 border-b border-zinc-900 overflow-x-auto shrink-0"
         >
-          {allDiffs.map((d) => {
-            const active = d.filePath === currentDiff.filePath;
+          {uniqueDiffs.map((d) => {
+            const norm = (p: string) =>
+              p.trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+            const active = norm(d.filePath) === norm(currentDiff.filePath);
             return (
               <button
-                key={d.filePath}
+                key={norm(d.filePath)}
                 type="button"
                 onClick={() => onSelectDiff(d)}
                 className={`px-2.5 py-1 rounded-full text-[11px] font-mono border shrink-0 cursor-pointer transition-colors ${

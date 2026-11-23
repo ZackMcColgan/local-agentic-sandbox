@@ -906,15 +906,40 @@ export class ThreadStore {
   }
 
   private reconcileSummaryStatus(summary: ThreadSummary): ThreadSummary {
+    const hasActiveTurn = Boolean(getActiveTurn(summary.id));
     const isActivelyRunning =
       activeExecutionSet.has(summary.id) ||
+      hasActiveTurn ||
       (summary.taskId ? activeExecutionSet.has(summary.taskId) : false);
-    if (isActivelyRunning && summary.status !== "running") {
-      return { ...summary, status: "running" };
+    const computeSummaryLiveness = (
+      status: Thread["status"],
+      isLiveOverride: boolean
+    ): ThreadLiveness =>
+      computeTurnLivenessPure(
+        {
+          id: summary.id,
+          title: summary.title,
+          status,
+          createdAt: summary.createdAt,
+          updatedAt: summary.updatedAt,
+          model: summary.model || "",
+          reasoningEffort: summary.reasoningEffort || "low",
+          messages: [],
+        },
+        Date.now(),
+        isLiveOverride
+      );
+
+    if ((isActivelyRunning || summary.hasStreamingMessage) && summary.status !== "running") {
+      return {
+        ...summary,
+        status: "running",
+        liveness: computeSummaryLiveness("running", true),
+      };
     }
-    if (summary.status === "running" && !isActivelyRunning) {
+    if (summary.status === "running" && !isActivelyRunning && !summary.hasStreamingMessage) {
       if (summary.error) {
-        return { ...summary, status: "failed" };
+        return { ...summary, status: "failed", liveness: "settled" };
       }
       if (summary.taskId) {
         try {
@@ -928,14 +953,20 @@ export class ThreadStore {
                 data.status === "failed" ||
                 data.status === "completed")
             ) {
-              return { ...summary, status: data.status };
+              return { ...summary, status: data.status, liveness: "settled" };
             }
           }
         } catch {}
       }
-      return { ...summary, status: "stopped" };
+      return { ...summary, status: "stopped", liveness: "settled" };
     }
-    return summary;
+    return {
+      ...summary,
+      liveness: computeSummaryLiveness(
+        summary.status,
+        isActivelyRunning || summary.hasStreamingMessage
+      ),
+    };
   }
 
   async listThreadSummaries(query?: string): Promise<ThreadSummary[]> {
@@ -967,7 +998,8 @@ export class ThreadStore {
         if (
           cached &&
           cached.mtimeMs === stat.mtimeMs &&
-          typeof cached.summary.hasStreamingMessage === "boolean"
+          typeof cached.summary.hasStreamingMessage === "boolean" &&
+          typeof cached.summary.traceCount === "number"
         ) {
           summaries.push(this.reconcileSummaryStatus(cached.summary));
           continue;
@@ -977,12 +1009,22 @@ export class ThreadStore {
           const t = JSON.parse(raw) as Thread;
           const msgs = Array.isArray(t.messages) ? t.messages : [];
           const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
-          const rawPreview = (lastMsg?.content || "").replace(/\s+/g, " ").trim();
+          const fallbackRoundNarration =
+            Array.isArray(lastMsg?.roundNarrations) && lastMsg.roundNarrations.length > 0
+              ? lastMsg.roundNarrations[lastMsg.roundNarrations.length - 1]?.text || ""
+              : "";
+          const rawPreview = (lastMsg?.content || fallbackRoundNarration)
+            .replace(/\s+/g, " ")
+            .trim();
           const lastMessagePreview =
             rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
           const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
           const hasStreamingMessage = msgs.some(
             (m) => m.role === "assistant" && m.status === "streaming"
+          );
+          const traceCount = msgs.reduce(
+            (sum, m) => sum + (Array.isArray(m.traces) ? m.traces.length : 0),
+            0
           );
           const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
           const title =
@@ -1007,6 +1049,12 @@ export class ThreadStore {
             ...((t as { parkedReason?: string }).parkedReason !== undefined
               ? { parkedReason: (t as { parkedReason?: string }).parkedReason }
               : {}),
+            ...(t.needsAttention !== undefined ? { needsAttention: t.needsAttention } : {}),
+            ...(t.stalledReason !== undefined ? { stalledReason: t.stalledReason } : {}),
+            ...(t.autoResumeCount !== undefined ? { autoResumeCount: t.autoResumeCount } : {}),
+            ...(t.scope !== undefined ? { scope: t.scope } : {}),
+            ...(t.hostAccess !== undefined ? { hostAccess: t.hostAccess } : {}),
+            traceCount,
             messageCount: msgs.length,
             lastMessagePreview,
             hasDiffs,

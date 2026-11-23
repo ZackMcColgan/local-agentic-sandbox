@@ -3,6 +3,22 @@ import fs from "fs";
 import path from "path";
 import { resolveThreadsDir } from "@/lib/threads/threadStore";
 import { confinePathToRoot } from "@/lib/securityHardening";
+import { resolveHostCheckoutRoot } from "@/lib/explorer/explorerFs";
+
+function resolveAllowlistedProjectRoots(): string[] {
+  try {
+    // Lazy-require so unit tests without native SQLite bindings stay green
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { listProjects } = require("@/lib/projects/projectStore") as {
+      listProjects: () => Array<{ root_path: string; allowlisted: number }>;
+    };
+    return listProjects()
+      .filter((p) => p && p.allowlisted === 1 && typeof p.root_path === "string" && p.root_path)
+      .map((p) => path.resolve(p.root_path));
+  } catch {
+    return [];
+  }
+}
 
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -81,11 +97,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Clean leading slashes
-    const cleanPath = requestedPath.replace(/^[\/\\]+/, "").trim();
+    const rawTrimmed = requestedPath.trim();
+    const isAbsoluteHostPath =
+      /^[a-zA-Z]:[\\/]/.test(rawTrimmed) ||
+      (process.platform !== "win32" && rawTrimmed.startsWith("/"));
+    // Clean leading slashes for relative workspace lookups
+    const cleanPath = isAbsoluteHostPath ? rawTrimmed : rawTrimmed.replace(/^[\/\\]+/, "").trim();
 
     // Prevent path traversal
-    if (cleanPath.includes("..")) {
+    if (cleanPath.split(/[\\/]+/).includes("..")) {
       return NextResponse.json(
         { error: "Access forbidden: path traversal detected" },
         { status: 403 }
@@ -95,38 +115,60 @@ export async function GET(request: NextRequest) {
     // Determine candidate root directories where files might reside
     const cwd = process.cwd();
     const threadsDir = resolveThreadsDir();
-    const candidateRoots = [
-      threadsDir,
-      process.env.WORKSPACE_DIR || "/workspace",
-      path.resolve(cwd, "..", "workspace"),
-      path.resolve(cwd, "workspace"),
-      cwd,
-      path.resolve(cwd, ".."),
-    ];
+    const hostCheckoutRoot = resolveHostCheckoutRoot();
+    const allowlistedProjectRoots = resolveAllowlistedProjectRoots();
+    const candidateRoots = Array.from(
+      new Set([
+        threadsDir,
+        process.env.WORKSPACE_DIR || "/workspace",
+        path.resolve(cwd, "..", "workspace"),
+        path.resolve(cwd, "workspace"),
+        cwd,
+        path.resolve(cwd, ".."),
+        hostCheckoutRoot,
+        ...allowlistedProjectRoots,
+      ])
+    );
+
+    const isInsideRoot = (root: string, candidate: string): boolean => {
+      const resolvedRoot = path.resolve(root);
+      const resolvedCandidate = path.resolve(candidate);
+      const rel = path.relative(resolvedRoot, resolvedCandidate);
+      return !rel.startsWith("..") && !path.isAbsolute(rel) && !/^[a-zA-Z]:/.test(rel);
+    };
 
     // Check if target is a directory across candidate roots (directory listing is forbidden)
+    let matchedAnyRoot = false;
     for (const root of candidateRoots) {
       if (!fs.existsSync(root)) continue;
       const candidatesToCheck: string[] = [];
-      try {
-        candidatesToCheck.push(confinePathToRoot(root, cleanPath));
-      } catch {
-        return NextResponse.json({ error: "Access denied: path escapes root" }, { status: 403 });
-      }
-      if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
-        candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^workspace[\/\\]/, "")));
-      }
-      if (
-        root === threadsDir &&
-        (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
-      ) {
-        candidatesToCheck.push(
-          path.resolve(root, cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, ""))
-        );
+      if (isAbsoluteHostPath) {
+        const resolvedAbs = path.resolve(cleanPath);
+        if (isInsideRoot(root, resolvedAbs)) {
+          matchedAnyRoot = true;
+          candidatesToCheck.push(resolvedAbs);
+        }
+      } else {
+        try {
+          candidatesToCheck.push(confinePathToRoot(root, cleanPath));
+          matchedAnyRoot = true;
+        } catch {
+          continue;
+        }
+        if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
+          candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^workspace[\/\\]/, "")));
+        }
+        if (
+          root === threadsDir &&
+          (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
+        ) {
+          candidatesToCheck.push(
+            path.resolve(root, cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, ""))
+          );
+        }
       }
       for (const candidate of candidatesToCheck) {
-        const rel = path.relative(root, candidate);
-        if (!rel.startsWith("..") && !path.isAbsolute(rel) && fs.existsSync(candidate)) {
+        if (isInsideRoot(root, candidate) && fs.existsSync(candidate)) {
           try {
             const stat = fs.statSync(candidate);
             if (stat.isDirectory()) {
@@ -138,6 +180,10 @@ export async function GET(request: NextRequest) {
           } catch {}
         }
       }
+    }
+
+    if (isAbsoluteHostPath && !matchedAnyRoot) {
+      return NextResponse.json({ error: "Access denied: path escapes root" }, { status: 403 });
     }
 
     // Strict content-type check: text, diagram, and code artifacts permitted
@@ -160,10 +206,11 @@ export async function GET(request: NextRequest) {
     for (const root of candidateRoots) {
       if (!fs.existsSync(root)) continue;
 
-      // Try with direct cleanPath
-      const candidate1 = path.resolve(root, cleanPath);
-      const rel1 = path.relative(root, candidate1);
-      if (!rel1.startsWith("..") && !path.isAbsolute(rel1) && fs.existsSync(candidate1)) {
+      // Try with direct cleanPath (absolute inside root, or relative under root)
+      const candidate1 = isAbsoluteHostPath
+        ? path.resolve(cleanPath)
+        : path.resolve(root, cleanPath);
+      if (isInsideRoot(root, candidate1) && fs.existsSync(candidate1)) {
         try {
           const stat = fs.statSync(candidate1);
           if (stat.isDirectory()) {
@@ -179,12 +226,13 @@ export async function GET(request: NextRequest) {
         } catch {}
       }
 
+      if (isAbsoluteHostPath) continue;
+
       // If cleanPath starts with "workspace/", strip it when searching inside workspace root
       if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
         const stripped = cleanPath.replace(/^workspace[\/\\]/, "");
         const candidate2 = path.resolve(root, stripped);
-        const rel2 = path.relative(root, candidate2);
-        if (!rel2.startsWith("..") && !path.isAbsolute(rel2) && fs.existsSync(candidate2)) {
+        if (isInsideRoot(root, candidate2) && fs.existsSync(candidate2)) {
           try {
             const stat = fs.statSync(candidate2);
             if (stat.isFile()) {
@@ -202,8 +250,7 @@ export async function GET(request: NextRequest) {
       ) {
         const stripped = cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "");
         const candidate3 = path.resolve(root, stripped);
-        const rel3 = path.relative(root, candidate3);
-        if (!rel3.startsWith("..") && !path.isAbsolute(rel3) && fs.existsSync(candidate3)) {
+        if (isInsideRoot(root, candidate3) && fs.existsSync(candidate3)) {
           try {
             const stat = fs.statSync(candidate3);
             if (stat.isFile()) {

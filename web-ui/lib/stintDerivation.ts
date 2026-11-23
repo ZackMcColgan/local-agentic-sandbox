@@ -181,14 +181,16 @@ export function deriveStintMetrics(input: StintRecordInput): StintMetrics | null
   const avgTokPerSec =
     genMs > 0 ? (computeAverageTokPerSec(outputTokens, genMs) ?? undefined) : undefined;
 
-  // Files summary from write traces
+  // Files summary from write traces (normalized path dedup so mixed slashes count once)
   const fileSet = new Set<string>();
   let addedLines = 0;
   let removedLines = 0;
   for (const trace of traces) {
     const diff = extractWriteDiffFromTrace(trace);
     if (!diff) continue;
-    fileSet.add(diff.filePath);
+    const norm = diff.filePath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    const key = /^[A-Za-z]:\//.test(norm) ? norm[0].toLowerCase() + norm.slice(1) : norm;
+    fileSet.add(key);
     addedLines += diff.addedLines;
     removedLines += diff.removedLines;
   }

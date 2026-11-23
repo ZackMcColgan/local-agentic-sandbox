@@ -467,7 +467,9 @@ export interface ChatFileDiffItem {
 
 /**
  * Extracts diff stats and unified previews from assistant trace objects
- * for file write and patch operations (workspace_write_file, workspace_patch_file, host_write_file).
+ * for file write and patch operations (workspace_write_file, workspace_patch_file,
+ * host_write_file, host_replace_string), coalescing repeated writes to the same
+ * normalized file path into one entry with summed +/- counts.
  */
 export function extractFileWriteDiffsFromTraces(
   traces?: Array<{
@@ -482,14 +484,46 @@ export function extractFileWriteDiffsFromTraces(
     return [];
   }
 
-  const items: ChatFileDiffItem[] = [];
+  const normalizeKey = (p: string) => {
+    const slashes = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    return /^[A-Za-z]:\//.test(slashes) ? slashes[0].toLowerCase() + slashes.slice(1) : slashes;
+  };
+
+  const itemsByPath = new Map<string, ChatFileDiffItem>();
+  const pushCoalesced = (item: ChatFileDiffItem) => {
+    const key = normalizeKey(item.path);
+    const existing = itemsByPath.get(key);
+    if (!existing) {
+      itemsByPath.set(key, item);
+      return;
+    }
+    const mergedFull =
+      existing.diffFull && item.diffFull && existing.diffFull !== item.diffFull
+        ? `${existing.diffFull}\n${item.diffFull}`
+        : item.diffFull || existing.diffFull;
+    const mergedFullLines = mergedFull ? mergedFull.split("\n") : [];
+    let mergedPreview = mergedFullLines.slice(0, 40).join("\n");
+    if (mergedFullLines.length > 40) {
+      mergedPreview += `\n... (${mergedFullLines.length - 40} more lines)`;
+    }
+    itemsByPath.set(key, {
+      ...existing,
+      path: item.path || existing.path,
+      tool: item.tool,
+      addedLines: existing.addedLines + item.addedLines,
+      removedLines: existing.removedLines + item.removedLines,
+      diffPreview: mergedPreview,
+      diffFull: mergedFull,
+    });
+  };
 
   traces.forEach((trace, index) => {
     const tool = trace?.tool || trace?.name;
     if (
       tool !== "workspace_write_file" &&
       tool !== "workspace_patch_file" &&
-      tool !== "host_write_file"
+      tool !== "host_write_file" &&
+      tool !== "host_replace_string"
     ) {
       return;
     }
@@ -521,7 +555,7 @@ export function extractFileWriteDiffsFromTraces(
       }
       const diffFull = lines.map((l: string) => "+ " + l).join("\n");
 
-      items.push({
+      pushCoalesced({
         id,
         path: filePath,
         tool,
@@ -530,8 +564,10 @@ export function extractFileWriteDiffsFromTraces(
         diffPreview,
         diffFull,
       });
-    } else if (tool === "workspace_patch_file") {
+    } else if (tool === "workspace_patch_file" || tool === "host_replace_string") {
       const hasOldOrNew =
+        trace?.args?.oldString !== undefined ||
+        trace?.args?.newString !== undefined ||
         trace?.args?.search !== undefined ||
         trace?.args?.oldText !== undefined ||
         trace?.args?.target !== undefined ||
@@ -553,7 +589,7 @@ export function extractFileWriteDiffsFromTraces(
         if (lines.length > 40) {
           diffPreview += `\n... (${lines.length - 40} more lines)`;
         }
-        items.push({
+        pushCoalesced({
           id,
           path: filePath,
           tool,
@@ -563,8 +599,14 @@ export function extractFileWriteDiffsFromTraces(
           diffFull: lines.join("\n"),
         });
       } else {
-        const oldStr = trace?.args?.search ?? trace?.args?.oldText ?? trace?.args?.target ?? "";
+        const oldStr =
+          trace?.args?.oldString ??
+          trace?.args?.search ??
+          trace?.args?.oldText ??
+          trace?.args?.target ??
+          "";
         const newStr =
+          trace?.args?.newString ??
           trace?.args?.replace ??
           trace?.args?.newText ??
           trace?.args?.replacement ??
@@ -581,20 +623,37 @@ export function extractFileWriteDiffsFromTraces(
         const oldLines = oldNormalized.length > 0 ? oldNormalized.split("\n") : [];
         const newLines = newNormalized.length > 0 ? newNormalized.split("\n") : [];
 
-        const removedLines = oldLines.length;
-        const addedLines = newLines.length;
+        let prefix = 0;
+        while (
+          prefix < oldLines.length &&
+          prefix < newLines.length &&
+          oldLines[prefix] === newLines[prefix]
+        ) {
+          prefix++;
+        }
+        let oldEnd = oldLines.length - 1;
+        let newEnd = newLines.length - 1;
+        while (oldEnd >= prefix && newEnd >= prefix && oldLines[oldEnd] === newLines[newEnd]) {
+          oldEnd--;
+          newEnd--;
+        }
+        const removedSlice = oldLines.slice(prefix, oldEnd + 1);
+        const addedSlice = newLines.slice(prefix, newEnd + 1);
+
+        const removedLines = removedSlice.length;
+        const addedLines = addedSlice.length;
 
         const diffPreview = [
-          ...oldLines.slice(0, 20).map((l: string) => "- " + l),
-          ...newLines.slice(0, 20).map((l: string) => "+ " + l),
+          ...removedSlice.slice(0, 20).map((l: string) => "- " + l),
+          ...addedSlice.slice(0, 20).map((l: string) => "+ " + l),
         ].join("\n");
 
         const diffFull = [
-          ...oldLines.map((l: string) => "- " + l),
-          ...newLines.map((l: string) => "+ " + l),
+          ...removedSlice.map((l: string) => "- " + l),
+          ...addedSlice.map((l: string) => "+ " + l),
         ].join("\n");
 
-        items.push({
+        pushCoalesced({
           id,
           path: filePath,
           tool,
@@ -607,7 +666,16 @@ export function extractFileWriteDiffsFromTraces(
     }
   });
 
-  return items;
+  return Array.from(itemsByPath.values());
+}
+
+/**
+ * Resolves a workspace or allowlisted host file path to the server file endpoint URL.
+ */
+export function resolveFileOpenUrl(rawPath: string): string {
+  const trimmed = (rawPath || "").trim();
+  if (!trimmed) return "";
+  return `/api/files?path=${encodeURIComponent(trimmed)}`;
 }
 
 export * from "./chatDiffs";

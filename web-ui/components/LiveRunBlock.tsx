@@ -165,6 +165,7 @@ export function LiveRunBlock({
 }: LiveRunBlockProps) {
   const [fetchedSelfDeployEnabled, setFetchedSelfDeployEnabled] = useState<boolean>(false);
   const [deliverableCode, setDeliverableCode] = useState<string | null>(null);
+  const [expandedLiveTraceIdx, setExpandedLiveTraceIdx] = useState<number | null>(null);
   const isSelfDeployEnabled = selfDeployEnabled ?? fetchedSelfDeployEnabled;
 
   useEffect(() => {
@@ -720,19 +721,33 @@ export function LiveRunBlock({
       {/* Live tool-call trace rows during the turn (UI-003 / UI-011b) */}
       {isRunning && liveTraces && liveTraces.length > 0 && (
         <div className="mt-2.5 space-y-2 w-full" data-testid="live-trace-rows">
-          {liveTraces.map((trace, tIdx) => (
-            <button
-              key={tIdx}
-              type="button"
-              aria-label={`Tool: ${trace.tool}`}
-              className="w-full px-3.5 py-2 flex items-center justify-between text-left rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-xs font-mono"
-            >
-              <span className="truncate text-slate-700 dark:text-zinc-100">{trace.tool}</span>
-              <span className="text-[10px] text-slate-400 dark:text-zinc-400">
-                {new Date(trace.timestamp).toLocaleTimeString()}
-              </span>
-            </button>
-          ))}
+          {liveTraces.map((trace, tIdx) => {
+            const isExpanded = expandedLiveTraceIdx === tIdx;
+            return (
+              <div
+                key={tIdx}
+                className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 overflow-hidden"
+              >
+                <button
+                  type="button"
+                  aria-label={`Tool: ${trace.tool}`}
+                  aria-expanded={isExpanded}
+                  onClick={() => setExpandedLiveTraceIdx(isExpanded ? null : tIdx)}
+                  className="w-full px-3.5 py-2 flex items-center justify-between text-left text-xs font-mono cursor-pointer hover:bg-slate-100/80 dark:hover:bg-zinc-800/60 transition-colors"
+                >
+                  <span className="truncate text-slate-700 dark:text-zinc-100">{trace.tool}</span>
+                  <span className="text-[10px] text-zinc-600 dark:text-zinc-400">
+                    {new Date(trace.timestamp).toLocaleTimeString()}
+                  </span>
+                </button>
+                {isExpanded && trace.args && (
+                  <pre className="px-3.5 py-2 border-t border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 overflow-x-auto whitespace-pre-wrap">
+                    {JSON.stringify(trace.args, null, 2)}
+                  </pre>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

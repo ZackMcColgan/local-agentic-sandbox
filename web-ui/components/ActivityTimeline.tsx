@@ -1,15 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronDown, ChevronRight, FileDiff } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, FileDiff } from "lucide-react";
 import {
   buildActivityTimeline,
+  coalesceTimelineWriteDiffs,
+  type RoundNarrationSegment,
   type ThinkingSegment,
   type TimelineRow,
   type TimelineTraceInput,
   type TimelineWriteDiff,
 } from "../lib/activityTimeline";
-import { formatElapsedDuration } from "../lib/chatUtils";
+import { formatElapsedDuration, resolveFileOpenUrl } from "../lib/chatUtils";
 
 export interface ThinkingPreviewInput {
   isStreaming: boolean;
@@ -152,6 +154,7 @@ export function ThinkingPreviewBlock({
 export interface ActivityTimelineProps {
   traces: TimelineTraceInput[];
   thinkingSegments?: ThinkingSegment[];
+  roundNarrations?: RoundNarrationSegment[];
   roundGenerationMs?: number[];
   isStreaming?: boolean;
   hasContent?: boolean;
@@ -194,6 +197,7 @@ function TimelineRowView({
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }) {
   const [groupExpanded, setGroupExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const durationLabel = formatRowDuration(row.durationMs);
 
   const dotClass =
@@ -204,6 +208,18 @@ function TimelineRowView({
         : "bg-emerald-500/80";
 
   const miniDiff = row.writeDiff?.diffText ? extractMiniDiffLines(row.writeDiff.diffText, 6) : null;
+  const openFileHref = row.writeDiff?.filePath ? resolveFileOpenUrl(row.writeDiff.filePath) : "";
+
+  if (row.kind === "narration" && row.narrationText) {
+    return (
+      <div data-testid="timeline-round-narration" data-round={row.round} className="relative pl-4">
+        <span className="absolute left-[-4.5px] top-[7px] h-2 w-2 rounded-full ring-2 ring-white dark:ring-black bg-zinc-400 dark:bg-zinc-600" />
+        <div className="text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap max-w-[68ch]">
+          {row.narrationText}
+        </div>
+      </div>
+    );
+  }
 
   if (row.isGroup && row.children) {
     const isErrorGroup = row.status === "error";
@@ -305,7 +321,15 @@ function TimelineRowView({
         className={`absolute left-[-4.5px] top-[7px] h-2 w-2 rounded-full ring-2 ring-white dark:ring-black ${dotClass}`}
       />
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2 text-xs">
+        <button
+          type="button"
+          aria-label={row.toolName ? `Tool: ${row.toolName}` : row.label}
+          aria-expanded={row.traceArgs ? detailsExpanded : undefined}
+          onClick={() => {
+            if (row.traceArgs) setDetailsExpanded((v) => !v);
+          }}
+          className="w-full flex items-center justify-between gap-2 text-xs text-left cursor-pointer group"
+        >
           <span
             className={`truncate ${
               row.status === "error"
@@ -333,7 +357,16 @@ function TimelineRowView({
               <span className="text-zinc-600 dark:text-zinc-400">{durationLabel}</span>
             )}
           </div>
-        </div>
+        </button>
+
+        {detailsExpanded && row.traceArgs && (
+          <pre
+            data-testid="timeline-row-details"
+            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black p-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 overflow-x-auto whitespace-pre-wrap"
+          >
+            {JSON.stringify(row.traceArgs, null, 2)}
+          </pre>
+        )}
 
         {row.status === "error" && row.errorSummary && (
           <CollapsibleErrorOutput errorSummary={row.errorSummary} />
@@ -364,17 +397,32 @@ function TimelineRowView({
                 )}
               </div>
             )}
-            {onOpenCanvasDiff && (
-              <div className="flex items-center justify-end px-2.5 py-1 border-t border-zinc-200 dark:border-zinc-900">
-                <button
-                  type="button"
-                  data-testid="open-in-canvas-btn"
-                  onClick={() => onOpenCanvasDiff(row.writeDiff!, allTurnDiffs)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
-                >
-                  <FileDiff className="h-3 w-3" />
-                  <span>Open</span>
-                </button>
+            {(onOpenCanvasDiff || openFileHref) && (
+              <div className="flex items-center justify-end gap-3 px-2.5 py-1 border-t border-zinc-200 dark:border-zinc-900">
+                {openFileHref && (
+                  <a
+                    href={openFileHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="timeline-open-file-link"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    title="Open file"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    <span>Open file</span>
+                  </a>
+                )}
+                {onOpenCanvasDiff && (
+                  <button
+                    type="button"
+                    data-testid="open-in-canvas-btn"
+                    onClick={() => onOpenCanvasDiff(row.writeDiff!, allTurnDiffs)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
+                  >
+                    <FileDiff className="h-3 w-3" />
+                    <span>Open</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -387,6 +435,7 @@ function TimelineRowView({
 export function ActivityTimeline({
   traces,
   thinkingSegments,
+  roundNarrations,
   roundGenerationMs,
   isStreaming = false,
   hasContent = false,
@@ -394,15 +443,17 @@ export function ActivityTimeline({
 }: ActivityTimelineProps) {
   const rows = buildActivityTimeline(traces, undefined, {
     thinkingSegments,
+    roundNarrations,
     roundGenerationMs,
     isStreaming,
   });
   if (rows.length === 0) return null;
 
-  const allTurnDiffs: TimelineWriteDiff[] = [];
+  const rawTurnDiffs: TimelineWriteDiff[] = [];
   for (const r of rows) {
-    if (r.writeDiff) allTurnDiffs.push(r.writeDiff);
+    if (r.writeDiff) rawTurnDiffs.push(r.writeDiff);
   }
+  const allTurnDiffs = coalesceTimelineWriteDiffs(rawTurnDiffs);
 
   return (
     <div

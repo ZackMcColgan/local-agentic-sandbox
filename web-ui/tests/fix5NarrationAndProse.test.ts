@@ -201,10 +201,15 @@ describe("FIX-5: UI-010 joinNarrationChunks wiring + B-1 multi-round prose prese
     assert.ok(updated, "thread should exist");
     const assistantMsgs = updated.messages.filter((m) => m.role === "assistant");
     assert.ok(assistantMsgs.length >= 1, "at least one assistant message should be persisted");
-    const lastContent = assistantMsgs[assistantMsgs.length - 1].content;
+    const lastMsg = assistantMsgs[assistantMsgs.length - 1];
     assert.ok(
-      lastContent.includes("Round 1 prose before tool."),
-      `Expected round 1 prose to survive in persisted message, got: ${JSON.stringify(lastContent)}`
+      lastMsg.roundNarrations?.some((r) => r.text.includes("Round 1 prose before tool.")),
+      `Expected round 1 prose to survive in roundNarrations, got: ${JSON.stringify(lastMsg.roundNarrations)}`
+    );
+    assert.equal(
+      lastMsg.content.trim(),
+      "Round 3 final answer.",
+      `Expected final summary to stay cleanly in content without intermediate narration, got: ${JSON.stringify(lastMsg.content)}`
     );
   });
 });

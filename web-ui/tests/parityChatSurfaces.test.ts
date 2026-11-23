@@ -10,7 +10,6 @@ const chatStream =
   fs.readFileSync(path.join(componentsDir, "chat/messageRender.tsx"), "utf8");
 const thinkingPanel = fs.readFileSync(path.join(componentsDir, "ThinkingPanel.tsx"), "utf8");
 const liveRunBlock = fs.readFileSync(path.join(componentsDir, "LiveRunBlock.tsx"), "utf8");
-const activityHeader = fs.readFileSync(path.join(componentsDir, "LiveActivityHeader.tsx"), "utf8");
 
 function segment(src: string, startMarker: string, length = 1600): string {
   const i = src.indexOf(startMarker);
@@ -77,22 +76,13 @@ describe("parity PR2 — thinking card (dark surface structure + UI-018 near-whi
   });
 });
 
-describe("parity PR2 — live trace rows (board rows + UI-021 brightening)", () => {
-  it("live rows use board colors: near-white titles, lifted durations, brand-hi checks", () => {
-    const rows = segment(chatStream, 'data-testid="live-trace-rows"', 2800);
-    assert.ok(rows.includes("dark:text-zinc-200"), "block header brightened off zinc-400");
-    assert.ok(rows.includes("dark:text-zinc-100"), "step titles near-white");
-    assert.ok(rows.includes("dark:text-zinc-400"), "durations lifted off zinc-500");
-    assert.ok(rows.includes("text-emerald-400"), "check marks in brand-hi emerald");
-    assert.ok(rows.includes("text-[12.8px]"), "board mono row size 12.8px");
-  });
-
-  it("older calls collapse behind an earlier-calls row (board grouping)", () => {
-    assert.ok(chatStream.includes("earlier tool calls"), "earlier-calls grouping label");
+describe("parity PR2 — live trace rows (single timeline in ChatStream + LiveRunBlock brightening)", () => {
+  it("ChatStream retires legacy live-trace-rows in favor of ActivityTimeline", () => {
     assert.ok(
-      chatStream.includes('data-testid="earlier-calls-toggle"'),
-      "earlier-calls toggle carries its test id"
+      !chatStream.includes('data-testid="live-trace-rows"'),
+      "legacy live-trace-rows surface retired in ChatStream"
     );
+    assert.ok(chatStream.includes("<ActivityTimeline"), "ChatStream uses single ActivityTimeline");
   });
 
   it("LiveRunBlock trace rows get the same brightening", () => {
@@ -107,7 +97,7 @@ describe("parity PR2 — live trace rows (board rows + UI-021 brightening)", () 
   });
 });
 
-describe("parity PR2 — RUNNING pill + activity header details", () => {
+describe("parity PR2 — RUNNING pill + LiveRunBlock surface", () => {
   it("LiveRunBlock running state is the solid emerald pill", () => {
     const pill = segment(liveRunBlock, 'data-testid="running-pill"', 500);
     assert.ok(pill.includes("bg-emerald-500"), "solid emerald fill");
@@ -119,21 +109,5 @@ describe("parity PR2 — RUNNING pill + activity header details", () => {
 
   it("LiveRunBlock card uses the dark surface in dark mode", () => {
     assert.ok(liveRunBlock.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
-  });
-
-  it("activity header: dark card, phone hero 27px, emerald-to-cyan gradient pulse, mono tool split", () => {
-    assert.ok(activityHeader.includes("dark:bg-[#0e0e12]"), "dark --bg-surface-1 #0e0e12");
-    assert.ok(
-      activityHeader.includes("text-[27px]") && activityHeader.includes("sm:text-[34px]"),
-      "hero elapsed 27px phone / 34px desktop"
-    );
-    assert.ok(
-      activityHeader.includes("from-emerald-500 to-cyan-400"),
-      "pulse track carries the moving emerald-to-cyan gradient"
-    );
-    assert.ok(
-      activityHeader.includes('data-testid="live-activity-tool"'),
-      "the tool half of the phase line renders as its own mono muted span"
-    );
   });
 });

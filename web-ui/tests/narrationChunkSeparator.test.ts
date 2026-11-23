@@ -49,12 +49,12 @@ describe("UI-010: narration chunk separators", () => {
     fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
   });
 
-  it("inserts a newline between separate status chunks that end with punctuation and start with uppercase", () => {
+  it("inserts a paragraph break (\\n\\n) between separate status chunks that end with punctuation and start with uppercase", () => {
     let acc = "";
     acc = appendNarrationChunk(acc, "Updated runlog.");
     acc = appendNarrationChunk(acc, "Both runs green.");
     acc = appendNarrationChunk(acc, "Banking commit.");
-    assert.equal(acc, "Updated runlog.\nBoth runs green.\nBanking commit.");
+    assert.equal(acc, "Updated runlog.\n\nBoth runs green.\n\nBanking commit.");
   });
 
   it("leaves single-chunk messages unchanged", () => {
@@ -124,11 +124,10 @@ describe("UI-010: narration chunk separators", () => {
     const store = new ThreadStore(tmpThreadsDir);
     const thread = await store.getThread("narration-sep-thread");
     const assistant = thread?.messages.find((m) => m.role === "assistant");
-    assert.ok(assistant?.content.includes("Updated runlog."));
-    assert.ok(assistant?.content.includes("Both runs green."));
+    assert.equal(assistant?.content.trim(), "Both runs green.");
     assert.ok(
-      assistant?.content.includes("\n"),
-      `Expected newline separator between round chunks, got: ${JSON.stringify(assistant?.content)}`
+      assistant?.roundNarrations?.some((n) => n.text.includes("Updated runlog.")),
+      `Expected round 1 narration in roundNarrations, got: ${JSON.stringify(assistant?.roundNarrations)}`
     );
   });
 });

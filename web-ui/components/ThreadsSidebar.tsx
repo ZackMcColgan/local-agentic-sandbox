@@ -332,11 +332,19 @@ export function ThreadsSidebar({
               (n, m) => n + (m.traces ? m.traces.length : 0),
               0
             );
+            const projectedTraceCount =
+              (thread as { traceCount?: number; totalTraces?: number }).traceCount ??
+              (thread as { totalTraces?: number }).totalTraces ??
+              progressTraces;
+            const hasStreaming = Boolean(
+              (thread as { hasStreamingMessage?: boolean }).hasStreamingMessage
+            );
             const livenessBadge =
               thread.liveness === "alive" || thread.liveness === "stalled" ? thread.liveness : null;
             const rawStatus = (thread.status as string) || "";
             const statusLabel = (() => {
-              if (rawStatus === "running") return "Running";
+              if (rawStatus === "running" || hasStreaming || livenessBadge === "alive")
+                return "Running";
               if (rawStatus === "active") return "Active";
               if (rawStatus === "paused" || rawStatus === "needs_input") return "Needs Input";
               if (rawStatus === "parked") return "Parked";
@@ -502,11 +510,11 @@ export function ThreadsSidebar({
                     )}
                     {livenessBadge ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`${progressChars} chars · ${(thread as { totalTraces?: number }).totalTraces ?? progressTraces} total traces`}
+                        {`${progressChars} chars · ${projectedTraceCount} total traces`}
                       </span>
-                    ) : ((thread as { totalTraces?: number }).totalTraces ?? progressTraces) > 0 ? (
+                    ) : projectedTraceCount > 0 ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`· ${(thread as { totalTraces?: number }).totalTraces ?? progressTraces} total traces`}
+                        {`· ${projectedTraceCount} total traces`}
                       </span>
                     ) : null}
                   </div>
