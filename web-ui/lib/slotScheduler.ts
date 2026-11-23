@@ -16,6 +16,14 @@ export interface AcquireSlotOptions {
   label?: string;
   signal?: AbortSignal;
   onQueued?: (position: number) => void;
+  /**
+   * Board #129 Perf P5-B: fired when this lease's releaseForWait releases the
+   * engine slot for a non-LLM wait phase, and again when the slot is
+   * re-acquired. The chat turn gate uses these to let the next queued turn
+   * overlap the tool wait instead of idling the engine for 30-60s.
+   */
+  onWaitRelease?: () => void;
+  onWaitReacquire?: () => void;
 }
 
 export type SlotWaitKind = "tool" | "ci";
@@ -109,6 +117,8 @@ export class PrioritySlotScheduler {
   private preemptionsCount = 0;
   private completedJobs = 0;
   private readonly ownerWaitSamplesMs: number[] = [];
+  /** Per-lease release listeners: the chat queue overlap seam (#129 P5-B). */
+  private readonly releaseListeners = new Map<string, Set<() => void>>();
 
   constructor(options: SlotSchedulerOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -130,6 +140,12 @@ export class PrioritySlotScheduler {
     };
 
     await this.acquireState(state, options.onQueued);
+    if (options.onWaitRelease || options.onWaitReacquire) {
+      const listeners = this.releaseListeners.get(id) ?? new Set<() => void>();
+      if (options.onWaitRelease) listeners.add(options.onWaitRelease);
+      if (options.onWaitReacquire) listeners.add(options.onWaitReacquire);
+      this.releaseListeners.set(id, listeners);
+    }
     return this.createLease(state);
   }
 
@@ -161,14 +177,22 @@ export class PrioritySlotScheduler {
         acquiredAt: ts,
       };
       this.activeHolder = state;
+      if (options.onWaitRelease || options.onWaitReacquire) {
+        const listeners = this.releaseListeners.get(id) ?? new Set<() => void>();
+        if (options.onWaitRelease) listeners.add(options.onWaitRelease);
+        if (options.onWaitReacquire) listeners.add(options.onWaitReacquire);
+        this.releaseListeners.set(id, listeners);
+      }
       const lease = this.createLease(state);
       try {
         return Promise.resolve(leaseStorage.run(lease, () => fn(lease))).finally(() => {
           this.completedJobs++;
           lease.release();
+          this.forgetListeners(id);
         });
       } catch (err) {
         lease.release();
+        this.forgetListeners(id);
         return Promise.reject(err);
       }
     }
@@ -179,6 +203,7 @@ export class PrioritySlotScheduler {
       } finally {
         this.completedJobs++;
         lease.release();
+        this.forgetListeners(lease.id);
       }
     });
   }
@@ -280,6 +305,7 @@ export class PrioritySlotScheduler {
           return await fn();
         }
         this.releaseState(state);
+        this.notifyWaitRelease(state.id);
         const waitStart = this.now();
         let result!: T;
         let caught: unknown;
@@ -297,6 +323,7 @@ export class PrioritySlotScheduler {
           this.waitingToolMs += waitElapsed;
         }
         await this.acquireState(state);
+        this.notifyWaitReacquire(state.id);
         if (hasError) {
           throw caught;
         }
@@ -397,6 +424,27 @@ export class PrioritySlotScheduler {
     if (next) {
       next.grant();
     }
+  }
+
+  private notifyWaitRelease(id: string): void {
+    const listeners = this.releaseListeners.get(id);
+    if (!listeners) return;
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+
+  private notifyWaitReacquire(id: string): void {
+    const listeners = this.releaseListeners.get(id);
+    if (!listeners) return;
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+
+  /** Drop per-lease wait listeners once the lease is finished (no leak). */
+  private forgetListeners(id: string): void {
+    this.releaseListeners.delete(id);
   }
 }
 
