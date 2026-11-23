@@ -82,6 +82,10 @@ export function serializeTurn(
           priority,
           label: `chat:${j.threadId}`,
           signal: opts.signal,
+          // Board #129 P5-B: while this turn's lease is released for a tool
+          // wait, the queue may start the next queued turn concurrently.
+          onWaitRelease: () => queue.beginOverlap(),
+          onWaitReacquire: () => queue.endOverlap(),
         },
         async (lease) => {
           await opts.runTurn(j, worktree, lease);

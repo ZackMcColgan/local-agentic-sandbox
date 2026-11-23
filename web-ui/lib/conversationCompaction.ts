@@ -114,6 +114,23 @@ export function resolveCompactionStrategy(
   return raw === "hybrid" ? "hybrid" : "extraction";
 }
 
+/**
+ * Board #129 Perf P5-A: on the SINGLE-slot engine, mid-turn compaction must
+ * NOT dispatch a secondary summarization LLM call — that call carries a
+ * different system prompt and evicts the active turn's prefix state, so the
+ * next main round restarts at zero reuse (1,158 such evictions in the engine
+ * log). Mid-turn therefore defaults to the synchronous extraction digest.
+ * The hybrid model-digest rung stays wired at the turn boundary and manual
+ * compact; MID_TURN_HYBRID_COMPACTION=1 opts back into the mid-turn dispatch
+ * for multi-slot engines.
+ */
+export function resolveMidTurnHybridEnabled(env?: Record<string, string | undefined>): boolean {
+  const raw = (env?.MID_TURN_HYBRID_COMPACTION ?? process.env.MID_TURN_HYBRID_COMPACTION ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "on";
+}
+
 export interface CompactionMessage {
   role: string;
   content: string;

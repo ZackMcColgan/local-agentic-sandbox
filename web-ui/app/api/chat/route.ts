@@ -524,7 +524,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           req.signal.removeEventListener("abort", cleanupClientSignal);
           sseWriter.closeWriterPreStart(1000);
         },
-        runTurn: (job, worktree) => runChatTurn(deps, job, worktree),
+        runTurn: (job, worktree, lease) => runChatTurn(deps, job, worktree, lease),
       }
     );
     turnEnqueued = true;

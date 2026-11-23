@@ -91,7 +91,10 @@ import {
   buildToolRegistry,
   describeTool,
 } from "@/lib/progressiveTools";
-import { resolveCompactionStrategy } from "@/lib/conversationCompaction";
+import {
+  resolveCompactionStrategy,
+  resolveMidTurnHybridEnabled,
+} from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
   HOST_TOOL_NAMES,
@@ -133,6 +136,7 @@ import {
 } from "@/lib/chat/turnEngine";
 import type { QueuedJob } from "@/lib/jobQueue";
 import type { WorktreeHandle } from "@/lib/worktree";
+import type { SlotLease } from "@/lib/slotScheduler";
 
 export interface TraceItem {
   tool: string;
@@ -260,7 +264,8 @@ export interface RunChatTurnDeps {
 export async function runChatTurn(
   deps: RunChatTurnDeps,
   _job: QueuedJob,
-  _worktree: WorktreeHandle | null
+  _worktree: WorktreeHandle | null,
+  lease?: SlotLease
 ): Promise<void> {
   const {
     messages,
@@ -843,7 +848,13 @@ export async function runChatTurn(
 
         if (activeThreadId && threadData) {
           try {
-            if (resolveCompactionStrategy() === "hybrid") {
+            // Board #129 P5-A: on the single-slot engine, mid-turn compaction
+            // defaults to the synchronous extraction digest. The hybrid rung
+            // dispatches a secondary summarization call with a DIFFERENT
+            // system prompt on the same slot, evicting the active turn's
+            // prefix state (next main round restarts at zero reuse). Opt in
+            // via MID_TURN_HYBRID_COMPACTION=1 for multi-slot engines.
+            if (resolveCompactionStrategy() === "hybrid" && resolveMidTurnHybridEnabled()) {
               const hybridResult = await threadStore.compactThreadIncrementalHybrid(threadData, {
                 liveMessages: conversationMessages,
                 maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
@@ -1705,95 +1716,457 @@ export async function runChatTurn(
         return true;
       });
 
-      for (const batch of batches) {
-        if (turnAbortController.signal.aborted || searchBlocked) break;
-        if (activeThreadId) {
-          touchActiveTurn(activeThreadId, threadsDir);
-        }
-
-        if (batch.kind === "parallel") {
-          if (batch.items.length === 1) {
-            const only = batch.items[0].item;
-            if (only.toolName !== DESCRIBE_TOOL_NAME) {
-              await sendEvent({
-                type: "status",
-                status: `Executing tool ${only.toolName}...`,
-              });
-            }
-          } else {
-            await sendEvent({
-              type: "status",
-              status: `Executing ${batch.items.length} read-only tools in parallel...`,
-            });
+      // Board #129 P5-B: tool execution is not engine work. The single-slot
+      // lease is released for the duration of the tool batches (30-60s host
+      // installs/tests) so a queued turn can dispatch during the wait; the
+      // lease re-acquires before the next LLM round.
+      const executeToolBatches = async (): Promise<void> => {
+        for (const batch of batches) {
+          if (turnAbortController.signal.aborted || searchBlocked) break;
+          if (activeThreadId) {
+            touchActiveTurn(activeThreadId, threadsDir);
           }
 
-          type ParallelOutcome =
-            | {
-                kind: "skipped_abort";
+          if (batch.kind === "parallel") {
+            if (batch.items.length === 1) {
+              const only = batch.items[0].item;
+              if (only.toolName !== DESCRIBE_TOOL_NAME) {
+                await sendEvent({
+                  type: "status",
+                  status: `Executing tool ${only.toolName}...`,
+                });
               }
-            | {
-                kind: "describe";
-                toolArgs: Record<string, unknown>;
-                toolDesc: ReturnType<typeof describeTool>;
-                timestamp: string;
-              }
-            | {
-                kind: "executed";
-                toolName: string;
-                toolArgs: Record<string, unknown>;
-                target: {
-                  client: Client | null;
-                  tier: "sandbox" | "browser" | "workspace" | "host";
-                };
-                result: unknown;
-                durationMs: number;
-                timestamp: string;
-                isExecutionError: boolean;
-              };
-
-          const outcomes = await executeWithConcurrencyLimit<
-            { index: number; item: ParsedToolCallEntry },
-            ParallelOutcome
-          >(batch.items, TOOL_FANOUT_CAP, async ({ item: entry }) => {
-            if (turnAbortController.signal.aborted) {
-              return { kind: "skipped_abort" };
+            } else {
+              await sendEvent({
+                type: "status",
+                status: `Executing ${batch.items.length} read-only tools in parallel...`,
+              });
             }
-            const { toolName, toolArgs } = entry;
 
-            if (toolName === "workspace_read_file") {
-              if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
-                const candidate =
-                  toolArgs.file ||
-                  toolArgs.filepath ||
-                  toolArgs.filename ||
-                  toolArgs.target ||
-                  Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-                if (typeof candidate === "string" && candidate.trim()) {
-                  toolArgs.path = candidate.trim();
+            type ParallelOutcome =
+              | {
+                  kind: "skipped_abort";
+                }
+              | {
+                  kind: "describe";
+                  toolArgs: Record<string, unknown>;
+                  toolDesc: ReturnType<typeof describeTool>;
+                  timestamp: string;
+                }
+              | {
+                  kind: "executed";
+                  toolName: string;
+                  toolArgs: Record<string, unknown>;
+                  target: {
+                    client: Client | null;
+                    tier: "sandbox" | "browser" | "workspace" | "host";
+                  };
+                  result: unknown;
+                  durationMs: number;
+                  timestamp: string;
+                  isExecutionError: boolean;
+                };
+
+            const outcomes = await executeWithConcurrencyLimit<
+              { index: number; item: ParsedToolCallEntry },
+              ParallelOutcome
+            >(batch.items, TOOL_FANOUT_CAP, async ({ item: entry }) => {
+              if (turnAbortController.signal.aborted) {
+                return { kind: "skipped_abort" };
+              }
+              const { toolName, toolArgs } = entry;
+
+              if (toolName === "workspace_read_file") {
+                if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
+                  const candidate =
+                    toolArgs.file ||
+                    toolArgs.filepath ||
+                    toolArgs.filename ||
+                    toolArgs.target ||
+                    Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+                  if (typeof candidate === "string" && candidate.trim()) {
+                    toolArgs.path = candidate.trim();
+                  }
+                }
+              }
+
+              if (toolName === DESCRIBE_TOOL_NAME) {
+                const targetTool = String(toolArgs.tool_name || toolArgs.name || "");
+                const toolDesc = describeTool(targetTool, toolRegistry);
+                return {
+                  kind: "describe",
+                  toolArgs,
+                  toolDesc,
+                  timestamp: new Date().toISOString(),
+                };
+              }
+
+              const target = toolClientMap.get(toolName)!;
+              const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan?.spanId, {
+                tool: toolName,
+                tier: target.tier,
+              });
+              const startTime = performance.now();
+              let result: unknown = null;
+
+              if (target.tier === "host") {
+                try {
+                  result = await executeHostTool(
+                    toolName,
+                    toolArgs,
+                    undefined,
+                    threadData?.gitCapability,
+                    threadData?.mergeGrant,
+                    {
+                      heartbeatIntervalMs: turnHeartbeatMs,
+                      onHeartbeat: (elapsedMs) => {
+                        if (activeThreadId) {
+                          touchActiveTurn(activeThreadId, threadsDir);
+                        }
+                        void sendEvent({
+                          type: "status",
+                          status: `Running ${toolName} (${Math.round(elapsedMs / 1000)}s)...`,
+                        });
+                      },
+                    }
+                  );
+                } catch (hostErr: unknown) {
+                  const hostMsg = hostErr instanceof Error ? hostErr.message : undefined;
+                  result = {
+                    success: false,
+                    error: hostMsg || "Host execution error",
+                    isError: true,
+                  };
+                }
+              } else if (target.client) {
+                try {
+                  result = await target.client.callTool({
+                    name: toolName,
+                    arguments: toolArgs,
+                  });
+                } catch (mcpErr: unknown) {
+                  const mcpMsg = mcpErr instanceof Error ? mcpErr.message : undefined;
+                  result = {
+                    success: false,
+                    error: mcpMsg || "Tool execution error",
+                    isError: true,
+                  };
+                }
+              }
+
+              const durationMs = Math.round(performance.now() - startTime);
+              const isExecutionError = classifyExecutionError(result);
+              toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
+
+              return {
+                kind: "executed",
+                toolName,
+                toolArgs,
+                target,
+                result,
+                durationMs,
+                timestamp: new Date().toISOString(),
+                isExecutionError,
+              };
+            });
+
+            // Commit parallel results strictly in EMISSION order regardless of completion order.
+            for (const outcome of outcomes) {
+              if (outcome.kind === "skipped_abort") continue;
+              if (outcome.kind === "describe") {
+                conversationMessages.push({
+                  role: "tool",
+                  name: DESCRIBE_TOOL_NAME,
+                  content: JSON.stringify(outcome.toolDesc),
+                });
+                await sendEvent({
+                  type: "trace",
+                  trace: {
+                    tool: DESCRIBE_TOOL_NAME,
+                    args: outcome.toolArgs,
+                    result: outcome.toolDesc,
+                    durationMs: 1,
+                    timestamp: outcome.timestamp,
+                    model: turnState.activeModel,
+                    tier: "workspace",
+                  },
+                });
+                continue;
+              }
+              await commitExecutedToolResult(outcome);
+            }
+
+            continue;
+          }
+
+          // BARRIER execution: runs alone in exact original order.
+          const { toolCall, toolName, toolArgs, malformedArgsError } = batch.item;
+
+          if (malformedArgsError) {
+            const errPayload = JSON.stringify({ error: malformedArgsError });
+            await sendEvent({
+              type: "trace",
+              trace: {
+                tool: toolName,
+                args: { raw: toolCall.function.arguments },
+                result: errPayload,
+                isError: true,
+              },
+            });
+            conversationMessages.push({
+              role: "tool",
+              tool_call_id: toolCall.id || `${toolName}_err`,
+              name: toolName,
+              content: errPayload,
+            });
+            continue;
+          }
+
+          if (toolName === "search_web") {
+            const candidate =
+              toolArgs.query ||
+              toolArgs.q ||
+              toolArgs.search ||
+              toolArgs.search_query ||
+              toolArgs.input ||
+              toolArgs.keyword ||
+              toolArgs.text ||
+              Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+            const queryAttempt = typeof candidate === "string" ? candidate.trim() : "";
+            const evalResult = evaluateSearchQueryAttempt(queryAttempt, userPrompt, searchNudges);
+
+            if (evalResult.action === "nudge") {
+              searchNudges++;
+              conversationMessages.push({
+                role: "tool",
+                name: toolName,
+                content: JSON.stringify({
+                  status: "RETRY_REQUIRED",
+                  message: evalResult.message,
+                }),
+              });
+              appendTrailingDirective(
+                conversationMessages,
+                `[QUERY REVISION REQUIRED]: ${evalResult.message}`
+              );
+              await sendEvent({
+                type: "status",
+                status: "Revising search query...",
+              });
+              continue;
+            } else if (evalResult.action === "block") {
+              if (evalResult.countAttempt) {
+                webResearchCalls++;
+              }
+              conversationMessages.push({
+                role: "tool",
+                name: toolName,
+                content: JSON.stringify({
+                  status: "BLOCKED",
+                  error: evalResult.message,
+                }),
+              });
+              await sendEvent({
+                type: "status",
+                status: "Search query blocked",
+              });
+              searchBlocked = true;
+              break;
+            }
+
+            // Valid query -> proceed with tool call
+            toolArgs.query = queryAttempt;
+          } else if (toolName === "fetch_webpage_markdown") {
+            if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
+              const candidate =
+                toolArgs.link ||
+                toolArgs.href ||
+                toolArgs.target ||
+                toolArgs.uri ||
+                toolArgs.site ||
+                toolArgs.page ||
+                toolArgs.address ||
+                toolArgs.endpoint ||
+                Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+              if (typeof candidate === "string" && candidate.trim()) {
+                toolArgs.url = candidate.trim();
+              } else {
+                for (let i = traces.length - 1; i >= 0; i--) {
+                  const traceContent = JSON.stringify(traces[i].result || "");
+                  const urlMatch = traceContent.match(/https?:\/\/[^\s)"]+/i);
+                  if (urlMatch) {
+                    toolArgs.url = urlMatch[0];
+                    break;
+                  }
+                }
+                if (!toolArgs.url) {
+                  const promptUrlMatch = userPrompt.match(/https?:\/\/[^\s)"]+/i);
+                  if (promptUrlMatch) {
+                    toolArgs.url = promptUrlMatch[0];
+                  }
                 }
               }
             }
-
-            if (toolName === DESCRIBE_TOOL_NAME) {
-              const targetTool = String(toolArgs.tool_name || toolArgs.name || "");
-              const toolDesc = describeTool(targetTool, toolRegistry);
-              return {
-                kind: "describe",
-                toolArgs,
-                toolDesc,
-                timestamp: new Date().toISOString(),
-              };
+            if (typeof toolArgs.url === "string" && toolArgs.url.trim()) {
+              const trimmedUrl = toolArgs.url.trim();
+              toolArgs.url = /^https?:\/\//i.test(trimmedUrl)
+                ? trimmedUrl
+                : `https://${trimmedUrl}`;
             }
+          } else if (toolName === "workspace_run_command") {
+            if (
+              !toolArgs.command ||
+              typeof toolArgs.command !== "string" ||
+              !toolArgs.command.trim()
+            ) {
+              const candidate =
+                toolArgs.cmd ||
+                toolArgs.exec ||
+                toolArgs.script ||
+                toolArgs.code ||
+                Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+              if (typeof candidate === "string" && candidate.trim()) {
+                toolArgs.command = candidate.trim();
+              }
+            }
+          } else if (toolName === "execute_sandboxed_python") {
+            if (!toolArgs.code || typeof toolArgs.code !== "string" || !toolArgs.code.trim()) {
+              const candidate =
+                toolArgs.python ||
+                toolArgs.script ||
+                toolArgs.command ||
+                Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
+              if (typeof candidate === "string" && candidate.trim()) {
+                toolArgs.code = candidate.trim();
+              }
+            }
+          }
 
-            const target = toolClientMap.get(toolName)!;
-            const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan?.spanId, {
-              tool: toolName,
-              tier: target.tier,
+          const target = toolClientMap.get(toolName);
+          if (!target) {
+            const isHostToolProbeUnavailable =
+              !isProhibitedContext &&
+              threadHostAccess &&
+              (HOST_TOOL_NAMES.has(toolName) ||
+                (hostSettings.allowUnattendedHostGit &&
+                  Boolean(threadGitCapability) &&
+                  UNATTENDED_GIT_TOOL_NAMES.has(toolName)));
+            if (isHostToolProbeUnavailable) {
+              const errDetail = `Host tool '${toolName}' is temporarily unavailable (${hostStatus.reason || `host runner state: ${hostStatus.runnerState}`}). Retry later or proceed without it.`;
+              console.warn(`[ChatRoute] ${errDetail}`);
+              const errResult = {
+                ok: false,
+                success: false,
+                isError: true,
+                error: errDetail,
+              };
+              await commitExecutedToolResult({
+                toolName,
+                toolArgs,
+                target: { client: null, tier: "host" },
+                result: errResult,
+                durationMs: 1,
+                timestamp: new Date().toISOString(),
+                isExecutionError: true,
+              });
+              continue;
+            }
+            if (ADVERTISED_TOOLS.has(toolName)) {
+              console.warn(
+                `[ChatRoute] Advertised tool \'${toolName}\' called but backend client is disconnected. Gracefully returning tool status.`
+              );
+              conversationMessages.push({
+                role: "tool",
+                name: toolName,
+                content: `Tool \'${toolName}\' is temporarily unavailable (client disconnected or service unreachable). Please proceed without it or explain to the user.`,
+              });
+              await sendEvent({
+                type: "trace",
+                trace: {
+                  tool: toolName,
+                  args: toolArgs,
+                  result: `Tool \'${toolName}\' temporarily unavailable`,
+                  durationMs: 1,
+                  timestamp: new Date().toISOString(),
+                  model: turnState.activeModel,
+                  tier: "browser",
+                },
+              });
+              continue;
+            }
+            throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
+          }
+
+          if (isWebResearchTool(toolName, target.tier)) {
+            if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
+              conversationMessages.push({
+                role: "tool",
+                name: toolName,
+                content: WEB_BUDGET_EXHAUSTED_DIRECTIVE,
+              });
+              continue;
+            }
+            webResearchCalls++;
+          }
+
+          await sendEvent({
+            type: "status",
+            status: `Executing tool ${toolName}...`,
+          });
+
+          const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan?.spanId, {
+            tool: toolName,
+            tier: target.tier,
+          });
+
+          let bashSpan: ReturnType<TelemetryTracer["startSpan"]> | null = null;
+          if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
+            const codeStr = typeof toolArgs.code === "string" ? toolArgs.code : "";
+            bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
+              command: toolArgs.command || (codeStr ? codeStr.slice(0, 100) : "python"),
             });
-            const startTime = performance.now();
-            let result: unknown = null;
+          }
 
-            if (target.tier === "host") {
+          const startTime = performance.now();
+          let result: unknown = null;
+
+          if (
+            (toolName === "workspace_write_file" || toolName === "workspace_patch_file") &&
+            typeof toolArgs?.path === "string"
+          ) {
+            captureWorkspacePreImage(turnPreImages, toolArgs.path);
+          }
+
+          if (target.tier === "host") {
+            const check = isDestructiveHostAction(toolName, toolArgs);
+            if (check.isDestructive) {
+              const approval = createPendingApproval(
+                activeThreadId || "general",
+                toolName,
+                toolArgs,
+                check.reason || "Destructive action requires approval"
+              );
+              notify("host.approval_pending", {
+                title: "Host approval needed",
+                body: "Tap to review in the sandbox chat.",
+              }).catch(() => {});
+              await sendEvent({
+                type: "approval_required",
+                approval: {
+                  id: approval.id,
+                  tool: toolName,
+                  args: toolArgs,
+                  riskReason: approval.riskReason,
+                  createdAt: approval.createdAt,
+                  expiresAt: approval.expiresAt,
+                },
+              });
+              result = {
+                approvalRequired: true,
+                approvalId: approval.id,
+                message: `[HOST SECURITY GATE]: ${approval.riskReason}. Awaiting user approval.`,
+              };
+            } else {
               try {
                 result = await executeHostTool(
                   toolName,
@@ -1814,6 +2187,10 @@ export async function runChatTurn(
                     },
                   }
                 );
+                const hostDiff = generateHostFileDiff(toolName, toolArgs, result);
+                if (hostDiff) {
+                  turnHostDiffs.push(hostDiff);
+                }
               } catch (hostErr: unknown) {
                 const hostMsg = hostErr instanceof Error ? hostErr.message : undefined;
                 result = {
@@ -1822,392 +2199,43 @@ export async function runChatTurn(
                   isError: true,
                 };
               }
-            } else if (target.client) {
-              try {
-                result = await target.client.callTool({
-                  name: toolName,
-                  arguments: toolArgs,
-                });
-              } catch (mcpErr: unknown) {
-                const mcpMsg = mcpErr instanceof Error ? mcpErr.message : undefined;
-                result = {
-                  success: false,
-                  error: mcpMsg || "Tool execution error",
-                  isError: true,
-                };
-              }
             }
-
-            const durationMs = Math.round(performance.now() - startTime);
-            const isExecutionError = classifyExecutionError(result);
-            toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
-
-            return {
-              kind: "executed",
-              toolName,
-              toolArgs,
-              target,
-              result,
-              durationMs,
-              timestamp: new Date().toISOString(),
-              isExecutionError,
-            };
-          });
-
-          // Commit parallel results strictly in EMISSION order regardless of completion order.
-          for (const outcome of outcomes) {
-            if (outcome.kind === "skipped_abort") continue;
-            if (outcome.kind === "describe") {
-              conversationMessages.push({
-                role: "tool",
-                name: DESCRIBE_TOOL_NAME,
-                content: JSON.stringify(outcome.toolDesc),
-              });
-              await sendEvent({
-                type: "trace",
-                trace: {
-                  tool: DESCRIBE_TOOL_NAME,
-                  args: outcome.toolArgs,
-                  result: outcome.toolDesc,
-                  durationMs: 1,
-                  timestamp: outcome.timestamp,
-                  model: turnState.activeModel,
-                  tier: "workspace",
-                },
-              });
-              continue;
-            }
-            await commitExecutedToolResult(outcome);
-          }
-
-          continue;
-        }
-
-        // BARRIER execution: runs alone in exact original order.
-        const { toolCall, toolName, toolArgs, malformedArgsError } = batch.item;
-
-        if (malformedArgsError) {
-          const errPayload = JSON.stringify({ error: malformedArgsError });
-          await sendEvent({
-            type: "trace",
-            trace: {
-              tool: toolName,
-              args: { raw: toolCall.function.arguments },
-              result: errPayload,
-              isError: true,
-            },
-          });
-          conversationMessages.push({
-            role: "tool",
-            tool_call_id: toolCall.id || `${toolName}_err`,
-            name: toolName,
-            content: errPayload,
-          });
-          continue;
-        }
-
-        if (toolName === "search_web") {
-          const candidate =
-            toolArgs.query ||
-            toolArgs.q ||
-            toolArgs.search ||
-            toolArgs.search_query ||
-            toolArgs.input ||
-            toolArgs.keyword ||
-            toolArgs.text ||
-            Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-          const queryAttempt = typeof candidate === "string" ? candidate.trim() : "";
-          const evalResult = evaluateSearchQueryAttempt(queryAttempt, userPrompt, searchNudges);
-
-          if (evalResult.action === "nudge") {
-            searchNudges++;
-            conversationMessages.push({
-              role: "tool",
+          } else if (target.client) {
+            result = await target.client.callTool({
               name: toolName,
-              content: JSON.stringify({
-                status: "RETRY_REQUIRED",
-                message: evalResult.message,
-              }),
+              arguments: toolArgs,
             });
-            appendTrailingDirective(
-              conversationMessages,
-              `[QUERY REVISION REQUIRED]: ${evalResult.message}`
-            );
-            await sendEvent({
-              type: "status",
-              status: "Revising search query...",
-            });
-            continue;
-          } else if (evalResult.action === "block") {
-            if (evalResult.countAttempt) {
-              webResearchCalls++;
-            }
-            conversationMessages.push({
-              role: "tool",
-              name: toolName,
-              content: JSON.stringify({
-                status: "BLOCKED",
-                error: evalResult.message,
-              }),
-            });
-            await sendEvent({
-              type: "status",
-              status: "Search query blocked",
-            });
-            searchBlocked = true;
-            break;
           }
+          const durationMs = Math.round(performance.now() - startTime);
+          const isExecutionError = classifyExecutionError(result);
 
-          // Valid query -> proceed with tool call
-          toolArgs.query = queryAttempt;
-        } else if (toolName === "fetch_webpage_markdown") {
-          if (!toolArgs.url || typeof toolArgs.url !== "string" || !toolArgs.url.trim()) {
-            const candidate =
-              toolArgs.link ||
-              toolArgs.href ||
-              toolArgs.target ||
-              toolArgs.uri ||
-              toolArgs.site ||
-              toolArgs.page ||
-              toolArgs.address ||
-              toolArgs.endpoint ||
-              Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-            if (typeof candidate === "string" && candidate.trim()) {
-              toolArgs.url = candidate.trim();
-            } else {
-              for (let i = traces.length - 1; i >= 0; i--) {
-                const traceContent = JSON.stringify(traces[i].result || "");
-                const urlMatch = traceContent.match(/https?:\/\/[^\s)"]+/i);
-                if (urlMatch) {
-                  toolArgs.url = urlMatch[0];
-                  break;
-                }
-              }
-              if (!toolArgs.url) {
-                const promptUrlMatch = userPrompt.match(/https?:\/\/[^\s)"]+/i);
-                if (promptUrlMatch) {
-                  toolArgs.url = promptUrlMatch[0];
-                }
-              }
-            }
+          if (bashSpan) {
+            bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
           }
-          if (typeof toolArgs.url === "string" && toolArgs.url.trim()) {
-            const trimmedUrl = toolArgs.url.trim();
-            toolArgs.url = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`;
-          }
-        } else if (toolName === "workspace_run_command") {
-          if (
-            !toolArgs.command ||
-            typeof toolArgs.command !== "string" ||
-            !toolArgs.command.trim()
-          ) {
-            const candidate =
-              toolArgs.cmd ||
-              toolArgs.exec ||
-              toolArgs.script ||
-              toolArgs.code ||
-              Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-            if (typeof candidate === "string" && candidate.trim()) {
-              toolArgs.command = candidate.trim();
-            }
-          }
-        } else if (toolName === "execute_sandboxed_python") {
-          if (!toolArgs.code || typeof toolArgs.code !== "string" || !toolArgs.code.trim()) {
-            const candidate =
-              toolArgs.python ||
-              toolArgs.script ||
-              toolArgs.command ||
-              Object.values(toolArgs).find((v) => typeof v === "string" && v.trim());
-            if (typeof candidate === "string" && candidate.trim()) {
-              toolArgs.code = candidate.trim();
-            }
-          }
-        }
+          toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
 
-        const target = toolClientMap.get(toolName);
-        if (!target) {
-          const isHostToolProbeUnavailable =
-            !isProhibitedContext &&
-            threadHostAccess &&
-            (HOST_TOOL_NAMES.has(toolName) ||
-              (hostSettings.allowUnattendedHostGit &&
-                Boolean(threadGitCapability) &&
-                UNATTENDED_GIT_TOOL_NAMES.has(toolName)));
-          if (isHostToolProbeUnavailable) {
-            const errDetail = `Host tool '${toolName}' is temporarily unavailable (${hostStatus.reason || `host runner state: ${hostStatus.runnerState}`}). Retry later or proceed without it.`;
-            console.warn(`[ChatRoute] ${errDetail}`);
-            const errResult = {
-              ok: false,
-              success: false,
-              isError: true,
-              error: errDetail,
-            };
-            await commitExecutedToolResult({
-              toolName,
-              toolArgs,
-              target: { client: null, tier: "host" },
-              result: errResult,
-              durationMs: 1,
-              timestamp: new Date().toISOString(),
-              isExecutionError: true,
-            });
-            continue;
-          }
-          if (ADVERTISED_TOOLS.has(toolName)) {
-            console.warn(
-              `[ChatRoute] Advertised tool \'${toolName}\' called but backend client is disconnected. Gracefully returning tool status.`
-            );
-            conversationMessages.push({
-              role: "tool",
-              name: toolName,
-              content: `Tool \'${toolName}\' is temporarily unavailable (client disconnected or service unreachable). Please proceed without it or explain to the user.`,
-            });
-            await sendEvent({
-              type: "trace",
-              trace: {
-                tool: toolName,
-                args: toolArgs,
-                result: `Tool \'${toolName}\' temporarily unavailable`,
-                durationMs: 1,
-                timestamp: new Date().toISOString(),
-                model: turnState.activeModel,
-                tier: "browser",
-              },
-            });
-            continue;
-          }
-          throw new Error(`Model attempted execution of unregistered tool: ${toolName}`);
-        }
-
-        if (isWebResearchTool(toolName, target.tier)) {
-          if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS) {
-            conversationMessages.push({
-              role: "tool",
-              name: toolName,
-              content: WEB_BUDGET_EXHAUSTED_DIRECTIVE,
-            });
-            continue;
-          }
-          webResearchCalls++;
-        }
-
-        await sendEvent({
-          type: "status",
-          status: `Executing tool ${toolName}...`,
-        });
-
-        const toolSpan = tracer.startSpan("mcp.tool_call", rootSpan?.spanId, {
-          tool: toolName,
-          tier: target.tier,
-        });
-
-        let bashSpan: ReturnType<TelemetryTracer["startSpan"]> | null = null;
-        if (toolName === "workspace_run_command" || toolName === "execute_sandboxed_python") {
-          const codeStr = typeof toolArgs.code === "string" ? toolArgs.code : "";
-          bashSpan = tracer.startSpan("sandbox.bash_exec", toolSpan.spanId, {
-            command: toolArgs.command || (codeStr ? codeStr.slice(0, 100) : "python"),
+          await commitExecutedToolResult({
+            toolName,
+            toolArgs,
+            target,
+            result,
+            durationMs,
+            timestamp: new Date().toISOString(),
+            isExecutionError,
           });
-        }
-
-        const startTime = performance.now();
-        let result: unknown = null;
-
-        if (
-          (toolName === "workspace_write_file" || toolName === "workspace_patch_file") &&
-          typeof toolArgs?.path === "string"
-        ) {
-          captureWorkspacePreImage(turnPreImages, toolArgs.path);
-        }
-
-        if (target.tier === "host") {
-          const check = isDestructiveHostAction(toolName, toolArgs);
-          if (check.isDestructive) {
-            const approval = createPendingApproval(
-              activeThreadId || "general",
-              toolName,
-              toolArgs,
-              check.reason || "Destructive action requires approval"
-            );
-            notify("host.approval_pending", {
-              title: "Host approval needed",
-              body: "Tap to review in the sandbox chat.",
-            }).catch(() => {});
-            await sendEvent({
-              type: "approval_required",
-              approval: {
-                id: approval.id,
-                tool: toolName,
-                args: toolArgs,
-                riskReason: approval.riskReason,
-                createdAt: approval.createdAt,
-                expiresAt: approval.expiresAt,
-              },
-            });
-            result = {
-              approvalRequired: true,
-              approvalId: approval.id,
-              message: `[HOST SECURITY GATE]: ${approval.riskReason}. Awaiting user approval.`,
-            };
-          } else {
-            try {
-              result = await executeHostTool(
-                toolName,
-                toolArgs,
-                undefined,
-                threadData?.gitCapability,
-                threadData?.mergeGrant,
-                {
-                  heartbeatIntervalMs: turnHeartbeatMs,
-                  onHeartbeat: (elapsedMs) => {
-                    if (activeThreadId) {
-                      touchActiveTurn(activeThreadId, threadsDir);
-                    }
-                    void sendEvent({
-                      type: "status",
-                      status: `Running ${toolName} (${Math.round(elapsedMs / 1000)}s)...`,
-                    });
-                  },
-                }
-              );
-              const hostDiff = generateHostFileDiff(toolName, toolArgs, result);
-              if (hostDiff) {
-                turnHostDiffs.push(hostDiff);
-              }
-            } catch (hostErr: unknown) {
-              const hostMsg = hostErr instanceof Error ? hostErr.message : undefined;
-              result = {
-                success: false,
-                error: hostMsg || "Host execution error",
-                isError: true,
-              };
-            }
+          if (activeThreadId) {
+            touchActiveTurn(activeThreadId, threadsDir);
           }
-        } else if (target.client) {
-          result = await target.client.callTool({
-            name: toolName,
-            arguments: toolArgs,
-          });
         }
-        const durationMs = Math.round(performance.now() - startTime);
-        const isExecutionError = classifyExecutionError(result);
+      }; // end executeToolBatches
 
-        if (bashSpan) {
-          bashSpan.end(isExecutionError ? "error" : "ok", { durationMs, isExecutionError });
-        }
-        toolSpan.end(isExecutionError ? "error" : "ok", { durationMs });
-
-        await commitExecutedToolResult({
-          toolName,
-          toolArgs,
-          target,
-          result,
-          durationMs,
-          timestamp: new Date().toISOString(),
-          isExecutionError,
-        });
-        if (activeThreadId) {
-          touchActiveTurn(activeThreadId, threadsDir);
-        }
+      // Board #129 P5-B: release the engine slot lease for the tool-wait span
+      // (host installs/tests run outside the engine), then re-acquire before
+      // the next LLM round. No lease (non-gated callers) executes directly.
+      if (lease) {
+        await lease.releaseForWait(executeToolBatches);
+      } else {
+        await executeToolBatches();
       }
 
       // TURN-LIVENESS: round boundary is a discrete progress event — persist the
