@@ -143,6 +143,8 @@ export interface ThreadSummary {
   lastMessagePreview: string;
   hasDiffs: boolean;
   hasStreamingMessage: boolean;
+  /** True while the turn is queued waiting for a queue/slot before round-0 execution starts. */
+  queuedForExecution?: boolean;
   matchSnippet?: string;
 }
 
@@ -187,6 +189,8 @@ export interface Thread {
   tokenEconomics?: JobTokenRollup;
   /** Per-job chunk budget override (maxRounds, maxDurationMs, marathonOptOut). */
   chunkBudget?: ChunkBudgetConfig | null;
+  /** True while waiting in the turn queue/slot scheduler before execution begins; excluded from stall clock. */
+  queuedForExecution?: boolean;
 }
 
 /**
@@ -198,4 +202,5 @@ export interface ActiveTurnInfo {
   threadId: string;
   startedAt: string;
   status: "streaming";
+  queued?: boolean;
 }

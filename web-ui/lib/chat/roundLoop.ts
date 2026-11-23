@@ -11,6 +11,7 @@ import {
   clearTurnAbortController,
   registerRoundAbortController,
   clearRoundAbortController,
+  markTurnExecuting,
   touchActiveTurn,
 } from "@/lib/threads/threadStore";
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
@@ -82,7 +83,9 @@ import {
 import { resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import {
   HOST_TOOLS_DEFINITIONS,
+  HOST_TOOL_NAMES,
   UNATTENDED_GIT_TOOLS_DEFINITIONS,
+  UNATTENDED_GIT_TOOL_NAMES,
   executeHostTool,
   isDestructiveHostAction,
   createPendingApproval,
@@ -169,6 +172,18 @@ export interface RunChatTurnState {
   accumulatedThoughts: string[];
 }
 
+/** Default in-turn heartbeat cadence to keep thread.updatedAt fresh during long spans. */
+export const IN_TURN_HEARTBEAT_INTERVAL_MS = 30_000;
+
+const DELIVERABLE_WRITE_TOOLS = new Set([
+  "workspace_write_file",
+  "workspace_patch_file",
+  "host_write_file",
+  "host_replace_string",
+  "git_commit",
+  "host_git_commit",
+]);
+
 export interface RunChatTurnDeps {
   // Request & prompt context
   reqSignal: AbortSignal;
@@ -214,6 +229,8 @@ export interface RunChatTurnDeps {
   onRunTurnFinally: () => void;
   isExplicitStopped: () => boolean;
   turnState: RunChatTurnState;
+  /** Optional override for the in-turn touchActiveTurn heartbeat interval (defaults to 30s). */
+  heartbeatIntervalMs?: number;
 
   // MCP sessions & telemetry
   activeSessions: Array<{ client: Client; transport: SSEClientTransport }>;
@@ -286,6 +303,26 @@ export async function runChatTurn(
   let lastWritingChunkMs: number | null = null;
 
   deps.onRunTurnStarted();
+  const envHeartbeatMs = Number.parseInt(process.env.TURN_HEARTBEAT_INTERVAL_MS || "", 10);
+  const turnHeartbeatMs =
+    deps.heartbeatIntervalMs ??
+    (Number.isFinite(envHeartbeatMs) && envHeartbeatMs > 0
+      ? envHeartbeatMs
+      : IN_TURN_HEARTBEAT_INTERVAL_MS);
+  if (activeThreadId) {
+    // Stall clock starts at turn execution (not queue enqueue).
+    markTurnExecuting(activeThreadId, threadsDir);
+    touchActiveTurn(activeThreadId, threadsDir);
+  }
+  let inTurnHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  if (activeThreadId && turnHeartbeatMs > 0) {
+    inTurnHeartbeatTimer = setInterval(() => {
+      touchActiveTurn(activeThreadId, threadsDir);
+    }, turnHeartbeatMs);
+    if (typeof inTurnHeartbeatTimer.unref === "function") {
+      inTurnHeartbeatTimer.unref();
+    }
+  }
   let oracleSnippet = "";
   let oracleCitations: string[] = [];
 
@@ -1012,10 +1049,11 @@ export async function runChatTurn(
               textChunk
             );
             armRoundDeadline();
-            // TURN SIZE LIMIT: hard cap on total streamed content. A runaway
-            // round (e.g. a huge tool-call payload as one generation) is cut
-            // off with an honest marker and the round ends.
-            if (turnState.accumulatedStreamedTokens.length > MAX_STREAMED_CONTENT_CHARS) {
+            // TURN SIZE LIMIT: per-round hard cap on streamed content. A single
+            // runaway round (e.g. a huge tool-call payload as one generation) is
+            // cut off with an honest marker, without starving later rounds of a
+            // healthy multi-round turn.
+            if (fullRoundContent.length > MAX_STREAMED_CONTENT_CHARS) {
               roundSizeCapped = true;
               turnState.accumulatedStreamedTokens += TURN_SIZE_LIMIT_MARKER;
               streamSnapshot.maybeWrite(turnState.accumulatedStreamedTokens, undefined);
@@ -1035,7 +1073,12 @@ export async function runChatTurn(
             );
             await sendEvent({ type: "token", content: textChunk });
           }
+          if (chunk.toolCallProgress) {
+            if (firstLlmRequestMs === null) firstLlmRequestMs = Date.now();
+            armRoundDeadline();
+          }
           if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+            armRoundDeadline();
             toolCallsFromMessage.push(...chunk.message.tool_calls);
           }
         }
@@ -1454,10 +1497,7 @@ export async function runChatTurn(
         }
 
         if (isWebResearchTool(toolName, target.tier)) {
-          if (isArtifactRequest && !isExecutionError) {
-            webResearchCalls = MAX_WEB_RESEARCH_CALLS;
-            mergeSystemDirective(conversationMessages, buildSynthesisDirective(userPrompt, false));
-          } else if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
+          if (webResearchCalls >= MAX_WEB_RESEARCH_CALLS && !webBudgetNoticeAdded) {
             webBudgetNoticeAdded = true;
             mergeSystemDirective(conversationMessages, WEB_BUDGET_EXHAUSTED_DIRECTIVE);
           }
@@ -1506,6 +1546,9 @@ export async function runChatTurn(
 
       for (const batch of batches) {
         if (turnAbortController.signal.aborted || searchBlocked) break;
+        if (activeThreadId) {
+          touchActiveTurn(activeThreadId, threadsDir);
+        }
 
         if (batch.kind === "parallel") {
           if (batch.items.length === 1) {
@@ -1596,7 +1639,19 @@ export async function runChatTurn(
                   toolArgs,
                   undefined,
                   threadData?.gitCapability,
-                  threadData?.mergeGrant
+                  threadData?.mergeGrant,
+                  {
+                    heartbeatIntervalMs: turnHeartbeatMs,
+                    onHeartbeat: (elapsedMs) => {
+                      if (activeThreadId) {
+                        touchActiveTurn(activeThreadId, threadsDir);
+                      }
+                      void sendEvent({
+                        type: "status",
+                        status: `Running ${toolName} (${Math.round(elapsedMs / 1000)}s)...`,
+                      });
+                    },
+                  }
                 );
               } catch (hostErr: unknown) {
                 const hostMsg = hostErr instanceof Error ? hostErr.message : undefined;
@@ -1810,6 +1865,33 @@ export async function runChatTurn(
 
         const target = toolClientMap.get(toolName);
         if (!target) {
+          const isHostToolProbeUnavailable =
+            !isProhibitedContext &&
+            threadHostAccess &&
+            (HOST_TOOL_NAMES.has(toolName) ||
+              (hostSettings.allowUnattendedHostGit &&
+                Boolean(threadGitCapability) &&
+                UNATTENDED_GIT_TOOL_NAMES.has(toolName)));
+          if (isHostToolProbeUnavailable) {
+            const errDetail = `Host tool '${toolName}' is temporarily unavailable (${hostStatus.reason || `host runner state: ${hostStatus.runnerState}`}). Retry later or proceed without it.`;
+            console.warn(`[ChatRoute] ${errDetail}`);
+            const errResult = {
+              ok: false,
+              success: false,
+              isError: true,
+              error: errDetail,
+            };
+            await commitExecutedToolResult({
+              toolName,
+              toolArgs,
+              target: { client: null, tier: "host" },
+              result: errResult,
+              durationMs: 1,
+              timestamp: new Date().toISOString(),
+              isExecutionError: true,
+            });
+            continue;
+          }
           if (ADVERTISED_TOOLS.has(toolName)) {
             console.warn(
               `[ChatRoute] Advertised tool \'${toolName}\' called but backend client is disconnected. Gracefully returning tool status.`
@@ -1912,7 +1994,19 @@ export async function runChatTurn(
                 toolArgs,
                 undefined,
                 threadData?.gitCapability,
-                threadData?.mergeGrant
+                threadData?.mergeGrant,
+                {
+                  heartbeatIntervalMs: turnHeartbeatMs,
+                  onHeartbeat: (elapsedMs) => {
+                    if (activeThreadId) {
+                      touchActiveTurn(activeThreadId, threadsDir);
+                    }
+                    void sendEvent({
+                      type: "status",
+                      status: `Running ${toolName} (${Math.round(elapsedMs / 1000)}s)...`,
+                    });
+                  },
+                }
               );
               const hostDiff = generateHostFileDiff(toolName, toolArgs, result);
               if (hostDiff) {
@@ -1950,6 +2044,9 @@ export async function runChatTurn(
           timestamp: new Date().toISOString(),
           isExecutionError,
         });
+        if (activeThreadId) {
+          touchActiveTurn(activeThreadId, threadsDir);
+        }
       }
 
       // TURN-LIVENESS: round boundary is a discrete progress event — persist the
@@ -1998,7 +2095,21 @@ export async function runChatTurn(
         });
       }
 
-      if (isArtifactRequest && traces.some((t) => isWebResearchTool(t.tool))) {
+      const hasSubstantiveDeliverable =
+        turnCreatedFiles.length > 0 ||
+        turnHostDiffs.length > 0 ||
+        turnPreImages.size > 0 ||
+        traces.some(
+          (t) => DELIVERABLE_WRITE_TOOLS.has(t.tool) && !classifyExecutionError(t.result)
+        ) ||
+        /<svg[\s>][\s\S]*?<\/svg>|<mxfile|<mxGraphModel/i.test(
+          currentAssistantMessage.content || ""
+        );
+      if (
+        isArtifactRequest &&
+        traces.some((t) => isWebResearchTool(t.tool)) &&
+        hasSubstantiveDeliverable
+      ) {
         break;
       }
     }
@@ -2188,6 +2299,7 @@ export async function runChatTurn(
 
     // SYNTHESIS-RETRY: honest end-of-turn stamp for a failed synthesis (retry exhausted).
     const EMPTY_SYNTHESIS_STAMP = `⚠️ [Turn incomplete: Tool execution concluded without synthesis text. Traces captured above.] Work persisted above; the summary failed. The thread is resumable — resume this thread to continue.`;
+    const finalSegmentContent = cleanResidualToolTags(currentAssistantMessage.content || "");
     if (carriedToolRoundProse.trim()) {
       const currentText = currentAssistantMessage.content || "";
       if (!currentText.includes(carriedToolRoundProse.trim())) {
@@ -2289,10 +2401,11 @@ export async function runChatTurn(
       }
     }
 
-    // TURN SIZE LIMIT: a runaway generation (e.g. a huge tool-call payload
-    // emitted as content) must never be persisted or streamed whole. Clamp
-    // to a safe prefix (prefer a newline boundary) and stamp honestly.
-    if (cleanedContent.length > MAX_STREAMED_CONTENT_CHARS) {
+    // TURN SIZE LIMIT: per-segment guard on final persisted output. A single
+    // runaway generation exceeding MAX_STREAMED_CONTENT_CHARS is clamped and
+    // stamped honestly; healthy multi-round turns whose combined narration
+    // exceeds 64K across separate rounds are NOT truncated.
+    if (finalSegmentContent.length > MAX_STREAMED_CONTENT_CHARS) {
       turnStatus = "incomplete";
       let cut = cleanedContent.slice(0, MAX_STREAMED_CONTENT_CHARS);
       const lastNewline = cut.lastIndexOf("\n");
@@ -2500,6 +2613,10 @@ export async function runChatTurn(
       error: friendlyMessage,
     });
   } finally {
+    if (inTurnHeartbeatTimer !== null) {
+      clearInterval(inTurnHeartbeatTimer);
+      inTurnHeartbeatTimer = null;
+    }
     deps.onRunTurnFinally();
     sseWriter.stopHeartbeat();
     if (activeThreadId) {
