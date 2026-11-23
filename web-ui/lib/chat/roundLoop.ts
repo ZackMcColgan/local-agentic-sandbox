@@ -50,7 +50,11 @@ import {
   canContinueToolLoop,
   TOOL_ROUND_BACKSTOP,
   estimateTokens,
+  estimateToolSchemaTokens,
+  estimateEffectivePromptTokens,
+  computeEffectiveInputCeiling,
   CHAT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
   fitConversationToBudget,
   HIGH_WATER_BANKING_DIRECTIVE,
   TURN_TIMEOUT_MARKER,
@@ -60,6 +64,7 @@ import {
   ROUND_TIMEOUT_DIRECTIVE,
   MAX_STREAMED_CONTENT_CHARS,
 } from "@/lib/contextBudget";
+import { ROUND_MAX_TOKENS } from "@/lib/modelLimits";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import { applyMicroElision, type ElisionMeta } from "@/lib/microElision";
@@ -695,6 +700,9 @@ export async function runChatTurn(
     const roundGenerationMs: number[] = [];
     const thinkingSegments: Array<{ round: number; text: string }> = [];
     let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
+    // Fix D1 (F8a): provider-measured prompt truth calibration across rounds.
+    let lastMeasuredPromptTokens: number | undefined = undefined;
+    let lastMeasuredEstimateTokens: number | undefined = undefined;
     // TOKEN ECONOMICS (c): stubs recorded here append to the turn-level
     // turnMicroElisions declared with the other turn state, so both persist
     // paths (abort and final) carry the elision audit onto the message.
@@ -751,20 +759,46 @@ export async function runChatTurn(
         `[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`
       );
 
-      // TOKEN ECONOMICS (c): MICRO-ELISION. Superseded tool results (those
-      // past the recent window) are stubbed EVERY round, independent of the
-      // 85K fit trigger, so bulk that the model has already moved past stops
-      // paying prompt tokens. The recent window stays byte-identical; each
-      // stub carries tool + path/command + original size + round metadata and
-      // the full result remains in the thread trace record (audit copy).
+      // TOKEN ECONOMICS (c) + Fix D3 (F8c): MICRO-ELISION. Superseded tool
+      // results, superseded write/patch argument bodies, and file reads
+      // superseded by a later write are stubbed EVERY round, independent of the
+      // 85K fit trigger. The latest version of everything and all assistant
+      // prose stay byte-identical; full payloads remain in the thread traces.
       const roundElision = applyMicroElision(conversationMessages, round + 1);
       if (roundElision.stubbed > 0) {
         turnMicroElisions.push(...roundElision.elisions);
       }
 
+      // Fix D1 + D2 (F8a/F8b): resolve this round's tool schemas and context
+      // window BEFORE fit/continuation checks so tool schemas are counted from
+      // round 0 and output headroom (window - ROUND_MAX_TOKENS) is reserved.
+      const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
+      const roundToolSchemaTokens = estimateToolSchemaTokens(roundTools);
+      const roundContextWindowTokens =
+        resolveRoundModelOptions({
+          model: turnState.activeModel,
+          requestedEffort: effectiveReasoningEffort,
+          userPrompt,
+          hasCompletedToolCalls: traces.length > 0,
+        }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS;
+
+      const preFitRawEstimate = estimateTokens(conversationMessages) + roundToolSchemaTokens;
+      const preFitEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
+        lastMeasuredPromptTokens,
+        lastMeasuredEstimateTokens,
+        toolSchemaTokens: roundToolSchemaTokens,
+      });
+
       // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
       const compaction = fitConversationToBudget(conversationMessages, {
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        measuredPromptTokens:
+          lastMeasuredPromptTokens !== undefined ? preFitEffectiveTokens : undefined,
+        lastMeasuredEstimateTokens:
+          lastMeasuredPromptTokens !== undefined ? preFitRawEstimate : undefined,
+        toolSchemaTokens: roundToolSchemaTokens,
+        contextWindowTokens: roundContextWindowTokens,
+        outputReserveTokens: ROUND_MAX_TOKENS,
       });
       if (compaction.compacted) {
         let appliedMessages = compaction.messages;
@@ -774,12 +808,15 @@ export async function runChatTurn(
 
         if (activeThreadId && threadData) {
           try {
-            // ROUTE WIRING (compaction-hybrid step 3 + AUD-10): COMPACTION_STRATEGY=hybrid
-            // selects the async hybrid rung and rebuilds the live conversationMessages
-            // from the compacted thread record; unset/anything-else keeps the
-            // extraction call and live replacement byte-identical.
             if (resolveCompactionStrategy() === "hybrid") {
               const hybridResult = await threadStore.compactThreadIncrementalHybrid(threadData, {
+                liveMessages: conversationMessages,
+                maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+                measuredPromptTokens:
+                  lastMeasuredPromptTokens !== undefined ? preFitEffectiveTokens : undefined,
+                toolSchemaTokens: roundToolSchemaTokens,
+                contextWindowTokens: roundContextWindowTokens,
+                outputReserveTokens: ROUND_MAX_TOKENS,
                 summarize: async (sumReq) => {
                   let text = "";
                   let truncated = false;
@@ -796,9 +833,6 @@ export async function runChatTurn(
                       num_predict: sumReq.maxTokens,
                     },
                   })) {
-                    // Per-chunk progress hook: re-arms the deadline wrapper's
-                    // inactivity timer so 180s means silence since the LAST
-                    // chunk, not elapsed time since start.
                     sumReq.onProgress?.();
                     if (chunk.message?.content) text += chunk.message.content;
                     if (chunk.finish_reason === "length") truncated = true;
@@ -807,37 +841,35 @@ export async function runChatTurn(
                 },
               });
               if (!hybridResult.noop) {
-                const rebuilt: Array<{
-                  role: string;
-                  content: string;
-                  [key: string]: unknown;
-                }> = threadStore.buildModelMessages(threadData);
-                const liveSystem =
-                  conversationMessages[0]?.role === "system" ? conversationMessages[0] : null;
-                if (liveSystem && rebuilt[0]?.role !== "system") {
-                  rebuilt.unshift(liveSystem);
-                }
-                // Preserve any in-flight tool-round messages from the current turn
-                // that are present in live conversationMessages after the last user message.
-                let lastUserIdx = -1;
-                for (let i = conversationMessages.length - 1; i >= 0; i--) {
-                  if (conversationMessages[i]?.role === "user") {
-                    lastUserIdx = i;
-                    break;
+                if (hybridResult.messages && hybridResult.messages.length > 0) {
+                  appliedMessages = hybridResult.messages.map((m) => ({ ...m }));
+                } else {
+                  const rebuilt: Array<{ role: string; content: string; [key: string]: unknown }> =
+                    threadStore.buildModelMessages(threadData);
+                  const liveSystem =
+                    conversationMessages[0]?.role === "system" ? conversationMessages[0] : null;
+                  if (liveSystem && rebuilt[0]?.role !== "system") rebuilt.unshift(liveSystem);
+                  let lastUserIdx = -1;
+                  for (let i = conversationMessages.length - 1; i >= 0; i--) {
+                    if (conversationMessages[i]?.role === "user") {
+                      lastUserIdx = i;
+                      break;
+                    }
                   }
-                }
-                if (lastUserIdx >= 0 && lastUserIdx < conversationMessages.length - 1) {
-                  const inFlightTail = conversationMessages.slice(lastUserIdx + 1);
-                  const hasInFlightTools = inFlightTail.some(
-                    (m) =>
-                      m?.role === "tool" ||
-                      (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0)
-                  );
-                  if (hasInFlightTools) {
-                    rebuilt.push(...inFlightTail);
+                  if (lastUserIdx >= 0 && lastUserIdx < conversationMessages.length - 1) {
+                    const inFlightTail = conversationMessages.slice(lastUserIdx + 1);
+                    if (
+                      inFlightTail.some(
+                        (m) =>
+                          m?.role === "tool" ||
+                          (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0)
+                      )
+                    ) {
+                      rebuilt.push(...inFlightTail);
+                    }
                   }
+                  appliedMessages = rebuilt;
                 }
-                appliedMessages = rebuilt;
                 appliedTokensBefore = hybridResult.tokensBefore;
                 appliedTokensAfter = hybridResult.tokensAfter;
                 appliedActions = hybridResult.modelSummaryUsed
@@ -852,6 +884,21 @@ export async function runChatTurn(
 
         conversationMessages.length = 0;
         conversationMessages.push(...appliedMessages);
+
+        // When Rung (a) or hybrid compaction replaced older history, clear the
+        // pre-compaction provider baseline so the next round dispatches cleanly
+        // and re-measures real promptTokens from the provider. If only Rungs
+        // (b)-(d) trimmed scraps without Rung (a) compaction, retain the
+        // measured baseline so Fix D2 still blocks overflowing rounds.
+        const compactedViaRungA =
+          appliedActions.includes("compaction") ||
+          appliedActions.includes("hybrid_model_digest") ||
+          appliedActions.includes("hybrid_extraction_fallback");
+        if (compactedViaRungA) {
+          lastMeasuredPromptTokens = undefined;
+          lastMeasuredEstimateTokens = undefined;
+        }
+
         turnCompacted = true;
         turnTokensBefore = appliedTokensBefore;
         turnTokensAfter = appliedTokensAfter;
@@ -887,11 +934,20 @@ export async function runChatTurn(
         mergeSystemDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
       }
 
-      // 2. Measure fitted tokens for continuation
+      const postFitEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
+        lastMeasuredPromptTokens,
+        lastMeasuredEstimateTokens,
+        toolSchemaTokens: roundToolSchemaTokens,
+      });
+
+      // 2. Measure fitted tokens for continuation (with measured truth + output headroom)
       const continuation = canContinueToolLoop({
         round,
         contextTokens: estimateTokens(conversationMessages),
+        measuredPromptTokens: postFitEffectiveTokens,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        contextWindowTokens: roundContextWindowTokens,
+        outputReserveTokens: ROUND_MAX_TOKENS,
         lastRoundTools,
         webResearchCalls,
         roundBackstop: TOOL_ROUND_BACKSTOP,
@@ -899,7 +955,7 @@ export async function runChatTurn(
       });
       if (!continuation.canContinue) {
         toolLoopStopReason = continuation.stopReason;
-        budgetExhaustedAtTokens = estimateTokens(conversationMessages);
+        budgetExhaustedAtTokens = postFitEffectiveTokens;
         break;
       }
       groundingDirectivePending = false;
@@ -944,8 +1000,6 @@ export async function runChatTurn(
         mergeSystemDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
       }
 
-      const roundTools = filterToolsForWebBudget(llmTools, webResearchCalls);
-
       const roundOptions = resolveRoundModelOptions({
         model: turnState.activeModel,
         requestedEffort: effectiveReasoningEffort,
@@ -972,6 +1026,7 @@ export async function runChatTurn(
       const llmPayload: Parameters<ReturnType<typeof getLLMProvider>["streamChat"]>[1] = {
         model: turnState.activeModel,
         messages: fitContextWindow(conversationMessages, {
+          contextWindowTokens: roundOptions.num_ctx,
           tools: isFinalRound ? undefined : roundTools,
           isArtifactTurn: isArtifactRequest,
         }),
@@ -984,6 +1039,10 @@ export async function runChatTurn(
       if (roundTools.length > 0 && !isFinalRound) {
         llmPayload.tools = roundTools;
       }
+
+      const dispatchedEstimateTokens =
+        estimateTokens(llmPayload.messages) +
+        (llmPayload.tools ? estimateToolSchemaTokens(llmPayload.tools) : 0);
 
       let fullRoundContent = "";
       let roundThinking = "";
@@ -1105,6 +1164,10 @@ export async function runChatTurn(
         roundGenerationMs.push(Math.max(1, Date.now() - roundStreamStartMs));
         if (roundPromptTokenCount !== undefined) {
           roundPromptTokens.push(roundPromptTokenCount);
+          if (roundPromptTokenCount > 0) {
+            lastMeasuredPromptTokens = roundPromptTokenCount;
+            lastMeasuredEstimateTokens = dispatchedEstimateTokens;
+          }
         }
         roundDeadline.clear();
         if (activeThreadId) {
@@ -2158,12 +2221,34 @@ export async function runChatTurn(
     const lingeringToolCalls = getEffectiveToolCalls(currentAssistantMessage);
     const pendingLateSteers = activeThreadId ? threadStore.getPendingSteers(activeThreadId) : [];
 
+    // Fix D2 (F8b): never start a synthesis round when measured input already
+    // leaves no room for ROUND_MAX_TOKENS of output inside the context window.
+    const synthWindowCeiling = computeEffectiveInputCeiling(
+      resolveRoundModelOptions({
+        model: turnState.activeModel,
+        requestedEffort: effectiveReasoningEffort,
+        userPrompt,
+        isSynthesisOrFinalRound: true,
+        hasCompletedToolCalls: traces.length > 0,
+      }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
+      ROUND_MAX_TOKENS
+    );
+    const synthMeasuredInput = estimateEffectivePromptTokens(conversationMessages, {
+      lastMeasuredPromptTokens,
+      lastMeasuredEstimateTokens,
+      toolSchemaTokens: 0,
+    });
+    const hasOutputHeadroomForSynthesis = !(
+      toolLoopStopReason === "budget" && synthMeasuredInput > synthWindowCeiling
+    );
+
     // Invariant: If late steers arrived and we have context (e.g. tools were used or model produced content),
     // we MUST dispatch a model synthesis pass that incorporates the steer, OR if no request can run,
     // we do NOT consume them so they return honestly in pendingSteers.
     const shouldSynthesize =
       !turnAbortController.signal.aborted &&
       !honestEndMarker &&
+      hasOutputHeadroomForSynthesis &&
       (pendingLateSteers.length > 0 ||
         shouldRunPostToolSynthesis({
           userPrompt,

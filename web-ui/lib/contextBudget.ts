@@ -221,6 +221,64 @@ export function shouldRunPostToolSynthesis(params: {
 }
 
 /**
+ * Estimates tokens consumed by the serialized tool-schema block sent to the model.
+ */
+export function estimateToolSchemaTokens(tools?: unknown[]): number {
+  if (!Array.isArray(tools) || tools.length === 0) return 0;
+  return estimateTokens(JSON.stringify(tools));
+}
+
+/**
+ * Effective input ceiling reserving per-round output headroom:
+ * effectiveInputCeiling = max(0, contextWindowTokens - outputReserveTokens).
+ */
+export function computeEffectiveInputCeiling(
+  contextWindowTokens: number = DEFAULT_CONTEXT_WINDOW_TOKENS,
+  outputReserveTokens: number = ROUND_MAX_TOKENS
+): number {
+  return Math.max(0, contextWindowTokens - outputReserveTokens);
+}
+
+export interface PromptTokenCalibration {
+  /** Last real prompt_tokens reading reported by the provider. */
+  lastMeasuredPromptTokens?: number;
+  /** Estimator reading (messages + tool schemas) corresponding to lastMeasuredPromptTokens. */
+  lastMeasuredEstimateTokens?: number;
+  /** Pre-computed tool-schema token count for the current round. */
+  toolSchemaTokens?: number;
+  /** Tool-schema array for the current round (used if toolSchemaTokens is omitted). */
+  tools?: unknown[];
+}
+
+/**
+ * Estimates effective prompt tokens by combining:
+ * 1. Messages + tool-schema block (from round 0), and
+ * 2. Provider-measured prompt truth calibrated by the estimator's delta once a
+ *    real promptTokens reading exists.
+ */
+export function estimateEffectivePromptTokens(
+  messages: unknown,
+  calibration?: PromptTokenCalibration
+): number {
+  const rawMessageTokens = estimateTokens(messages);
+  const schemaTokens =
+    calibration?.toolSchemaTokens ?? estimateToolSchemaTokens(calibration?.tools);
+  const rawTotal = rawMessageTokens + schemaTokens;
+
+  const measured = calibration?.lastMeasuredPromptTokens;
+  if (typeof measured === "number" && Number.isFinite(measured) && measured > 0) {
+    const baseline = calibration?.lastMeasuredEstimateTokens;
+    if (typeof baseline === "number" && Number.isFinite(baseline) && baseline > 0) {
+      const delta = rawTotal - baseline;
+      return Math.max(rawTotal, Math.max(0, Math.round(measured + delta)));
+    }
+    return Math.max(rawTotal, Math.round(measured));
+  }
+
+  return rawTotal;
+}
+
+/**
  * Conservative token estimator: Math.ceil(text.length / 4).
  * Handles string, message object, or message arrays.
  */
@@ -377,6 +435,7 @@ export function resolveRoundModelOptions(params: {
 
 export interface FitContextOptions {
   maxContentTokens?: number;
+  contextWindowTokens?: number;
   tools?: unknown[];
   isArtifactTurn?: boolean;
   reserveOutputTokens?: number;
@@ -457,17 +516,17 @@ export function fitContextWindow(
   const isArtifact =
     options?.isArtifactTurn ?? hasArtifactCreationIntent(lastUserContent).isArtifactRequest;
 
-  // 2. Budget reservation for tool schemas and artifact output headroom
-  let maxTokens = options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
-  const rawToolTokens =
-    options?.toolSchemaTokens ??
-    (options?.tools && Array.isArray(options.tools) && options.tools.length > 0
-      ? estimateTokens(JSON.stringify(options.tools))
-      : 0);
-  const toolSchemaTokens = Math.min(2500, rawToolTokens);
+  // 2. Budget reservation for output headroom (window - ROUND_MAX_TOKENS) and tool schemas
+  const windowCeiling = computeEffectiveInputCeiling(
+    options?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
+    options?.reserveOutputTokens ?? ROUND_MAX_TOKENS
+  );
+  let maxTokens = Math.min(options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS, windowCeiling);
+  const rawToolTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
+  const toolSchemaTokens = rawToolTokens;
 
   if (toolSchemaTokens > 0) {
-    maxTokens = Math.max(2000, maxTokens - toolSchemaTokens);
+    maxTokens = Math.max(1200, maxTokens - toolSchemaTokens);
   }
 
   const hasWebResults = hasWebResearchResults(working);
@@ -481,7 +540,10 @@ export function fitContextWindow(
       options?.outputHeadroomTokens ??
       options?.reserveOutputTokens ??
       (hasWebResults ? ARTIFACT_OUTPUT_HEADROOM_TOKENS_WEB : ARTIFACT_OUTPUT_HEADROOM_TOKENS);
-    const windowBudget = options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
+    const windowBudget = Math.min(
+      options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS,
+      windowCeiling
+    );
     const artifactCeiling = windowBudget - headroom - rawToolTokens;
     maxTokens = Math.min(maxTokens, Math.max(1200, artifactCeiling));
   }
@@ -818,7 +880,13 @@ export async function runChatToolLoop(
 export function canContinueToolLoop(options: {
   round: number;
   contextTokens: number;
+  /** Measured/calibrated prompt tokens (includes provider truth + tool schemas, Fix D1). */
+  measuredPromptTokens?: number;
   budgetTokens?: number;
+  /** Physical model context window (defaults to DEFAULT_CONTEXT_WINDOW_TOKENS, Fix D2). */
+  contextWindowTokens?: number;
+  /** Per-round output reserve (defaults to ROUND_MAX_TOKENS, Fix D2). */
+  outputReserveTokens?: number;
   lastRoundTools?: string[];
   webResearchCalls: number;
   roundBackstop?: number;
@@ -831,6 +899,16 @@ export function canContinueToolLoop(options: {
   const { round, contextTokens, lastRoundTools = [], webResearchCalls } = options;
   const budgetTokens = options.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
   const backstop = options.roundBackstop ?? TOOL_ROUND_BACKSTOP;
+  const effectiveInputCeiling = computeEffectiveInputCeiling(
+    options.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
+    options.outputReserveTokens ?? ROUND_MAX_TOKENS
+  );
+  const effectiveContextTokens =
+    typeof options.measuredPromptTokens === "number" &&
+    Number.isFinite(options.measuredPromptTokens) &&
+    options.measuredPromptTokens > 0
+      ? Math.max(contextTokens, options.measuredPromptTokens)
+      : contextTokens;
 
   if (round >= backstop) {
     return { canContinue: false, stopReason: "backstop" };
@@ -841,7 +919,17 @@ export function canContinueToolLoop(options: {
     return { canContinue: false, stopReason: "completed" };
   }
 
-  if (contextTokens > budgetTokens) {
+  // Fix D2 (F8b): hard output-headroom guard — a round must never START when
+  // measured input already leaves no room for ROUND_MAX_TOKENS of output.
+  if (effectiveContextTokens > effectiveInputCeiling) {
+    return {
+      canContinue: false,
+      stopReason: "budget",
+    };
+  }
+
+  const effectiveBudget = Math.min(budgetTokens, effectiveInputCeiling);
+  if (effectiveContextTokens > effectiveBudget) {
     const allResearch =
       lastRoundTools.length > 0 && lastRoundTools.every((t) => isWebResearchTool(t));
     if (allResearch && webResearchCalls < MAX_WEB_RESEARCH_CALLS) {
@@ -874,8 +962,8 @@ export interface FitConversationResult {
  * Ladder fitting for active tool loops:
  * - Rung (a): Compaction alone if above 85% threshold or budget
  * - Rung (b): Older tool outputs elided to EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER
- * - Rung (c): Oldest non-system turns dropped (preserving system prompt and latest user query)
- * - Rung (d): Truncate oversize payload (preserving system prompt)
+ * - Rung (c): Oldest non-system turns dropped (preserving system prompt, leading user brief, and latest user query)
+ * - Rung (d): Truncate oversize payload (preserving system prompt and leading user brief first)
  */
 export function fitConversationToBudget(
   messages: ContextMessage[],
@@ -883,6 +971,18 @@ export function fitConversationToBudget(
     budgetTokens?: number;
     compactionThreshold?: number;
     preserveRecentMessages?: number;
+    /** Provider-measured / calibrated prompt tokens (Fix D1). */
+    measuredPromptTokens?: number;
+    /** Estimator baseline matching measuredPromptTokens (Fix D1). */
+    lastMeasuredEstimateTokens?: number;
+    /** Tool-schema block sent to the model (Fix D1). */
+    tools?: unknown[];
+    /** Pre-computed tool-schema token count (Fix D1). */
+    toolSchemaTokens?: number;
+    /** Physical context window size (Fix D2). */
+    contextWindowTokens?: number;
+    /** Per-round output reserve (defaults to ROUND_MAX_TOKENS, Fix D2). */
+    outputReserveTokens?: number;
   }
 ): FitConversationResult {
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -896,10 +996,33 @@ export function fitConversationToBudget(
     };
   }
 
-  const budgetTokens = options?.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS;
+  const effectiveInputCeiling = computeEffectiveInputCeiling(
+    options?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
+    options?.outputReserveTokens ?? ROUND_MAX_TOKENS
+  );
+  const budgetTokens = Math.min(
+    options?.budgetTokens ?? CHAT_CONTEXT_BUDGET_TOKENS,
+    effectiveInputCeiling
+  );
   const thresholdRatio = options?.compactionThreshold ?? COMPACTION_THRESHOLD_RATIO;
   const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
-  const initialTokens = estimateTokens(messages);
+  const schemaTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
+  const rawInitialTotal = estimateTokens(messages) + schemaTokens;
+  const baselineEstimate = options?.lastMeasuredEstimateTokens ?? rawInitialTotal;
+  const initialTokens = estimateEffectivePromptTokens(messages, {
+    lastMeasuredPromptTokens: options?.measuredPromptTokens,
+    lastMeasuredEstimateTokens: options?.lastMeasuredEstimateTokens,
+    toolSchemaTokens: schemaTokens,
+  });
+
+  const measureWorking = (msgs: ContextMessage[]): number =>
+    estimateEffectivePromptTokens(msgs, {
+      lastMeasuredPromptTokens: options?.measuredPromptTokens,
+      lastMeasuredEstimateTokens:
+        options?.measuredPromptTokens !== undefined ? baselineEstimate : undefined,
+      toolSchemaTokens: schemaTokens,
+    });
+
   let workingMessages = messages.map((m) => ({ ...m }));
   const actions: CompactionAction[] = [];
 
@@ -909,6 +1032,10 @@ export function fitConversationToBudget(
       maxContentTokens: budgetTokens,
       compactionThreshold: thresholdRatio,
       preserveRecentMessages: options?.preserveRecentMessages ?? 4,
+      measuredPromptTokens: initialTokens,
+      toolSchemaTokens: schemaTokens,
+      contextWindowTokens: options?.contextWindowTokens,
+      outputReserveTokens: options?.outputReserveTokens,
     });
     if (compactRes.compacted) {
       workingMessages = compactRes.messages.map((m) => ({ ...m }));
@@ -919,7 +1046,7 @@ export function fitConversationToBudget(
   const hasLeadingSystem = workingMessages[0]?.role === "system";
 
   // Rung (b): Older tool outputs elided if still > budgetTokens
-  if (estimateTokens(workingMessages) > budgetTokens) {
+  if (measureWorking(workingMessages) > budgetTokens) {
     let anyElided = false;
     const lastToolIdx = workingMessages.map((m) => m.role).lastIndexOf("tool");
     for (let i = hasLeadingSystem ? 1 : 0; i < workingMessages.length; i++) {
@@ -930,7 +1057,7 @@ export function fitConversationToBudget(
             content: EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
           };
           anyElided = true;
-          if (estimateTokens(workingMessages) <= budgetTokens) {
+          if (measureWorking(workingMessages) <= budgetTokens) {
             break;
           }
         }
@@ -942,21 +1069,28 @@ export function fitConversationToBudget(
   }
 
   // Rung (c): Drop oldest non-system turns if still > budgetTokens
-  if (estimateTokens(workingMessages) > budgetTokens) {
+  // Fix D5 (F8e): protect BOTH the leading user brief AND the latest user message.
+  if (measureWorking(workingMessages) > budgetTokens) {
     let anyDropped = false;
-    let latestUserIdx = -1;
-    for (let j = workingMessages.length - 1; j >= 0; j--) {
-      if (workingMessages[j]?.role === "user") {
-        latestUserIdx = j;
-        break;
+    const findProtectedUserIndices = (arr: ContextMessage[]) => {
+      const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+      let latestUserIdx = -1;
+      for (let j = arr.length - 1; j >= 0; j--) {
+        if (arr[j]?.role === "user") {
+          latestUserIdx = j;
+          break;
+        }
       }
-    }
+      return { firstUserIdx, latestUserIdx };
+    };
+
+    let { firstUserIdx, latestUserIdx } = findProtectedUserIndices(workingMessages);
 
     let safety = workingMessages.length * 2;
-    while (estimateTokens(workingMessages) > budgetTokens && safety-- > 0) {
+    while (measureWorking(workingMessages) > budgetTokens && safety-- > 0) {
       let candidateIdx = -1;
       for (let i = hasLeadingSystem ? 1 : 0; i < workingMessages.length; i++) {
-        if (i === latestUserIdx) continue;
+        if (i === firstUserIdx || i === latestUserIdx) continue;
         candidateIdx = i;
         break;
       }
@@ -964,13 +1098,7 @@ export function fitConversationToBudget(
       workingMessages.splice(candidateIdx, 1);
       anyDropped = true;
 
-      latestUserIdx = -1;
-      for (let j = workingMessages.length - 1; j >= 0; j--) {
-        if (workingMessages[j]?.role === "user") {
-          latestUserIdx = j;
-          break;
-        }
-      }
+      ({ firstUserIdx, latestUserIdx } = findProtectedUserIndices(workingMessages));
     }
     if (anyDropped) {
       actions.push("drop_old_turns");
@@ -978,12 +1106,16 @@ export function fitConversationToBudget(
   }
 
   // Rung (d): Truncate oversize message if still > budgetTokens (e.g. 64K-char payload)
+  // Fix D5 (F8e): preserve system prompt and leading user brief verbatim whenever any
+  // other truncatable message exists.
   let safetyD = 20;
-  while (estimateTokens(workingMessages) > budgetTokens && safetyD-- > 0) {
+  while (measureWorking(workingMessages) > budgetTokens && safetyD-- > 0) {
+    const firstUserIdx = workingMessages.findIndex((m) => m?.role === "user");
     let longestIdx = -1;
     let maxLen = 0;
     for (let i = 0; i < workingMessages.length; i++) {
       if (i === 0 && hasLeadingSystem && workingMessages.length > 1) continue;
+      if (i === firstUserIdx && workingMessages.length > (hasLeadingSystem ? 2 : 1)) continue;
       const len =
         typeof workingMessages[i].content === "string" ? workingMessages[i].content.length : 0;
       if (len > maxLen) {
@@ -996,7 +1128,7 @@ export function fitConversationToBudget(
       break;
     }
 
-    const currentTokens = estimateTokens(workingMessages);
+    const currentTokens = measureWorking(workingMessages);
     const excessTokens = currentTokens - budgetTokens;
     const excessChars = Math.max(1, excessTokens * 4);
     const targetChars = Math.max(0, maxLen - excessChars - TOOL_TRUNCATION_MARKER.length);
@@ -1010,7 +1142,7 @@ export function fitConversationToBudget(
     }
   }
 
-  const finalTokens = estimateTokens(workingMessages);
+  const finalTokens = measureWorking(workingMessages);
   const highWater =
     actions.includes("elide_tool_outputs") ||
     actions.includes("drop_old_turns") ||

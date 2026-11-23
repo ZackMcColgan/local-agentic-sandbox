@@ -10,6 +10,7 @@ import {
   resolveCompactionStrategy,
 } from "../conversationCompaction";
 import type {
+  CompactionMessage,
   HybridFallbackReason,
   SummarizeRequest,
   SummarizeResult,
@@ -1520,6 +1521,17 @@ export class ThreadStore {
       content: summary,
     });
 
+    // Fix D5 (F8e): preserve the leading user brief verbatim if no user message
+    // survives in the post-boundary tail (e.g. mid-single-turn compaction).
+    const leadingUser = rawMessages.find((m) => m.role === "user");
+    const afterHasUser = after.some((m) => m.role === "user");
+    if (leadingUser && !afterHasUser) {
+      result.push({
+        role: "user",
+        content: leadingUser.content,
+      });
+    }
+
     for (const m of after) {
       result.push({
         role: m.role,
@@ -1664,6 +1676,20 @@ export class ThreadStore {
       summarize: (req: SummarizeRequest) => Promise<SummarizeResult | string>;
       inactivityMs?: number;
       totalDeadlineMs?: number;
+      /**
+       * Fix D4 (F8d): optional in-memory message array carried by the live round
+       * loop. Mid-single-turn threads have <= 4 persisted messages on disk while
+       * carrying dozens of in-flight rounds in memory; running the hybrid rung
+       * against liveMessages compacts mid-turn and updates the persisted record
+       * from the same result.
+       */
+      liveMessages?: CompactionMessage[];
+      maxContentTokens?: number;
+      compactionThreshold?: number;
+      measuredPromptTokens?: number;
+      toolSchemaTokens?: number;
+      contextWindowTokens?: number;
+      outputReserveTokens?: number;
     }
   ): Promise<{
     noop: boolean;
@@ -1674,9 +1700,83 @@ export class ThreadStore {
     throughMessageId?: string;
     modelSummaryUsed: boolean;
     fallbackReason?: HybridFallbackReason;
+    messages?: CompactionMessage[];
     thread: Thread;
   }> {
-    const messages = thread.messages || [];
+    const persistedMessages = thread.messages || [];
+
+    // Fix D4 (F8d): when liveMessages is provided (mid-turn roundLoop path), run
+    // the hybrid rung against the live in-memory array rather than no-oping on
+    // the <=4 persisted on-disk messages of a single-turn job.
+    if (opts.liveMessages && opts.liveMessages.length > 4) {
+      const result = await runHybridCompaction(opts.liveMessages, {
+        strategy: "hybrid",
+        maxContentTokens: opts.maxContentTokens,
+        compactionThreshold: opts.compactionThreshold,
+        measuredPromptTokens: opts.measuredPromptTokens,
+        toolSchemaTokens: opts.toolSchemaTokens,
+        contextWindowTokens: opts.contextWindowTokens,
+        outputReserveTokens: opts.outputReserveTokens,
+        summarize: opts.summarize,
+        inactivityMs: opts.inactivityMs,
+        totalDeadlineMs: opts.totalDeadlineMs,
+      });
+      if (!result.compacted) {
+        return {
+          noop: true,
+          reason: "below_threshold",
+          tokensBefore: result.tokensBefore,
+          tokensAfter: result.tokensAfter,
+          modelSummaryUsed: false,
+          thread,
+        };
+      }
+
+      const settledPersisted = persistedMessages.filter(
+        (m) => !(m.role === "assistant" && m.status === "streaming" && !m.content)
+      );
+      let throughMessageId = "mid-turn";
+      if (settledPersisted.length > 4) {
+        const hasPersistedSystem = settledPersisted[0]?.role === "system";
+        const persistedEndIdx = Math.max(hasPersistedSystem ? 1 : 0, settledPersisted.length - 4);
+        throughMessageId =
+          settledPersisted[Math.max(0, persistedEndIdx - 1)]?.id ??
+          settledPersisted[0]?.id ??
+          "mid-turn";
+      } else if (settledPersisted.length > 0) {
+        throughMessageId = settledPersisted[settledPersisted.length - 1].id;
+      } else if (persistedMessages.length > 0) {
+        throughMessageId = persistedMessages[0].id;
+      }
+
+      this.applyCompactionBoundary(
+        thread,
+        result.liveContent ?? "",
+        throughMessageId,
+        result.tokensBefore,
+        result.tokensAfter
+      );
+      thread.compaction!.strategy = "hybrid";
+      thread.compaction!.extractionDigest = result.extractionDigest;
+      if (result.fallback) {
+        thread.compaction!.fallbackLogged = true;
+        thread.compaction!.fallbackReason = result.fallbackReason;
+      }
+      this.saveThread(thread);
+      return {
+        noop: false,
+        tokensBefore: result.tokensBefore,
+        tokensAfter: result.tokensAfter,
+        summary: result.liveContent,
+        throughMessageId,
+        modelSummaryUsed: result.modelSummaryUsed,
+        fallbackReason: result.fallbackReason,
+        messages: result.messages,
+        thread,
+      };
+    }
+
+    const messages = persistedMessages;
     const tokensBefore = estimateTokens(this.buildModelMessages(thread));
     if (messages.length <= 4) {
       return {
@@ -1708,6 +1808,12 @@ export class ThreadStore {
     }
     const result = await runHybridCompaction(messages, {
       strategy: "hybrid",
+      maxContentTokens: opts.maxContentTokens,
+      compactionThreshold: opts.compactionThreshold,
+      measuredPromptTokens: opts.measuredPromptTokens,
+      toolSchemaTokens: opts.toolSchemaTokens,
+      contextWindowTokens: opts.contextWindowTokens,
+      outputReserveTokens: opts.outputReserveTokens,
       summarize: opts.summarize,
       inactivityMs: opts.inactivityMs,
       totalDeadlineMs: opts.totalDeadlineMs,
@@ -1745,6 +1851,7 @@ export class ThreadStore {
       throughMessageId: throughMessage.id,
       modelSummaryUsed: result.modelSummaryUsed,
       fallbackReason: result.fallbackReason,
+      messages: result.messages,
       thread,
     };
   }
