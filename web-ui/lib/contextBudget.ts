@@ -498,6 +498,23 @@ export interface FitContextOptions {
 }
 
 /**
+ * Returns the number of contiguous messages to evict atomically at `idx`:
+ * an `assistant` message carrying `tool_calls` plus all immediately following
+ * paired `role: "tool"` messages, or `1` for any other message.
+ */
+function countAtomicToolGroupSize(messages: ContextMessage[], idx: number): number {
+  const msg = messages[idx];
+  if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+    let count = 1;
+    while (idx + count < messages.length && messages[idx + count]?.role === "tool") {
+      count++;
+    }
+    return count;
+  }
+  return 1;
+}
+
+/**
  * Enforces the context window budget by returning a NEW array with older
  * non-protected messages evicted or replaced with truncation markers.
  * Canonical message history is never mutated.
@@ -674,8 +691,9 @@ export function fitContextWindow(
       };
       evictedCount++;
     } else {
-      working.splice(candidateIdx, 1);
-      evictedCount++;
+      const groupCount = countAtomicToolGroupSize(working, candidateIdx);
+      working.splice(candidateIdx, groupCount);
+      evictedCount += groupCount;
     }
   }
 
@@ -694,8 +712,9 @@ export function fitContextWindow(
       break;
     }
 
-    working.splice(candidateIdx, 1);
-    evictedCount++;
+    const groupCount = countAtomicToolGroupSize(working, candidateIdx);
+    working.splice(candidateIdx, groupCount);
+    evictedCount += groupCount;
   }
 
   // Pass 3 (Pathological): If still over budget with only protected messages left,
@@ -1219,7 +1238,8 @@ export function fitConversationToBudget(
         break;
       }
       if (candidateIdx === -1) break;
-      workingMessages.splice(candidateIdx, 1);
+      const dropCount = countAtomicToolGroupSize(workingMessages, candidateIdx);
+      workingMessages.splice(candidateIdx, dropCount);
       anyDropped = true;
       markDirty();
 

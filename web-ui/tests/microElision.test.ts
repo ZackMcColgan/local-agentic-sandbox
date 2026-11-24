@@ -296,3 +296,102 @@ describe("Micro-elision (c): chat route wiring (source assertions)", () => {
     );
   });
 });
+
+describe("Micro-elision R4: multi-tool batch pairing in findPairedCall", () => {
+  it("reading [a.ts, b.ts] in one batch and editing a.ts later does NOT elide b.ts (with tool_call_id)", () => {
+    const readAContent = JSON.stringify({ content: "const a = 1;\n" + filler(500) });
+    const readBContent = JSON.stringify({ content: "const b = 2;\n" + filler(500) });
+    const messages: ElisionTestMessage[] = [
+      { role: "system", content: "System." },
+      { role: "user", content: "Read a.ts and b.ts, then edit a.ts." },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_a",
+            type: "function",
+            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/a.ts" }) },
+          },
+          {
+            id: "call_b",
+            type: "function",
+            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/b.ts" }) },
+          },
+        ],
+      },
+      { role: "tool", name: "workspace_read_file", tool_call_id: "call_a", content: readAContent },
+      { role: "tool", name: "workspace_read_file", tool_call_id: "call_b", content: readBContent },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_edit_a",
+            type: "function",
+            function: {
+              name: "workspace_write_file",
+              arguments: JSON.stringify({ path: "src/a.ts", content: "const a = 99;" }),
+            },
+          },
+        ],
+      },
+      { role: "tool", name: "workspace_write_file", tool_call_id: "call_edit_a", content: '{"ok":true}' },
+    ];
+
+    applyMicroElision(messages, 2);
+
+    assert.equal(messages[3].elided, true, "superseded read of src/a.ts must be elided");
+    assert.match(messages[3].content, /^\[Micro-elision:/);
+    assert.equal(messages[4].elided, undefined, "unrelated read of src/b.ts must NOT be elided");
+    assert.equal(messages[4].content, readBContent, "b.ts content must remain byte-identical");
+  });
+
+  it("reading [a.ts, b.ts] in one batch without tool_call_id uses toolOffset fallback so editing a.ts does NOT elide b.ts", () => {
+    const readAContent = JSON.stringify({ content: "const a = 1;\n" + filler(500) });
+    const readBContent = JSON.stringify({ content: "const b = 2;\n" + filler(500) });
+    const messages: ElisionTestMessage[] = [
+      { role: "system", content: "System." },
+      { role: "user", content: "Read a.ts and b.ts, then edit a.ts." },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_a",
+            type: "function",
+            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/a.ts" }) },
+          },
+          {
+            id: "call_b",
+            type: "function",
+            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/b.ts" }) },
+          },
+        ],
+      },
+      { role: "tool", name: "workspace_read_file", content: readAContent },
+      { role: "tool", name: "workspace_read_file", content: readBContent },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_edit_a",
+            type: "function",
+            function: {
+              name: "workspace_write_file",
+              arguments: JSON.stringify({ path: "src/a.ts", content: "const a = 99;" }),
+            },
+          },
+        ],
+      },
+      { role: "tool", name: "workspace_write_file", content: '{"ok":true}' },
+    ];
+
+    applyMicroElision(messages, 2);
+
+    assert.equal(messages[3].elided, true, "superseded read of src/a.ts must be elided");
+    assert.equal(messages[4].elided, undefined, "b.ts at toolOffset=1 must NOT be elided");
+    assert.equal(messages[4].content, readBContent, "b.ts content must remain byte-identical");
+  });
+});

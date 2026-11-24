@@ -685,4 +685,255 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
       fs.rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
+
+  it("R4: multi-tool round pushes tool_call_id on every tool message, flushes mid-batch directives after all tool messages, and does not duplicate assistant(tool_calls) before synthesis", async () => {
+    const fakeClient = {
+      callTool: async (req: { name: string; arguments: Record<string, unknown> }) => {
+        if (req.name === "search_web") {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ results: [{ url: "https://example.com", title: "Ex" }] }) }],
+          };
+        }
+        if (req.name === "workspace_write_file") {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ success: true, path: req.arguments.path }) }],
+          };
+        }
+        return {
+          content: [{ type: "text", text: JSON.stringify({ content: `1 | ${String(req.arguments.path)}` }) }],
+        };
+      },
+      close: async () => {},
+    } as unknown as Client;
+
+    const toolClientMap: RunChatTurnDeps["toolClientMap"] = new Map([
+      ["search_web", { client: fakeClient, tier: "browser" }],
+      ["workspace_write_file", { client: fakeClient, tier: "sandbox" }],
+      ["workspace_read_file", { client: fakeClient, tier: "sandbox" }],
+    ]);
+
+    let llmRound = 0;
+    let synthesisMessages: Array<{
+      role?: string;
+      name?: string;
+      tool_call_id?: string;
+      tool_calls?: Array<{ id?: string }>;
+      content?: string;
+    }> = [];
+
+    const { deps, fakeJob } = makeTurnDeps({
+      tmpDir,
+      toolClientMap,
+      streamLlmChat: async function* (_url, payload) {
+        llmRound++;
+        if (llmRound === 1) {
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  id: "tc_search",
+                  type: "function",
+                  function: {
+                    name: "search_web",
+                    arguments: JSON.stringify({ query: "example architecture" }),
+                  },
+                },
+                {
+                  id: "tc_write_svg",
+                  type: "function",
+                  function: {
+                    name: "workspace_write_file",
+                    arguments: JSON.stringify({ path: "diagram.svg", content: "<svg></svg>" }),
+                  },
+                },
+                {
+                  id: "tc_read_after",
+                  type: "function",
+                  function: {
+                    name: "workspace_read_file",
+                    arguments: JSON.stringify({ path: "notes.md" }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "stop",
+          };
+        } else {
+          synthesisMessages = (payload.messages as typeof synthesisMessages).map((m) => ({ ...m }));
+          yield { message: { content: "Saved diagram.svg and summarized." }, finish_reason: "stop" };
+        }
+      },
+    });
+    deps.userPrompt = "Create an SVG architecture diagram";
+    deps.messages = [{ role: "user", content: "Create an SVG architecture diagram" }];
+
+    await runChatTurn(deps, fakeJob, null);
+
+    assert.equal(llmRound, 2, "must run round 1 tool batch + post-tool synthesis pass");
+
+    // 1. Every role: "tool" message carries its matching tool_call_id
+    const toolMsgs = synthesisMessages.filter((m) => m.role === "tool");
+    assert.deepEqual(
+      toolMsgs.map((m) => m.tool_call_id),
+      ["tc_search", "tc_write_svg", "tc_read_after"]
+    );
+
+    // 2. Strictly assistant(tool_calls) -> tool(c0) -> tool(c1) -> tool(c2) -> user(directive)
+    const firstAssistantIdx = synthesisMessages.findIndex(
+      (m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length === 3
+    );
+    assert.ok(firstAssistantIdx >= 0, "assistant(tool_calls) message must exist");
+    assert.equal(synthesisMessages[firstAssistantIdx + 1]?.role, "tool");
+    assert.equal(synthesisMessages[firstAssistantIdx + 1]?.tool_call_id, "tc_search");
+    assert.equal(synthesisMessages[firstAssistantIdx + 2]?.role, "tool");
+    assert.equal(synthesisMessages[firstAssistantIdx + 2]?.tool_call_id, "tc_write_svg");
+    assert.equal(synthesisMessages[firstAssistantIdx + 3]?.role, "tool");
+    assert.equal(synthesisMessages[firstAssistantIdx + 3]?.tool_call_id, "tc_read_after");
+    assert.equal(synthesisMessages[firstAssistantIdx + 4]?.role, "user");
+    assert.match(String(synthesisMessages[firstAssistantIdx + 4]?.content || ""), /\[DELIVERABLE SAVED\]/);
+
+    // 3. No duplicate unpaired assistant(tool_calls) before synthesis
+    const assistantToolCallMsgs = synthesisMessages.filter(
+      (m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0
+    );
+    assert.equal(
+      assistantToolCallMsgs.length,
+      1,
+      "post-tool synthesis must NOT receive a duplicate unpaired assistant(tool_calls) message"
+    );
+  });
+
+  it("R4: searchBlocked halting a multi-tool batch emits synthetic skipped tool stubs with tool_call_id and flushes directives after all tool messages", async () => {
+    const fakeClient = {
+      callTool: async (req: { name: string; arguments: Record<string, unknown> }) => ({
+        content: [{ type: "text", text: JSON.stringify({ content: `1 | ${String(req.arguments.path)}` }) }],
+      }),
+      close: async () => {},
+    } as unknown as Client;
+
+    const toolClientMap: RunChatTurnDeps["toolClientMap"] = new Map([
+      ["search_web", { client: fakeClient, tier: "browser" }],
+      ["workspace_read_file", { client: fakeClient, tier: "sandbox" }],
+    ]);
+
+    let llmRound = 0;
+    let synthesisMessages: Array<{
+      role?: string;
+      tool_call_id?: string;
+      tool_calls?: Array<{ id?: string }>;
+      content?: string;
+    }> = [];
+
+    const { deps, fakeJob } = makeTurnDeps({
+      tmpDir,
+      toolClientMap,
+      streamLlmChat: async function* (_url, payload) {
+        llmRound++;
+        if (llmRound === 1) {
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  id: "s0",
+                  type: "function",
+                  function: { name: "search_web", arguments: JSON.stringify({ query: "" }) },
+                },
+                {
+                  id: "s1",
+                  type: "function",
+                  function: { name: "search_web", arguments: JSON.stringify({ query: "" }) },
+                },
+                {
+                  id: "r2",
+                  type: "function",
+                  function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "after.ts" }) },
+                },
+              ],
+            },
+            finish_reason: "stop",
+          };
+        } else {
+          synthesisMessages = (payload.messages as typeof synthesisMessages).map((m) => ({ ...m }));
+          yield { message: { content: "Handled blocked search." }, finish_reason: "stop" };
+        }
+      },
+    });
+
+    await runChatTurn(deps, fakeJob, null);
+
+    const assistantIdx = synthesisMessages.findIndex(
+      (m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length === 3
+    );
+    assert.ok(assistantIdx >= 0);
+    assert.equal(synthesisMessages[assistantIdx + 1]?.role, "tool");
+    assert.equal(synthesisMessages[assistantIdx + 1]?.tool_call_id, "s0");
+    assert.equal(synthesisMessages[assistantIdx + 2]?.role, "tool");
+    assert.equal(synthesisMessages[assistantIdx + 2]?.tool_call_id, "s1");
+    assert.equal(synthesisMessages[assistantIdx + 3]?.role, "tool");
+    assert.equal(synthesisMessages[assistantIdx + 3]?.tool_call_id, "r2");
+    assert.match(String(synthesisMessages[assistantIdx + 3]?.content || ""), /SKIPPED/i);
+    assert.equal(synthesisMessages[assistantIdx + 4]?.role, "user");
+    assert.match(
+      String(synthesisMessages[assistantIdx + 4]?.content || ""),
+      /\[QUERY REVISION REQUIRED\]/
+    );
+  });
+
+  it("R4: barrier MCP callTool throwing an error is caught and returned as a structured error tool result without aborting the turn", async () => {
+    const fakeClient = {
+      callTool: async () => {
+        throw new Error("MCP transport timeout");
+      },
+      close: async () => {},
+    } as unknown as Client;
+
+    const toolClientMap: RunChatTurnDeps["toolClientMap"] = new Map([
+      ["workspace_run_command", { client: fakeClient, tier: "sandbox" }],
+    ]);
+
+    let llmRound = 0;
+    const round2ToolMsgs: Array<{ role?: string; tool_call_id?: string; content?: string }> = [];
+
+    const { deps, turnState, events, fakeJob } = makeTurnDeps({
+      tmpDir,
+      toolClientMap,
+      streamLlmChat: async function* (_url, payload) {
+        llmRound++;
+        if (llmRound === 1) {
+          yield {
+            message: {
+              content: "",
+              tool_calls: [
+                {
+                  id: "barrier_err_0",
+                  type: "function",
+                  function: {
+                    name: "workspace_run_command",
+                    arguments: JSON.stringify({ command: "npm test" }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "stop",
+          };
+        } else {
+          for (const m of payload.messages as typeof round2ToolMsgs) {
+            if (m.role === "tool") round2ToolMsgs.push(m);
+          }
+          yield { message: { content: "Recovered cleanly from barrier MCP error." }, finish_reason: "stop" };
+        }
+      },
+    });
+
+    await runChatTurn(deps, fakeJob, null);
+
+    assert.equal(llmRound, 2, "turn must continue to round 2 instead of aborting");
+    assert.equal(round2ToolMsgs.length, 1);
+    assert.equal(round2ToolMsgs[0].tool_call_id, "barrier_err_0");
+    assert.match(String(round2ToolMsgs[0].content || ""), /MCP transport timeout/);
+    assert.equal(turnState.traces.length, 1);
+    assert.ok(events.some((e) => e.type === "done"));
+  });
 });
