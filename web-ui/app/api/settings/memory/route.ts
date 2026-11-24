@@ -4,6 +4,7 @@ import {
   saveOperatorMemory,
   OPERATOR_MEMORY_MAX_CHARS,
 } from "@/lib/memory/operatorMemory";
+import { parseJsonBody } from "@/lib/apiJson";
 
 export async function GET() {
   try {
@@ -19,7 +20,9 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     if (typeof body.text !== "string") {
       return NextResponse.json({ error: "Invalid payload: text string required" }, { status: 400 });
     }

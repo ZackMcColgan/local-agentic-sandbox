@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getHostSettings, setHostSettings, fetchRecentGitActivity } from "@/lib/hostSettings";
 import { determineHostRunnerState } from "@/lib/hostMode";
+import { parseJsonBody } from "@/lib/apiJson";
 
 export async function GET() {
   try {
@@ -29,7 +30,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const updates: {
       hostAccessEnabled?: boolean;
       allowUnattendedHostGit?: boolean;

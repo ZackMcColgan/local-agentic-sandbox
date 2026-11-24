@@ -9,6 +9,7 @@ import {
   SkillCandidate,
 } from "@/lib/subagents/skillGate";
 import { FlywheelSkillsStore } from "@/lib/flywheel/skillsStore";
+import { parseJsonBody } from "@/lib/apiJson";
 
 export async function GET(_req: NextRequest) {
   let flywheelStore: FlywheelSkillsStore | null = null;
@@ -49,7 +50,9 @@ export async function GET(_req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const action = body.action;
     const id = body.candidateId || body.slug || body.id;
 

@@ -634,5 +634,67 @@ describe("Batch C — Counting truth (F10, F11, F12)", () => {
         "SSE done durationMs must match persisted record"
       );
     });
+
+    it("stamps firstLlmRequestMs pre-dispatch so a 250ms LLM prefill delay does not inflate phaseTimings.contextPrepMs", async () => {
+      let firstProviderRequestMs: number | null = null;
+      const mock = await startMockLlmServer((_req, _body, res) => {
+        if (firstProviderRequestMs === null) {
+          firstProviderRequestMs = Date.now();
+        }
+        // Simulate 250ms Round-0 LLM prompt prefill / TTFT before first chunk
+        setTimeout(() => {
+          res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+          res.write(
+            `${JSON.stringify({
+              message: { role: "assistant", content: "Response after prefill." },
+              done: true,
+              done_reason: "stop",
+              prompt_eval_count: 100,
+              eval_count: 20,
+            })}\n`
+          );
+          res.end();
+        }, 250);
+      });
+      server = mock.server;
+      process.env.LLM_BASE_URL = mock.baseUrl;
+
+      const req = new NextRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: "thread-c3-prefill-gap",
+          messages: [{ role: "user", content: "Measure contextPrepMs without prefill" }],
+        }),
+      });
+
+      const res = await POST(req);
+      const events = await readSseEvents(res);
+      const done = events.find((e) => e.type === "done") as
+        (SseEvent & { phaseTimings?: { contextPrepMs?: number } }) | undefined;
+      assert.ok(done, "turn must emit done event");
+      assert.ok(firstProviderRequestMs !== null, "provider must have received request");
+
+      const store = new ThreadStore(tmpThreadsDir);
+      const thread = await store.getThread("thread-c3-prefill-gap");
+      const assistant = thread?.messages.find((m) => m.role === "assistant");
+      assert.ok(assistant, "assistant message must be persisted");
+
+      const contextPrepMs = assistant.phaseTimings?.contextPrepMs;
+      assert.equal(typeof contextPrepMs, "number", "contextPrepMs must be persisted");
+      assert.ok(
+        contextPrepMs! < 150,
+        `contextPrepMs (${contextPrepMs}ms) must exclude 250ms Round-0 LLM prefill delay`
+      );
+      assert.equal(
+        done.phaseTimings?.contextPrepMs,
+        contextPrepMs,
+        "SSE done contextPrepMs must match persisted record"
+      );
+      assert.ok(
+        assistant.durationMs! >= 230,
+        `durationMs (${assistant.durationMs}ms) must still include the 250ms LLM prefill`
+      );
+    });
   });
 });

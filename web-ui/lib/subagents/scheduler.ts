@@ -288,12 +288,71 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
     } catch {}
   }
 
+  readHeartbeat(): SchedulerHeartbeat | null {
+    try {
+      const hbPath = this.getHeartbeatPath();
+      if (!fs.existsSync(hbPath)) return null;
+      return JSON.parse(fs.readFileSync(hbPath, "utf8")) as SchedulerHeartbeat;
+    } catch {
+      return null;
+    }
+  }
+
   clearHeartbeat() {
     try {
       if (fs.existsSync(this.getHeartbeatPath())) {
         fs.unlinkSync(this.getHeartbeatPath());
       }
     } catch {}
+  }
+
+  private markOrphanedCronManifestsCrashed(runId?: string): number {
+    const dirs = Array.from(
+      new Set(
+        [
+          this.supervisor?.checkpointDirectory,
+          path.join(this.workspaceDir, ".agent/checkpoints"),
+        ].filter((d): d is string => Boolean(d))
+      )
+    );
+    let updatedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir)) continue;
+      let files: string[] = [];
+      try {
+        files = fs.readdirSync(dir).filter((f) => f.endsWith("-checkpoint.json"));
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        const filePath = path.join(dir, file);
+        try {
+          const manifest = JSON.parse(fs.readFileSync(filePath, "utf8")) as TaskManifest;
+          const isCronManifest =
+            (runId !== undefined && manifest.taskId === runId) ||
+            (typeof manifest.branchName === "string" &&
+              manifest.branchName.startsWith("feat/sched-")) ||
+            (typeof manifest.taskId === "string" && manifest.taskId.startsWith("run-"));
+          if (manifest.status === "active" && isCronManifest) {
+            manifest.status = "crashed";
+            manifest.parkedReason = manifest.parkedReason || "Interrupted by scheduler restart";
+            manifest.updatedAt = nowIso;
+            fs.writeFileSync(filePath, JSON.stringify(manifest, null, 2), "utf8");
+            if (this.supervisor) {
+              try {
+                this.supervisor.syncTaskToRunLedger(manifest);
+              } catch {}
+            }
+            updatedCount += 1;
+          }
+        } catch {
+          // Ignore malformed checkpoint files
+        }
+      }
+    }
+    return updatedCount;
   }
 
   async checkCrashAndRecover(): Promise<{
@@ -307,6 +366,8 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
     try {
       const hb: SchedulerHeartbeat = JSON.parse(fs.readFileSync(hbPath, "utf8"));
       if (!hb.active) return { recovered: false };
+
+      this.markOrphanedCronManifestsCrashed(hb.runId);
 
       const schedules = this.loadSchedules();
       const sched = schedules.find((s) => s.id === hb.scheduleId);
