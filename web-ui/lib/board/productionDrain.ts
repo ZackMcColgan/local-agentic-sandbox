@@ -398,8 +398,17 @@ export function evaluateSettledThreadOutcome(params: {
     }
   }
 
-  if ((response && !response.ok) || thread?.status === "failed" || thread?.status === "stopped") {
-    const reason = extractTurnFailureReason(thread, threadId, response);
+  // Fail closed unless the HTTP dispatch succeeded (or was omitted) AND the
+  // settled thread exists with terminal status "completed".
+  if ((response && !response.ok) || !thread || thread.status !== "completed") {
+    const reason =
+      response && !response.ok
+        ? extractTurnFailureReason(thread, threadId, response)
+        : !thread
+          ? "Thread missing at settlement"
+          : thread.status === "failed" || thread.status === "stopped"
+            ? extractTurnFailureReason(thread, threadId, response)
+            : `Unexpected thread status '${thread.status}'`;
     const autoFixable = isStaleGitLockFailure(reason);
     return {
       status: "failed",
