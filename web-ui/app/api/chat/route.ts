@@ -379,6 +379,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
       turnMicroElisions: [],
       turnReadDedups: [],
       accumulatedThoughts: [],
+      inFlightThinking: "",
     };
 
     let explicitStopped = false;
@@ -399,6 +400,7 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
           turnSignalAborted: turnAbortController.signal.aborted,
           accumulatedStreamedTokens: turnState.accumulatedStreamedTokens,
           accumulatedThoughts: turnState.accumulatedThoughts,
+          inFlightThinking: turnState.inFlightThinking,
           traces: turnState.traces,
           activeModel: turnState.activeModel,
           requestedModel,

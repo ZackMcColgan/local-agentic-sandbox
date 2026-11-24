@@ -131,17 +131,17 @@ describe("CHAT-13 & CHAT-14 — Thinking panel survival across steering and refr
       const decoder = new TextDecoder();
       let gotThoughtEvent = false;
 
-      // Read until we see a thought event
+      // Read until we see a thinking delta or thought event
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const text = decoder.decode(value, { stream: true });
-        if (text.includes('"type":"thought"')) {
+        if (text.includes('"type":"thinking"') || text.includes('"type":"thought"')) {
           gotThoughtEvent = true;
           break;
         }
       }
-      assert.ok(gotThoughtEvent, "Must receive thought event from stream");
+      assert.ok(gotThoughtEvent, "Must receive thinking/thought event from stream");
 
       // Wait 1.1s for throttled stream snapshot to land on disk
       await new Promise((r) => setTimeout(r, 1200));

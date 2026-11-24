@@ -60,6 +60,16 @@ export class ThrottledStreamSnapshot {
   ) {}
 
   /**
+   * Returns true when a snapshot write is due (either forced or the throttle
+   * interval has elapsed). Callers check this before constructing cumulative
+   * thought strings or cloning segment arrays on hot token paths.
+   */
+  isDue(force?: boolean): boolean {
+    if (!this.threadId) return false;
+    return Boolean(force) || this.clock() - this.lastWriteMs >= this.intervalMs;
+  }
+
+  /**
    * Writes a snapshot of the accumulated streamed content, thinking, and executed tool
    * traces, throttled to at most one write per interval. Returns true when a write landed.
    *
@@ -81,34 +91,35 @@ export class ThrottledStreamSnapshot {
     }
   ): boolean {
     if (!this.threadId) return false;
+    const now = this.clock();
+    if (!opts?.force && now - this.lastWriteMs < this.intervalMs) return false;
     // qa-7: cache the round token record the moment a caller supplies it, so
     // every later snapshot carries it even when the caller passes content only.
-    if (Array.isArray(opts?.roundPromptTokens) && opts.roundPromptTokens.length > 0) {
-      this.lastRoundPromptTokens = [...opts.roundPromptTokens];
+    const roundPromptTokens = opts?.roundPromptTokens;
+    if (Array.isArray(roundPromptTokens) && roundPromptTokens.length > 0) {
+      this.lastRoundPromptTokens = [...roundPromptTokens];
     }
-    if (Array.isArray(opts?.roundGenerationMs) && opts.roundGenerationMs.length > 0) {
-      this.lastRoundGenerationMs = [...opts.roundGenerationMs];
+    const roundGenerationMs = opts?.roundGenerationMs;
+    if (Array.isArray(roundGenerationMs) && roundGenerationMs.length > 0) {
+      this.lastRoundGenerationMs = [...roundGenerationMs];
     }
-    if (
-      typeof opts?.outputTokens === "number" &&
-      Number.isFinite(opts.outputTokens) &&
-      opts.outputTokens > 0
-    ) {
-      this.lastOutputTokens = opts.outputTokens;
+    const outputTokens = opts?.outputTokens;
+    if (typeof outputTokens === "number" && Number.isFinite(outputTokens) && outputTokens > 0) {
+      this.lastOutputTokens = outputTokens;
     }
-    if (Array.isArray(opts?.thinkingSegments) && opts.thinkingSegments.length > 0) {
-      this.lastThinkingSegments = [...opts.thinkingSegments];
+    const thinkingSegments = opts?.thinkingSegments;
+    if (Array.isArray(thinkingSegments) && thinkingSegments.length > 0) {
+      this.lastThinkingSegments = [...thinkingSegments];
     }
-    if (Array.isArray(opts?.roundNarrations) && opts.roundNarrations.length > 0) {
-      this.lastRoundNarrations = [...opts.roundNarrations];
+    const roundNarrations = opts?.roundNarrations;
+    if (Array.isArray(roundNarrations) && roundNarrations.length > 0) {
+      this.lastRoundNarrations = [...roundNarrations];
     }
     const hasContent = Boolean(content && content.trim());
     const hasThought = Boolean(thought && thought.trim());
     const hasTraces = Array.isArray(traces) && traces.length > 0;
     const hasNarrations = Boolean(this.lastRoundNarrations && this.lastRoundNarrations.length > 0);
     if (!hasContent && !hasThought && !hasTraces && !hasNarrations) return false;
-    const now = this.clock();
-    if (!opts?.force && now - this.lastWriteMs < this.intervalMs) return false;
     this.lastWriteMs = now;
     this.sink.addMessage(this.threadId, {
       id: this.messageId,
