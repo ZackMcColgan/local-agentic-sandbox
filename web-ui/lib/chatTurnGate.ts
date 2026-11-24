@@ -56,9 +56,7 @@ export function serializeTurn(
   req: TurnGateRequest,
   opts: TurnGateOptions
 ): TurnGateHandle {
-  const effectiveWorkspaceKey = opts.repoRoot
-    ? undefined
-    : (opts.workspaceKey ?? req.workspaceKey);
+  const effectiveWorkspaceKey = opts.repoRoot ? undefined : (opts.workspaceKey ?? req.workspaceKey);
   const effectiveSharedWorkspace = opts.repoRoot
     ? undefined
     : (opts.sharedWorkspace ?? req.sharedWorkspace);
@@ -67,7 +65,9 @@ export function serializeTurn(
     ...req,
     ...(opts.priority !== undefined ? { priority: opts.priority } : {}),
     ...(effectiveWorkspaceKey !== undefined ? { workspaceKey: effectiveWorkspaceKey } : {}),
-    ...(effectiveSharedWorkspace !== undefined ? { sharedWorkspace: effectiveSharedWorkspace } : {}),
+    ...(effectiveSharedWorkspace !== undefined
+      ? { sharedWorkspace: effectiveSharedWorkspace }
+      : {}),
   });
 
   // Decide queue position BEFORE draining: a turn is "queued" only when

@@ -589,8 +589,7 @@ describe("slot scheduler overlap cap and workspace isolation (R1 + R5)", () => {
     // Abort-during-wait case: aborting while waiting to reacquire must still balance endOverlap()
     // and rethrow any error caught from fn().
     const abortQueue = new JobQueue();
-    const readAbortOverlap = () =>
-      (abortQueue as unknown as { overlapDepth: number }).overlapDepth;
+    const readAbortOverlap = () => (abortQueue as unknown as { overlapDepth: number }).overlapDepth;
     const acA = new AbortController();
     let signalBHolding!: () => void;
     const bHolding = new Promise<void>((r) => {
@@ -647,11 +646,7 @@ describe("slot scheduler overlap cap and workspace isolation (R1 + R5)", () => {
 
     acA.abort();
     await aDone;
-    assert.equal(
-      readAbortOverlap(),
-      0,
-      "overlapDepth must reset to 0 when reacquire aborts"
-    );
+    assert.equal(readAbortOverlap(), 0, "overlapDepth must reset to 0 when reacquire aborts");
     assert.match(
       caughtInA instanceof Error ? caughtInA.message : String(caughtInA),
       /tool-wait-error/,
@@ -752,7 +747,11 @@ describe("slot scheduler overlap cap and workspace isolation (R1 + R5)", () => {
     releaseA1End();
     await Promise.all([a1.settled, a2.settled, b1.settled]);
 
-    assert.equal(queue.snapshot().running, null, "snapshot().running must be null after all finish");
+    assert.equal(
+      queue.snapshot().running,
+      null,
+      "snapshot().running must be null after all finish"
+    );
     assert.ok(
       events.indexOf("start:B1") < events.indexOf("wait_end:A1"),
       `other-thread B1 should overlap A1 wait: ${JSON.stringify(events)}`
