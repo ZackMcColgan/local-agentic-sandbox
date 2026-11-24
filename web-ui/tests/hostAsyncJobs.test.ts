@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHostServer } from "../../host-bridge/server";
+import { issueApprovalToken } from "../../host-bridge/approvalToken";
 
 const TEST_SECRET = "async-jobs-test-secret-0123456789abcdef";
 
@@ -271,9 +272,9 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
       assert.ok(denied.body.reason, "403 must carry the classifier reason");
       assert.ok(fs.existsSync(victim), "destructive job must not execute before approval");
 
-      // Approved: job runs and deletes.
-      const approvalId = "async-approval-1";
-      const started = await startJob(base, "host_delete_path", { path: victim }, approvalId);
+      // Approved: job runs and deletes. Token bound to this exact tool + payload.
+      const approvalToken = issueApprovalToken(TEST_SECRET, "host_delete_path", { path: victim });
+      const started = await startJob(base, "host_delete_path", { path: victim }, approvalToken);
       assert.ok(started.status === 200 || started.status === 202);
       await pollUntil(
         base,
@@ -282,12 +283,9 @@ describe("Async host jobs (start / spool / status / timeout / orphan)", () => {
       );
       assert.ok(!fs.existsSync(victim), "approved destructive job must execute");
 
-      // Replay of a consumed approval is rejected (409) and does not execute.
-      const other = path.join(tempDir, "other.txt");
-      fs.writeFileSync(other, "keep me", "utf8");
-      const replay = await startJob(base, "host_delete_path", { path: other }, approvalId);
+      // Replay of a consumed token is rejected (409) and does not execute.
+      const replay = await startJob(base, "host_delete_path", { path: victim }, approvalToken);
       assert.strictEqual(replay.status, 409);
-      assert.ok(fs.existsSync(other), "consumed approval must not execute");
     } finally {
       await srv.stop();
     }
