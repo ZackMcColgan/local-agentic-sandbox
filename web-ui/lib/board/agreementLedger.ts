@@ -14,6 +14,8 @@ export interface AgreementLedgerEntry {
   driverVerdict: GateVerdict | null;
   agreed: boolean | null;
   reason?: string;
+  /** Wall-clock engine minutes spent evaluating this PR (HO-7). */
+  engineMinutes?: number;
   recordedAt: string;
   updatedAt: string;
 }
@@ -128,6 +130,9 @@ export class AgreementLedgerStore {
           agreed:
             entry.driverVerdict === null ? null : entry.reviewerVerdict === entry.driverVerdict,
           ...(typeof entry.reason === "string" ? { reason: entry.reason } : {}),
+          ...(typeof entry.engineMinutes === "number" && Number.isFinite(entry.engineMinutes)
+            ? { engineMinutes: entry.engineMinutes }
+            : {}),
           recordedAt:
             typeof entry.recordedAt === "string" ? entry.recordedAt : new Date(0).toISOString(),
           updatedAt:
@@ -157,16 +162,19 @@ export class AgreementLedgerStore {
     headSha: string;
     reviewerVerdict: GateVerdict;
     reason?: string;
+    engineMinutes?: number;
   }): PersistentAgreementLedger {
     const current = this.read();
     const nowIso = new Date().toISOString();
     const entries = [...current.entries];
-    const existingIndex = entries.findIndex((e) => e.prNumber === input.prNumber);
+    // HO-9: Key entries by (prNumber, headSha) so new commits on a PR do not overwrite prior SHA verdicts.
+    const existingIndex = entries.findIndex(
+      (e) => e.prNumber === input.prNumber && e.headSha === input.headSha
+    );
 
     if (existingIndex >= 0) {
       const prev = entries[existingIndex];
-      const sameHead = prev.headSha === input.headSha;
-      const driverVerdict = sameHead ? prev.driverVerdict : null;
+      const driverVerdict = prev.driverVerdict;
       entries[existingIndex] = {
         ...prev,
         headSha: input.headSha,
@@ -174,6 +182,7 @@ export class AgreementLedgerStore {
         driverVerdict,
         agreed: driverVerdict === null ? null : input.reviewerVerdict === driverVerdict,
         ...(input.reason !== undefined ? { reason: input.reason } : {}),
+        ...(input.engineMinutes !== undefined ? { engineMinutes: input.engineMinutes } : {}),
         updatedAt: nowIso,
       };
     } else {
@@ -184,6 +193,7 @@ export class AgreementLedgerStore {
         driverVerdict: null,
         agreed: null,
         ...(input.reason !== undefined ? { reason: input.reason } : {}),
+        ...(input.engineMinutes !== undefined ? { engineMinutes: input.engineMinutes } : {}),
         recordedAt: nowIso,
         updatedAt: nowIso,
       });
@@ -202,16 +212,38 @@ export class AgreementLedgerStore {
   }): PersistentAgreementLedger | null {
     const current = this.read();
     const entries = [...current.entries];
-    const existingIndex = entries.findIndex((e) => e.prNumber === input.prNumber);
-    if (existingIndex < 0) {
-      return null;
+    let existingIndex = -1;
+    if (typeof input.headSha === "string" && input.headSha.trim()) {
+      const targetSha = input.headSha.trim();
+      existingIndex = entries.findIndex(
+        (e) => e.prNumber === input.prNumber && e.headSha === targetSha
+      );
+      if (existingIndex < 0) {
+        const anyForPr = entries.find((e) => e.prNumber === input.prNumber);
+        if (anyForPr) {
+          throw new Error(
+            `headSha mismatch for PR #${input.prNumber}: expected '${anyForPr.headSha}', got '${targetSha}'`
+          );
+        }
+        return null;
+      }
+    } else {
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].prNumber === input.prNumber) {
+          existingIndex = i;
+          break;
+        }
+      }
+      if (existingIndex < 0) {
+        return null;
+      }
     }
 
     const nowIso = new Date().toISOString();
     const prev = entries[existingIndex];
     entries[existingIndex] = {
       ...prev,
-      headSha: input.headSha ?? prev.headSha,
+      headSha: prev.headSha,
       driverVerdict: input.driverVerdict,
       agreed: prev.reviewerVerdict === input.driverVerdict,
       ...(input.reason !== undefined ? { reason: input.reason } : {}),

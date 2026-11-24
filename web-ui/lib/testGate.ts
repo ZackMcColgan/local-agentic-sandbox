@@ -1158,6 +1158,18 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/shakeoutFixes.test.ts",
     ],
   },
+  {
+    match: (p) =>
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("lib/board/reviewerAuditEvaluate") ||
+      p.includes("lib/board/flowMonitor") ||
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("lib/deploy/selfDeployVerified") ||
+      p.includes("app/api/sandbox-status/route") ||
+      p.includes("handoverPrereqsBatch6.test.ts"),
+    tests: ["tests/handoverPrereqsBatch6.test.ts"],
+  },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
