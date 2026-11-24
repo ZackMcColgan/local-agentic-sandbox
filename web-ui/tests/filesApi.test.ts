@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import { GET } from "../app/api/files/route.js";
 import { NextRequest } from "next/server";
+import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
 async function withTempWorkspace(fn: (workspaceDir: string) => Promise<void>): Promise<void> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "filesapi-ws-"));
@@ -13,6 +14,7 @@ async function withTempWorkspace(fn: (workspaceDir: string) => Promise<void>): P
   try {
     await fn(tmpDir);
   } finally {
+    closeSharedRunLedger();
     if (prevWs !== undefined) {
       process.env.WORKSPACE_DIR = prevWs;
     } else {

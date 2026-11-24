@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync, quarantineCorruptFile } from "./fsAtomic";
 import { resolveSettingsDir } from "./notifications";
 import { getHostRunnerBaseUrl } from "./hostMode";
 
@@ -91,8 +92,15 @@ export function getHostSettings(): HostSettings {
       settings: parsed,
     };
     return cloneHostSettings(parsed);
-  } catch {
+  } catch (err) {
     hostSettingsCache = null;
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code !== "ENOENT") {
+      quarantineCorruptFile(
+        path.resolve(getHostSettingsFilePath()),
+        err instanceof Error ? err.message : "corrupt host-settings.json"
+      );
+    }
   }
 
   return defaultHostSettings();
@@ -110,11 +118,7 @@ export function setHostSettings(updates: Partial<HostSettings>): HostSettings {
 
   try {
     const filePath = getHostSettingsFilePath();
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, JSON.stringify(next, null, 2) + "\n", "utf8");
+    atomicWriteFileSync(filePath, JSON.stringify(next, null, 2) + "\n", 0o660);
   } catch {}
 
   resetHostSettingsCache();

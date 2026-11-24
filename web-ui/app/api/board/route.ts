@@ -17,9 +17,12 @@ export async function GET() {
     const flowMonitorObservations = isFlowMonitorObserveEnabled()
       ? getFlowMonitorObservations()
       : undefined;
-    return NextResponse.json(
-      flowMonitorObservations ? { items, flowMonitorObservations } : { items }
-    );
+    const quarantinedFile = store.getLastQuarantinePath();
+    return NextResponse.json({
+      items,
+      ...(flowMonitorObservations ? { flowMonitorObservations } : {}),
+      ...(quarantinedFile ? { quarantinedFile } : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load board";
     return NextResponse.json({ error: message }, { status: 500 });

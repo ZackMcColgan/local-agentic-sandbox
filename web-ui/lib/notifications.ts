@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync } from "./fsAtomic";
 import { resolveThreadsDir } from "./threads/threadStore";
 
 export interface TelegramConfig {
@@ -80,24 +81,10 @@ export function savePersistedNotificationSettings(
     ...patch,
   };
 
-  const dir = resolveSettingsDir();
   try {
-    fs.mkdirSync(dir, { recursive: true });
     const targetFile = getNotificationSettingsFilePath();
-    const tmpFile = path.join(
-      dir,
-      `.notifications.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
-    );
     const content = JSON.stringify(updated, null, 2);
-    try {
-      fs.writeFileSync(tmpFile, content, "utf8");
-      fs.renameSync(tmpFile, targetFile);
-    } catch {
-      fs.writeFileSync(targetFile, content, "utf8");
-      try {
-        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
-      } catch {}
-    }
+    atomicWriteFileSync(targetFile, content, 0o660);
   } catch {
     // Non-fatal persistence error fallback
   }

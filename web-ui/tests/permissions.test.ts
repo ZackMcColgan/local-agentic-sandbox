@@ -118,57 +118,27 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
     const targetThreadsDir = path.join(tempDir!, "threads_runtime_file");
     fs.mkdirSync(targetThreadsDir, { recursive: true, mode: 0o770 });
 
-    const origWriteFileSync = fs.writeFileSync;
-    const writeCalls: Array<{ path: string; options?: fs.WriteFileOptions }> = [];
+    const store = new ThreadStore(targetThreadsDir);
+    const thread = store.createThread({
+      title: "Test Hardened Thread",
+      initialPrompt: "Testing file mode 0660",
+    });
 
-    try {
-      const fsMutable = fs as unknown as { writeFileSync: typeof fs.writeFileSync };
-      fsMutable.writeFileSync = ((
-        p: fs.PathOrFileDescriptor,
-        data: string | NodeJS.ArrayBufferView,
-        opt?: fs.WriteFileOptions
-      ) => {
-        writeCalls.push({ path: String(p), options: opt });
-        return origWriteFileSync(p, data, opt);
-      }) as typeof fs.writeFileSync;
+    assert.ok(thread && thread.id);
+    const filePath = store.getFilePath(thread.id);
+    assert.ok(fs.existsSync(filePath), "Thread file should exist");
 
-      const store = new ThreadStore(targetThreadsDir);
-      const thread = store.createThread({
-        title: "Test Hardened Thread",
-        initialPrompt: "Testing file mode 0660",
-      });
-
-      assert.ok(thread && thread.id);
-      const filePath = store.getFilePath(thread.id);
-      assert.ok(fs.existsSync(filePath), "Thread file should exist");
-
-      // Verify writeFileSync calls used mode 0o660
-      const threadWrites = writeCalls.filter((c) => c.path.includes(thread.id));
-      assert.ok(threadWrites.length > 0, "Expected writeFileSync calls for thread");
-      for (const call of threadWrites) {
-        assert.ok(
-          call.options && typeof call.options === "object",
-          `writeFileSync options should be an object (got ${typeof call.options})`
-        );
-        assert.strictEqual(
-          (call.options as fs.ObjectEncodingOptions & { mode?: fs.Mode }).mode,
-          0o660,
-          `writeFileSync must be called with mode 0o660 on ${call.path}`
-        );
-      }
-
-      // On POSIX systems, check actual filesystem mode
-      if (process.platform !== "win32") {
-        const stat = fs.statSync(filePath);
-        const mode = stat.mode & 0o777;
-        assert.strictEqual(
-          mode & 0o007,
-          0,
-          `File ${filePath} must have zero world permissions (got ${mode.toString(8)})`
-        );
-      }
-    } finally {
-      fs.writeFileSync = origWriteFileSync;
+    // Behavioral check: the saved file on disk carries mode 0660, however the
+    // store wrote it (direct write or atomic temp+rename). The contract is the
+    // file's permissions, not the write mechanism.
+    if (process.platform !== "win32") {
+      const stat = fs.statSync(filePath);
+      const mode = stat.mode & 0o777;
+      assert.strictEqual(
+        mode,
+        0o660,
+        `File ${filePath} must have mode 0660 (got ${mode.toString(8)})`
+      );
     }
   });
 
