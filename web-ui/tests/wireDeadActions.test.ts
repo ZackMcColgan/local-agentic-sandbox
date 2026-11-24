@@ -9,12 +9,7 @@ import { ThreadStore, Thread } from "../lib/threads/threadStore";
 import { POST as postThreadAction } from "../app/api/threads/[id]/route";
 import { POST as postThreadCompact } from "../app/api/threads/[id]/compact/route";
 import { POST as postProjectTask } from "../app/api/projects/[id]/tasks/route";
-import {
-  registerProject,
-  getProject,
-  getProjectTask,
-  listProjectTasks,
-} from "../lib/projects/projectStore";
+import { registerProject, getProject, listProjectTasks } from "../lib/projects/projectStore";
 import { runGit } from "../lib/projects/projectGit";
 import {
   cancelActiveProjectTasks,
