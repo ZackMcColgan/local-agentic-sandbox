@@ -716,7 +716,7 @@ export function formatMorningReportMarkdown(report: MorningReport): string {
       lines.push(`- **Judgment Call**: ${flag.judgmentCall}`);
       lines.push(`- **Reasoning**: ${flag.reasoning}`);
       lines.push(`- **Revert Action**: \`${flag.revertAction.type} ${flag.revertAction.target}\``);
-      lines.push(`- **Reviewed**: ${flag.reviewed ? "✅ Yes" : "⏳ Pending Zack's Review"}`);
+      lines.push(`- **Reviewed**: ${flag.reviewed ? "✅ Yes" : "⏳ Pending Owner Review"}`);
       lines.push("");
     }
   }

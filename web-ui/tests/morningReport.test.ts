@@ -54,7 +54,7 @@ describe("Phase 1 — Morning Report Suite", () => {
         question:
           "Should the draw.io architecture diagram default to white background or dark canvas?",
         judgmentCall:
-          "Selected crisp white (#ffffff) background per Zack's standing UI & visual inspection rule.",
+          "Selected crisp white (#ffffff) background per the Owner's standing UI & visual inspection rule.",
         reasoning:
           "Rule 2.A specifies Light Mode Purity / white background for diagrams linked to root README.",
         revertAction: {

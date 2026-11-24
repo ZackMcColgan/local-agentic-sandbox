@@ -225,7 +225,7 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
 
     assert.equal(pool.getActiveWorkerCount(), 1);
 
-    // Zack hits stop on mobile
+    // The Owner hits stop on mobile
     controller.abort();
     await workerPromise;
 
@@ -345,7 +345,7 @@ describe("Phase 1 Acceptance — Dogfood Task Suite", () => {
           milestoneId: "M2",
           question: "Should draw.io canvas default to pure white (#ffffff) or dark canvas?",
           judgmentCall:
-            "Selected pure white (#ffffff) per Zack's standing UI & visual inspection rule.",
+            "Selected pure white (#ffffff) per the Owner's standing UI & visual inspection rule.",
           reasoning:
             "Rule 2.A specifies Light Mode Purity / white background for diagrams linked to root README.",
           revertAction: {

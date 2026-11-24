@@ -7,7 +7,7 @@ import { assembleSystemPrompt, OWNER_MEMORY_HEADER } from "../lib/memory/operato
 describe("Settings Memory — system-prompt injection", () => {
   const BASE = "SYSTEM_PROMPT_TEXT";
   const PROFILE =
-    "\n--- USER PROFILE & DURABLE PREFERENCES ---\n- preferred_name: Zack\n--- END USER PROFILE ---\n";
+    "\n--- USER PROFILE & DURABLE PREFERENCES ---\n- preferred_name: Alex\n--- END USER PROFILE ---\n";
   const EFFORT = "\n\nREASONING EFFORT: BALANCED.";
   const HOST = "\n\n[HOST ACCESS: READY]";
 

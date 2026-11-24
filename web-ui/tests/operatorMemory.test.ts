@@ -160,16 +160,16 @@ describe("Settings Memory — API route GET/PUT", () => {
     const res = await PUT(
       new Request("http://localhost/api/settings/memory", {
         method: "PUT",
-        body: JSON.stringify({ text: "zack's facts" }),
+        body: JSON.stringify({ text: "owner's facts" }),
       })
     );
     assert.equal(res.status, 200);
     const json = await res.json();
-    assert.equal(json.text, "zack's facts");
+    assert.equal(json.text, "owner's facts");
 
     const { GET } = await import("../app/api/settings/memory/route.js");
     const again = await (await GET()).json();
-    assert.equal(again.text, "zack's facts");
+    assert.equal(again.text, "owner's facts");
   });
 
   it("PUT with 2001 chars is rejected server-side with 400", async () => {

@@ -15,7 +15,7 @@ test.describe("Layout Invariants & Visual Baselines", () => {
   });
 
   test("Navigation Drawer (Open) — layout invariants and baseline", async ({ page, isMobile }) => {
-    test.skip(!isMobile, "Navigation Drawer is a mobile-only Gemini navigation pattern");
+    test.skip(!isMobile, "Navigation Drawer is a mobile-only navigation pattern");
     await page.goto("/");
     await page.waitForSelector("header");
 

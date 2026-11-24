@@ -9,7 +9,7 @@ const tests = [
     id: "Q2",
     name: "Instruction following",
     prompt:
-      'Reply with ONLY this JSON, no other text: {"name": "Zack", "role": "engineer", "remote": true}',
+      'Reply with ONLY this JSON, no other text: {"name": "Alex", "role": "engineer", "remote": true}',
   },
   {
     id: "Q3",
