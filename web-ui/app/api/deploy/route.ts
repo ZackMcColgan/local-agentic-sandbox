@@ -80,13 +80,72 @@ export async function POST(req: NextRequest) {
       const deploymentUrl =
         dryRunUrl || process.env.DEPLOY_URL || `http://${hostAddress}:${deployPort}`;
 
+      const pipeline = new SelfDeployPipeline();
+      const deployHistory = pipeline.getDeployHistory();
+      const matchingDeploy = deployHistory.find(
+        (d) => d.branchName === task.branchName || d.deployId === task.taskId
+      );
+
+      let healthStatus = 0;
+      let healthOk = false;
+      let verificationError: string | undefined;
+
+      try {
+        const probeRes = await fetch(deploymentUrl, {
+          signal: AbortSignal.timeout(5000),
+        });
+        healthStatus = probeRes.status;
+        healthOk = probeRes.status >= 200 && probeRes.status < 400;
+        if (!healthOk) {
+          verificationError = `Deployment preview health check returned HTTP ${probeRes.status} at ${deploymentUrl}`;
+        }
+      } catch (probeErr: unknown) {
+        healthStatus = 503;
+        healthOk = false;
+        const msg = probeErr instanceof Error ? probeErr.message : String(probeErr);
+        verificationError = `Deployment preview unreachable at ${deploymentUrl}: ${msg}`;
+      }
+
+      if (matchingDeploy && matchingDeploy.status !== "deployed") {
+        healthOk = false;
+        verificationError =
+          matchingDeploy.errorMessage ||
+          `Latest deploy record for '${task.branchName}' has status '${matchingDeploy.status}'`;
+      }
+
+      if (!healthOk) {
+        task.updatedAt = new Date().toISOString();
+        task.journal.push({
+          timestamp: task.updatedAt,
+          role: "supervisor",
+          message: `Build deploy verification failed for namespace '${deploymentNamespace}' at ${deploymentUrl}: ${verificationError}`,
+        });
+        supervisor.saveCheckpoint(task);
+
+        return NextResponse.json(
+          {
+            success: false,
+            taskId,
+            deploymentUrl,
+            deploymentNamespace,
+            deployStatus: matchingDeploy?.status && matchingDeploy.status !== "deployed"
+              ? matchingDeploy.status
+              : "failed",
+            healthStatus,
+            rollbackStatus: matchingDeploy?.rollbackStatus || "none",
+            error: verificationError || "Deployment verification failed",
+          },
+          { status: 502 }
+        );
+      }
+
       task.deploymentUrl = deploymentUrl;
       task.deploymentNamespace = deploymentNamespace;
       task.updatedAt = new Date().toISOString();
       task.journal.push({
-        timestamp: new Date().toISOString(),
+        timestamp: task.updatedAt,
         role: "supervisor",
-        message: `Deployed build preview to namespace '${deploymentNamespace}' at ${deploymentUrl}`,
+        message: `Verified build preview in namespace '${deploymentNamespace}' at ${deploymentUrl} (HTTP ${healthStatus})`,
       });
 
       supervisor.saveCheckpoint(task);
@@ -103,19 +162,14 @@ export async function POST(req: NextRequest) {
         } catch {}
       }
 
-      const pipeline = new SelfDeployPipeline();
-      const deployHistory = pipeline.getDeployHistory();
-      const latestDeploy =
-        deployHistory.find((d) => d.branchName === task.branchName || d.deployId === task.taskId) ||
-        deployHistory[0];
-
       return NextResponse.json({
         success: true,
         taskId,
         deploymentUrl,
         deploymentNamespace,
-        deployStatus: latestDeploy?.status || "deployed",
-        rollbackStatus: latestDeploy?.rollbackStatus || "none",
+        deployStatus: "deployed",
+        healthStatus,
+        rollbackStatus: matchingDeploy?.rollbackStatus || "none",
       });
     }
 
