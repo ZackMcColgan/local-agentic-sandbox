@@ -31,6 +31,33 @@ import {
   type Thread,
 } from "../lib/threads/threadStore";
 
+// Same teardown race as threadStoreCheapSweep.test.ts: a file that appears
+// during the recursive delete defeats one rmSync's built-in retries under
+// loaded CI runners, so re-attempt the whole delete for up to ~10s and name
+// the leftovers on final failure instead of throwing a bare ENOTEMPTY.
+function removeTempDirWithRetries(dir: string): void {
+  const deadline = Date.now() + 10_000;
+  let lastError: unknown = null;
+  let leftovers = "<unreadable>";
+  while (Date.now() < deadline) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      return;
+    } catch (err) {
+      lastError = err;
+      try {
+        leftovers = fs.readdirSync(dir).join(", ") || "<empty>";
+      } catch {
+        leftovers = "<unreadable>";
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    }
+  }
+  throw new Error(
+    `removeTempDirWithRetries failed for ${dir} (leftovers: ${leftovers}): ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 function makeTempEnv(): {
   rootDir: string;
   boardDir: string;
@@ -65,7 +92,7 @@ function makeTempEnv(): {
       else process.env.THREADS_DIR = prevThreadsDir;
       if (prevCheckpointDir === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
       else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointDir;
-      fs.rmSync(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTempDirWithRetries(rootDir);
     },
   };
 }
