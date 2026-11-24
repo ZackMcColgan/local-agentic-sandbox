@@ -1155,6 +1155,21 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/shakeoutFixes.test.ts",
     ],
   },
+  {
+    match: (p) =>
+      p.includes("lib/fsAtomic") ||
+      p.includes("lib/ledger/sqliteConfig") ||
+      p.includes("lib/board/boardStore") ||
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/ledger/runLedger") ||
+      p.includes("lib/flywheel/skillsStore") ||
+      p.includes("lib/hostSettings") ||
+      p.includes("lib/subagents/checkpointSaver") ||
+      p.includes("lib/subagents/skillGate") ||
+      p.includes("dataDurability.test.ts"),
+    tests: ["tests/dataDurability.test.ts"],
+  },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
