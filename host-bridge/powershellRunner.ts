@@ -13,6 +13,7 @@ const POWERSHELL_WRAPPER_SCRIPT = [
   "  $__hostPsLastOk = $?",
   "} catch {",
   "  if ($_.FullyQualifiedErrorId -eq 'NativeCommandError') {",
+  "    $__hostPsHadTerminatingError = $true",
   "    [Console]::Error.WriteLine($_.Exception.Message)",
   "  } else {",
   "    $__hostPsHadTerminatingError = $true",

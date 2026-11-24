@@ -1158,6 +1158,17 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/shakeoutFixes.test.ts",
     ],
   },
+  {
+    match: (p) =>
+      p.includes("host-bridge/powershellRunner") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("lib/board/boardControlStore") ||
+      p.includes("lib/jobQueue") ||
+      p.includes("lib/chatTurnGate") ||
+      p.includes("runtimeCorrectnessBatch5.test.ts"),
+    tests: ["tests/runtimeCorrectnessBatch5.test.ts"],
+  },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),

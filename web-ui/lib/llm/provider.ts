@@ -155,27 +155,32 @@ export class OllamaProvider implements LLMProvider {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let streamDone = false;
+    let abortListener: (() => void) | undefined;
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+          if (signal.aborted) {
+            reject(new DOMException("The operation was aborted", "AbortError"));
+            return;
+          }
+          abortListener = () => reject(new DOMException("The operation was aborted", "AbortError"));
+          signal.addEventListener("abort", abortListener, { once: true });
+        })
+      : null;
+    abortPromise?.catch(() => {});
 
     try {
       while (true) {
         if (signal?.aborted) {
           throw new DOMException("The operation was aborted", "AbortError");
         }
-        const { done, value } = await (signal
-          ? Promise.race([
-              reader.read(),
-              new Promise<never>((_, reject) => {
-                if (signal.aborted) {
-                  reject(new DOMException("The operation was aborted", "AbortError"));
-                  return;
-                }
-                const onAbort = () =>
-                  reject(new DOMException("The operation was aborted", "AbortError"));
-                signal.addEventListener("abort", onAbort, { once: true });
-              }),
-            ])
+        const { done, value } = await (abortPromise
+          ? Promise.race([reader.read(), abortPromise])
           : reader.read());
-        if (done) break;
+        if (done) {
+          streamDone = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
@@ -197,6 +202,14 @@ export class OllamaProvider implements LLMProvider {
         } catch {}
       }
     } finally {
+      if (signal && abortListener) {
+        signal.removeEventListener("abort", abortListener);
+      }
+      if (!streamDone) {
+        try {
+          await reader.cancel();
+        } catch {}
+      }
       reader.releaseLock();
     }
   }
@@ -692,27 +705,32 @@ export class LlamaCppProvider implements LLMProvider {
     > = new Map();
 
     let insideThinking = false;
+    let streamDone = false;
+    let abortListener: (() => void) | undefined;
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+          if (signal.aborted) {
+            reject(new DOMException("The operation was aborted", "AbortError"));
+            return;
+          }
+          abortListener = () => reject(new DOMException("The operation was aborted", "AbortError"));
+          signal.addEventListener("abort", abortListener, { once: true });
+        })
+      : null;
+    abortPromise?.catch(() => {});
 
     try {
       while (true) {
         if (signal?.aborted) {
           throw new DOMException("The operation was aborted", "AbortError");
         }
-        const { done, value } = await (signal
-          ? Promise.race([
-              reader.read(),
-              new Promise<never>((_, reject) => {
-                if (signal.aborted) {
-                  reject(new DOMException("The operation was aborted", "AbortError"));
-                  return;
-                }
-                const onAbort = () =>
-                  reject(new DOMException("The operation was aborted", "AbortError"));
-                signal.addEventListener("abort", onAbort, { once: true });
-              }),
-            ])
+        const { done, value } = await (abortPromise
+          ? Promise.race([reader.read(), abortPromise])
           : reader.read());
-        if (done) break;
+        if (done) {
+          streamDone = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
@@ -966,6 +984,14 @@ export class LlamaCppProvider implements LLMProvider {
         yield { done: true };
       }
     } finally {
+      if (signal && abortListener) {
+        signal.removeEventListener("abort", abortListener);
+      }
+      if (!streamDone) {
+        try {
+          await reader.cancel();
+        } catch {}
+      }
       reader.releaseLock();
     }
   }
@@ -1163,16 +1189,36 @@ export class LlamaCppProvider implements LLMProvider {
 
             const content = choice.delta?.content;
             if (content) {
-              accumulatedText += content;
-              if (content.includes("<think>")) insideThinking = true;
-              if (insideThinking && !content.includes("</think>")) {
-                thinkingText += content;
-                req.onThinkingChunk?.(content, thinkingText);
-              } else if (insideThinking && content.includes("</think>")) {
-                const [beforeClosing] = content.split("</think>");
-                thinkingText += beforeClosing || "";
-                insideThinking = false;
-                if (beforeClosing) req.onThinkingChunk?.(beforeClosing, thinkingText);
+              let remaining = content;
+              while (remaining.length > 0) {
+                if (!insideThinking) {
+                  const openIdx = remaining.indexOf("<think>");
+                  if (openIdx === -1) {
+                    accumulatedText += remaining;
+                    remaining = "";
+                  } else {
+                    if (openIdx > 0) {
+                      accumulatedText += remaining.slice(0, openIdx);
+                    }
+                    insideThinking = true;
+                    remaining = remaining.slice(openIdx + "<think>".length);
+                  }
+                } else {
+                  const closeIdx = remaining.indexOf("</think>");
+                  if (closeIdx === -1) {
+                    thinkingText += remaining;
+                    req.onThinkingChunk?.(remaining, thinkingText);
+                    remaining = "";
+                  } else {
+                    const beforeClose = remaining.slice(0, closeIdx);
+                    if (beforeClose) {
+                      thinkingText += beforeClose;
+                      req.onThinkingChunk?.(beforeClose, thinkingText);
+                    }
+                    insideThinking = false;
+                    remaining = remaining.slice(closeIdx + "</think>".length);
+                  }
+                }
               }
             }
           }

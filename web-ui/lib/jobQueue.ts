@@ -38,6 +38,7 @@ export class JobQueue {
   private pending: QueuedJob[] = [];
   private tail: Promise<void> = Promise.resolve();
   private jobExecutors = new WeakMap<QueuedJob, (job: QueuedJob) => Promise<void>>();
+  private jobSettled = new Map<string, { promise: Promise<void>; resolve: () => void }>();
   /**
    * Board #129 Perf P5-B: count of running jobs currently inside a RELEASED
    * engine-slot wait phase (lease.releaseForWait). While > 0 the active drain
@@ -91,7 +92,27 @@ export class JobQueue {
     }
     this.pending.splice(insertIdx, 0, job);
     this.recomputePositions();
+    if (!this.jobSettled.has(job.id)) {
+      let resolveFn!: () => void;
+      const promise = new Promise<void>((resolve) => {
+        resolveFn = resolve;
+      });
+      this.jobSettled.set(job.id, { promise, resolve: resolveFn });
+    }
     return job;
+  }
+
+  /** Resolves as soon as this specific job finishes (or immediately if already settled/unknown). */
+  waitForJob(jobId: string): Promise<void> {
+    return this.jobSettled.get(jobId)?.promise ?? Promise.resolve();
+  }
+
+  private resolveJobSettled(jobId: string): void {
+    const entry = this.jobSettled.get(jobId);
+    if (entry) {
+      this.jobSettled.delete(jobId);
+      entry.resolve();
+    }
   }
 
   private recomputePositions(): void {
@@ -184,6 +205,7 @@ export class JobQueue {
               job.status = "failed";
             } finally {
               this.activeJobs.delete(job);
+              this.resolveJobSettled(job.id);
               pump();
             }
           })();
@@ -211,6 +233,7 @@ export function submitJob(
 ) {
   const job = queue.enqueue(req);
   const snapshot = queue.snapshot();
-  const settled = queue.drain(executor);
+  void queue.drain(executor);
+  const settled = queue.waitForJob(job.id);
   return { job, snapshot, settled };
 }
