@@ -162,7 +162,7 @@ test.describe("Monster-prompt single-call intake on mobile viewport", () => {
 
     await expect(page.getByRole("dialog", { name: "Add to the board" })).toHaveCount(0);
     expect(confirmCalls).toBe(1);
-    await expect(page.getByText("Add intake validator")).toBeVisible();
-    await expect(page.getByText("Wire mobile confirm sheet")).toBeVisible();
+    await expect(page.getByText("Add intake validator").first()).toBeVisible();
+    await expect(page.getByText("Wire mobile confirm sheet").first()).toBeVisible();
   });
 });
