@@ -41,7 +41,7 @@ export function resolveRealConfinedPath(
 ): string {
   if (userPath.includes("..")) {
     throw new Error(
-      `Security Violation: Path traversal outside workspace is forbidden (${userPath})`
+      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
     );
   }
   const normalized = path.normalize(userPath).replace(/^(\/|\\)+/, "");
@@ -53,7 +53,7 @@ export function resolveRealConfinedPath(
 
   if (!isStrictlyInsideRoot(rootResolved, resolved)) {
     throw new Error(
-      `Security Violation: Path traversal outside workspace is forbidden (${userPath})`
+      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
     );
   }
 
@@ -77,12 +77,12 @@ export function resolveRealConfinedPath(
       canonicalTarget = fs.realpathSync(resolved);
     } catch {
       throw new Error(
-        `Security Violation: Symlink escape outside workspace is forbidden (${userPath})`
+        `Security Violation: Symlink escape outside /workspace is forbidden (${userPath})`
       );
     }
     if (!isStrictlyInsideRoot(canonicalRoot, canonicalTarget)) {
       throw new Error(
-        `Security Violation: Symlink escape outside workspace is forbidden (${userPath})`
+        `Security Violation: Symlink escape outside /workspace is forbidden (${userPath})`
       );
     }
     return canonicalTarget;
@@ -103,20 +103,20 @@ export function resolveRealConfinedPath(
     canonicalAncestor = fs.realpathSync(probe);
   } catch {
     throw new Error(
-      `Security Violation: Symlink escape outside workspace is forbidden (${userPath})`
+      `Security Violation: Symlink escape outside /workspace is forbidden (${userPath})`
     );
   }
 
   if (!isStrictlyInsideRoot(canonicalRoot, canonicalAncestor)) {
     throw new Error(
-      `Security Violation: Symlink escape outside workspace is forbidden (${userPath})`
+      `Security Violation: Symlink escape outside /workspace is forbidden (${userPath})`
     );
   }
 
   const finalPath = path.resolve(canonicalAncestor, ...missingSegments);
   if (!isStrictlyInsideRoot(canonicalRoot, finalPath)) {
     throw new Error(
-      `Security Violation: Path traversal outside workspace is forbidden (${userPath})`
+      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
     );
   }
   return finalPath;
