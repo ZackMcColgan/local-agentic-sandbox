@@ -42,13 +42,13 @@ console.log("[Phase C] Running Behavioral Acceptance Experiments 1–5...");
 console.log(`[Phase C] Using temporary profile: ${profilePath}`);
 
 // Experiment 1: Two-session memory
-// Session A: user states "only call me Zack" -> recorded
-// Session B: new process, same profile -> loads "Zack" unprompted
+// Session A: user states "only call me Alex" -> recorded
+// Session B: new process, same profile -> loads "Alex" unprompted
 console.log("\n--- Experiment 1: Two-session memory across isolated processes ---");
 const sessionA_Id = "session_A_" + Date.now();
 const sessionA_Code = `
 import { extractDurablePreferences, recordProfileEntry } from "${profileModulePath}";
-const extracted = extractDurablePreferences("Hello, please only call me Zack from now on.", "${sessionA_Id}");
+const extracted = extractDurablePreferences("Hello, please only call me Alex from now on.", "${sessionA_Id}");
 for (const pref of extracted) {
   recordProfileEntry(pref.key, pref.value, { sessionId: "${sessionA_Id}", origin: pref.origin });
 }
@@ -59,13 +59,13 @@ runSnippet(sessionA_Code, { USER_PROFILE_PATH: profilePath });
 const sessionB_Code = `
 import { loadUserProfile, formatProfileForContext } from "${profileModulePath}";
 const profile = loadUserProfile();
-if (profile.entries["preferred_name"]?.value !== "Zack") {
-  console.error("Session B failed to find preferred_name Zack");
+if (profile.entries["preferred_name"]?.value !== "Alex") {
+  console.error("Session B failed to find preferred_name Alex");
   process.exit(1);
 }
 const context = formatProfileForContext(profile);
-if (!context.includes("Always address the user as 'Zack'")) {
-  console.error("Session B context does not include Zack");
+if (!context.includes("Always address the user as 'Alex'")) {
+  console.error("Session B context does not include Alex");
   process.exit(1);
 }
 console.log("Session B unprompted memory context verified:", context.trim());
@@ -149,30 +149,30 @@ console.log("\n--- Experiment 5: Correction tracking & history retention ---");
 const corrProfilePath = path.join(tempDir, "correction_profile.json");
 const pCode = `
 import { recordProfileEntry } from "${profileModulePath}";
-recordProfileEntry("preferred_name", "Zachary", { sessionId: "sess_p", origin: "user-stated" });
+recordProfileEntry("preferred_name", "Xavier", { sessionId: "sess_p", origin: "user-stated" });
 `;
 runSnippet(pCode, { USER_PROFILE_PATH: corrProfilePath });
 
 const qCode = `
 import { recordProfileEntry } from "${profileModulePath}";
-recordProfileEntry("preferred_name", "Zack", { sessionId: "sess_q", origin: "corrected" });
+recordProfileEntry("preferred_name", "Alden", { sessionId: "sess_q", origin: "corrected" });
 `;
 runSnippet(qCode, { USER_PROFILE_PATH: corrProfilePath });
 
 const corrLoaded = JSON.parse(fs.readFileSync(corrProfilePath, "utf8"));
 const corrEntry = corrLoaded.entries["preferred_name"];
-assert.equal(corrEntry.value, "Zack", "Current value must be Q ('Zack')");
+assert.equal(corrEntry.value, "Alden", "Current value must be Q ('Alden')");
 assert.equal(corrEntry.origin, "corrected", "Current origin must be corrected");
 assert.equal(corrEntry.sourceSessionId, "sess_q", "Current session ID must be sess_q");
 assert.equal(corrEntry.history.length, 1, "History must retain prior value");
-assert.equal(corrEntry.history[0].value, "Zachary", "History prior value must be P ('Zachary')");
+assert.equal(corrEntry.history[0].value, "Xavier", "History prior value must be P ('Xavier')");
 assert.equal(
   corrEntry.history[0].sourceSessionId,
   "sess_p",
   "History sourceSessionId must be sess_p"
 );
 console.log(
-  `✅ Experiment 5 PASSED: Current value 'Zack', prior value 'Zachary' preserved in history.`
+  `✅ Experiment 5 PASSED: Current value 'Alden', prior value 'Zachary' preserved in history.`
 );
 
 // Cleanup
