@@ -741,7 +741,7 @@ export function LiveRunBlock({
                   </span>
                 </button>
                 {isExpanded && trace.args && (
-                  <pre className="px-3.5 py-2 border-t border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 overflow-x-auto whitespace-pre-wrap">
+                  <pre className="px-3.5 py-2 border-t border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 max-h-64 overflow-y-auto overflow-x-auto overscroll-contain whitespace-pre-wrap">
                     {JSON.stringify(trace.args, null, 2)}
                   </pre>
                 )}

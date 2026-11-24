@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { spawn, execSync } from "child_process";
 import { checkCommandDialect } from "./dialectGuard";
+import { killPowerShellProcessTree, spawnWrappedPowerShell } from "./powershellRunner";
 
 export type JobStatus = "pending" | "running" | "done" | "failed" | "interrupted";
 
@@ -171,11 +171,7 @@ export class JobStore {
 function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string): Promise<void> {
   return new Promise((resolve) => {
     const command = String(rec.args?.command || "");
-    const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
-      cwd: effectiveCwd,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const proc = spawnWrappedPowerShell(command, effectiveCwd);
 
     store.update(rec.id, { status: "running", startedAt: Date.now() });
 
@@ -183,30 +179,7 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
     let killed = false;
     const killTree = () => {
       killed = true;
-      const pid = proc.pid;
-      if (pid) {
-        try {
-          execSync(`taskkill /PID ${pid} /T /F`, { stdio: "ignore" });
-        } catch {}
-        try {
-          const check = execSync(
-            `powershell.exe -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | ForEach-Object { $_.ProcessId }"`,
-            { encoding: "utf8", timeout: 3000 }
-          );
-          for (const p of check
-            .trim()
-            .split(/\r?\n/)
-            .map((s) => s.trim())
-            .filter(Boolean)) {
-            try {
-              execSync(`taskkill /PID ${p} /T /F`, { stdio: "ignore" });
-            } catch {}
-          }
-        } catch {}
-      }
-      try {
-        proc.kill("SIGKILL");
-      } catch {}
+      killPowerShellProcessTree(proc);
     };
     store.registerKill(rec.id, killTree);
 
@@ -221,11 +194,12 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
     proc.on("close", (code) => {
       clearTimeout(timer);
       store.unregisterKill(rec.id);
+      const exitCode = code ?? (code === null ? -1 : 0);
       if (timedOut) {
         store.update(rec.id, {
           status: "failed",
           finishedAt: Date.now(),
-          exitCode: code,
+          exitCode,
           timedOut: true,
           error: `Job timed out after ${Math.round(rec.timeoutMs / 1000)}s (async job-level timeout)`,
         });
@@ -233,15 +207,15 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
         store.update(rec.id, {
           status: "interrupted",
           finishedAt: Date.now(),
-          exitCode: code,
+          exitCode,
           error: "Job interrupted by daemon shutdown.",
         });
       } else {
         store.update(rec.id, {
-          status: code === 0 ? "done" : "failed",
+          status: exitCode === 0 ? "done" : "failed",
           finishedAt: Date.now(),
-          exitCode: code,
-          error: code === 0 ? undefined : `Process exited with code ${code}`,
+          exitCode,
+          error: exitCode === 0 ? undefined : `Process exited with code ${exitCode}`,
         });
       }
       resolve();
