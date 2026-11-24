@@ -359,5 +359,15 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       assert.ok(html.includes("Isolated Branch"), "Must render Isolated Branch pipeline step");
       assert.ok(html.includes("Pre-Deploy Gate"), "Must render Pre-Deploy Gate pipeline step");
     });
+
+    it("deploy route does not expose __mockSelfDeployPipeline global test hook in production code path", () => {
+      const routePath = path.resolve(__dirname, "../app/api/deploy/route.ts");
+      const src = fs.readFileSync(routePath, "utf8");
+      assert.doesNotMatch(
+        src,
+        /__mockSelfDeployPipeline/,
+        "web-ui/app/api/deploy/route.ts must not contain the __mockSelfDeployPipeline test hook"
+      );
+    });
   });
 });

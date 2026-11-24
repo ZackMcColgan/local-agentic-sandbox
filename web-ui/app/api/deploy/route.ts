@@ -207,24 +207,21 @@ export async function POST(req: NextRequest) {
       branchName = branchName || "feat/task-preview";
       newSha = newSha || "HEAD";
 
-      const pipeline =
-        (globalThis as { __mockSelfDeployPipeline?: SelfDeployPipeline })
-          .__mockSelfDeployPipeline ||
-        new SelfDeployPipeline(
-          body.dryRun
-            ? {
-                commandRunner: async (file: string, args: string[]) => {
-                  const fullCmd = [file, ...args].join(" ");
-                  if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
-                    // A real `ctr images ls name==<image>` listing names the image.
-                    return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
-                  }
-                  return { exitCode: 0, stdout: "ok\n", stderr: "" };
-                },
-                healthChecker: async () => ({ status: 200, ok: true }),
-              }
-            : undefined
-        );
+      const pipeline = new SelfDeployPipeline(
+        body.dryRun
+          ? {
+              commandRunner: async (file: string, args: string[]) => {
+                const fullCmd = [file, ...args].join(" ");
+                if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+                  // A real `ctr images ls name==<image>` listing names the image.
+                  return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+                }
+                return { exitCode: 0, stdout: "ok\n", stderr: "" };
+              },
+              healthChecker: async () => ({ status: 200, ok: true }),
+            }
+          : undefined
+      );
       const record = await pipeline.executeDeploy({
         branchName,
         previousSha,
