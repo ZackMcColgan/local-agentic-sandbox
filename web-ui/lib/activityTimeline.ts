@@ -446,7 +446,10 @@ export function extractTraceError(result: unknown, isError?: boolean): string | 
     if (isError === true) {
       return truncate(result, MAX_ERROR_LEN) || "Action failed";
     }
-    if (isError === undefined && /^(error|failed|enoent|eacces|exit code [1-9])/i.test(result.trim())) {
+    if (
+      isError === undefined &&
+      /^(error|failed|enoent|eacces|exit code [1-9])/i.test(result.trim())
+    ) {
       return truncate(result, MAX_ERROR_LEN);
     }
     return undefined;

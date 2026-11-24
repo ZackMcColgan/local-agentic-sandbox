@@ -84,9 +84,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               ? (trace.result as { isError?: boolean; content?: Array<{ text?: string }> })
               : null;
           const isSuccess =
-            trace.isError !== undefined
-              ? !trace.isError
-              : !extractTraceError(trace.result);
+            trace.isError !== undefined ? !trace.isError : !extractTraceError(trace.result);
 
           // Parse result text if it's formatted as stringified JSON
           let parsedResult: unknown = trace.result;

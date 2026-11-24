@@ -41,7 +41,14 @@ const POWERSHELL_WRAPPER_SCRIPT = [
 export function spawnWrappedPowerShell(command: string, cwd: string): ChildProcess {
   return spawn(
     "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-Command", POWERSHELL_WRAPPER_SCRIPT],
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-OutputFormat",
+      "Text",
+      "-Command",
+      POWERSHELL_WRAPPER_SCRIPT,
+    ],
     {
       cwd,
       windowsHide: true,
