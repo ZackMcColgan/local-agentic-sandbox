@@ -1291,6 +1291,18 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("lib/board/reviewerAuditEvaluate") ||
+      p.includes("lib/board/flowMonitor") ||
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("lib/deploy/selfDeployVerified") ||
+      p.includes("app/api/sandbox-status/route") ||
+      p.includes("handoverPrereqsBatch6.test.ts"),
+    tests: ["tests/handoverPrereqsBatch6.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("host-bridge/powershellRunner") ||
       p.includes("lib/llm/provider") ||
       p.includes("lib/streamSnapshot") ||

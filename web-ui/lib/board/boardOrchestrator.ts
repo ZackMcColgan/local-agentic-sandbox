@@ -17,12 +17,18 @@ import { getControlStopReason, readBoardControlState } from "./boardControl";
 import type { BoardControlRecord } from "./boardControlStore";
 import { getSharedSlotScheduler, type SlotUtilizationMetrics } from "../slotScheduler";
 import {
-  isFlowMonitorStage2Enabled,
+  isFlowMonitorArmEnabled,
+  isFlowMonitorObserveEnabled,
   monitorPrToConclusion,
+  recordFlowMonitorObservation,
   type FlowMonitorBoardItem,
   type MonitorPrResult,
   type PrChecksSnapshot,
 } from "./flowMonitor";
+import {
+  verifyJobCompletion,
+  type FinishVerificationResult,
+} from "../subagents/finishVerificationGate";
 import {
   evaluateReviewerGate,
   isReviewerGateStage3Enabled,
@@ -205,6 +211,10 @@ export interface BoardOrchestratorDeps {
    * that was reviewed, even when check polling fell back to a placeholder.
    */
   resolveHeadSha?: (prNumber: number) => Promise<string | null> | string | null;
+  /** HO-7: Optional predicate returning true when a build turn holds the engine slot. */
+  isBuildSlotBusy?: () => boolean;
+  /** HO-2: Optional finish-verification hook wired into the reviewer gate input. */
+  verifyFinish?: (item: DispatcherBoardItem) => FinishVerificationResult;
   selfDeploy?: {
     deps?: SelfDeployVerifiedDeps;
     getDeployInput?: (
@@ -448,7 +458,7 @@ export class BoardOrchestrator {
     if (typeof this.deps.stageFlags?.flowMonitor === "boolean") {
       return this.deps.stageFlags.flowMonitor;
     }
-    return isFlowMonitorStage2Enabled(undefined) || process.env.BOARD_STAGE_FLOW_MONITOR === "true";
+    return isFlowMonitorArmEnabled(undefined);
   }
 
   private resolveReviewerGateEnabled(): boolean {
@@ -518,6 +528,15 @@ export class BoardOrchestrator {
             this.deps.flowMonitor.issueThread ?? (async () => ({ threadId: "shadow-noop" })),
           log: this.log,
         });
+        if (isFlowMonitorObserveEnabled()) {
+          recordFlowMonitorObservation({
+            itemKey: item.key,
+            prNumber: pr.prNumber,
+            action: result.flowMonitor.action,
+            verdictStatus: result.flowMonitor.verdict.status,
+            reason: result.flowMonitor.reason,
+          });
+        }
       } catch (err) {
         this.log(
           `[orchestrator] shadow flowMonitor failed for ${item.id}: ${
@@ -528,34 +547,53 @@ export class BoardOrchestrator {
     }
 
     if (this.deps.reviewerGate) {
-      try {
-        const stage3Enabled = this.resolveReviewerGateEnabled();
-        const mechanicalInput = await this.deps.reviewerGate.getMechanicalInput(item, pr);
-        const gateResult = await evaluateReviewerGate({
-          itemId: item.id,
-          brief: item.brief,
-          mechanicalInput,
-          stage3Enabled,
-          ciAllGreen: result.flowMonitor?.verdict.status === "green",
-          issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
-          log: this.log,
-        });
-        result.reviewerGate = {
-          ...gateResult,
-          mergeAuthorized: stage3Enabled ? gateResult.mergeAuthorized : false,
-        };
-        const recordedHeadSha = await this.resolveRecordedHeadSha(pr, item.key);
-        result.ledger = this.getAgreementLedger().recordShadowVerdict({
-          prNumber: pr.prNumber,
-          headSha: recordedHeadSha,
-          reviewerVerdict: gateResult.verdict,
-        });
-      } catch (err) {
+      const slotBusy = this.deps.isBuildSlotBusy
+        ? this.deps.isBuildSlotBusy()
+        : Boolean(getSharedSlotScheduler().getSnapshot().active);
+      if (slotBusy) {
         this.log(
-          `[orchestrator] shadow reviewerGate failed for ${item.id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`
+          `[orchestrator] shedding shadow reviewer for ${item.id} (PR #${pr.prNumber}) while build turn holds engine slot`
         );
+      } else {
+        try {
+          const revStartMs = this.now();
+          const stage3Enabled = this.resolveReviewerGateEnabled();
+          const mechanicalInput = await this.deps.reviewerGate.getMechanicalInput(item, pr);
+          const finishResult = this.deps.verifyFinish
+            ? this.deps.verifyFinish(item)
+            : verifyJobCompletion({
+                workspaceRoot: this.deps.hostCheckoutPath || process.cwd(),
+                gatePassed: result.flowMonitor?.verdict.status === "green",
+              });
+          const gateResult = await evaluateReviewerGate({
+            itemId: item.id,
+            brief: item.brief,
+            mechanicalInput,
+            stage3Enabled,
+            ciAllGreen: result.flowMonitor?.verdict.status === "green",
+            finishVerificationClean: finishResult.ok,
+            issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
+            log: this.log,
+          });
+          result.reviewerGate = {
+            ...gateResult,
+            mergeAuthorized: stage3Enabled ? gateResult.mergeAuthorized : false,
+          };
+          const recordedHeadSha = await this.resolveRecordedHeadSha(pr, item.key);
+          const engineMinutes = Math.round(((this.now() - revStartMs) / 60_000) * 1000) / 1000;
+          result.ledger = this.getAgreementLedger().recordShadowVerdict({
+            prNumber: pr.prNumber,
+            headSha: recordedHeadSha,
+            reviewerVerdict: gateResult.verdict,
+            engineMinutes,
+          });
+        } catch (err) {
+          this.log(
+            `[orchestrator] shadow reviewerGate failed for ${item.id}: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
       }
     }
 

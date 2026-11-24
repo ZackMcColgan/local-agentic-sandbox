@@ -38,6 +38,7 @@ export async function evaluatePrShadowVerdict(
 ): Promise<ReviewerEvaluateResult> {
   const { prNumber, brief, allowlist = [], log } = params;
   const itemId = `pr-${prNumber}`;
+  const evalStartMs = Date.now();
 
   const mechanicalInput = await deps.getMechanicalInput(prNumber, allowlist);
   const gateResult = await evaluateReviewerGate({
@@ -91,14 +92,16 @@ export async function evaluatePrShadowVerdict(
     );
   }
 
+  const engineMinutes = Math.round(((Date.now() - evalStartMs) / 60_000) * 1000) / 1000;
   const ledger = getAgreementLedgerStore().recordShadowVerdict({
     prNumber,
     headSha,
     reviewerVerdict: gateResult.verdict,
+    engineMinutes,
     ...(reason ? { reason } : {}),
   });
 
-  const entry = ledger.entries.find((e) => e.prNumber === prNumber);
+  const entry = ledger.entries.find((e) => e.prNumber === prNumber && e.headSha === headSha);
   if (!entry) {
     throw new Error(`Shadow verdict for PR ${prNumber} was not recorded in the ledger`);
   }

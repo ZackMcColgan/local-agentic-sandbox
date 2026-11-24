@@ -47,6 +47,7 @@ function makeBaseDeps(overrides: Partial<SelfDeployVerifiedDeps> = {}): SelfDepl
         gatewayStatus: 200,
         threadListLoads: true,
         observedTag: expectedTag,
+        observedSha: BASE_INPUT.developSha,
       };
     },
     ...overrides,
@@ -155,6 +156,7 @@ test("S4 failure rolls back to banked tag, verifies rollback, and surfaces needs
         gatewayStatus: 200,
         threadListLoads: true,
         observedTag: expectedTag,
+        observedSha: BASE_INPUT.developSha,
       };
     },
   });

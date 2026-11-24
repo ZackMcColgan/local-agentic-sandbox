@@ -8,13 +8,21 @@ import {
   type UpdateBoardItemInput,
 } from "@/lib/board/boardStore";
 import { mergeThreadsIntoBoard } from "@/lib/board/mergeThreadsIntoBoard";
+import { getFlowMonitorObservations, isFlowMonitorObserveEnabled } from "@/lib/board/flowMonitor";
 
 export async function GET() {
   try {
     const store = getBoardStore();
     const items = await mergeThreadsIntoBoard(seedBoardIfEmpty(store));
+    const flowMonitorObservations = isFlowMonitorObserveEnabled()
+      ? getFlowMonitorObservations()
+      : undefined;
     const quarantinedFile = store.getLastQuarantinePath();
-    return NextResponse.json(quarantinedFile ? { items, quarantinedFile } : { items });
+    return NextResponse.json({
+      items,
+      ...(flowMonitorObservations ? { flowMonitorObservations } : {}),
+      ...(quarantinedFile ? { quarantinedFile } : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load board";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -33,6 +41,7 @@ export async function POST(req: NextRequest) {
       source: body.source ?? "manual",
       threadLink: body.threadLink,
       sprint: body.sprint,
+      allowlist: body.allowlist,
     });
     return NextResponse.json({ item: created }, { status: 201 });
   } catch (err) {

@@ -3,6 +3,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import type { BoardItem, BoardStatus } from "@/lib/board/boardStore";
 import type { BoardControlAction, BoardControlState } from "@/lib/board/boardControlStore";
+import type { FlowMonitorObservation } from "@/lib/board/flowMonitor";
 import { BoardAddSheet } from "./BoardAddSheet";
 import { SchedulesPanel } from "./SchedulesPanel";
 
@@ -17,6 +18,7 @@ export interface BoardViewProps {
   stopAtBoundary?: boolean;
   isControlPending?: boolean;
   onControlAction?: (action: BoardControlAction) => void | Promise<void>;
+  flowMonitorObservations?: FlowMonitorObservation[];
 }
 
 const COLUMNS: { status: BoardStatus; label: string }[] = [
@@ -38,6 +40,7 @@ export function BoardView({
   stopAtBoundary = false,
   isControlPending = false,
   onControlAction,
+  flowMonitorObservations,
 }: BoardViewProps) {
   const [activeColIndex, setActiveColIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -403,6 +406,16 @@ export function BoardView({
                 : "Paused"
               : "Stopped"}
         </span>
+        {flowMonitorObservations && flowMonitorObservations.length > 0 && (
+          <span
+            data-testid="flow-monitor-observe-readout"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 dark:border-white/[0.12] px-2.5 py-0.5 text-[11px] text-zinc-700 dark:text-stone-300"
+            title={flowMonitorObservations[0].reason}
+          >
+            Flow monitor observe ({flowMonitorObservations.length}):{" "}
+            {flowMonitorObservations[0].itemKey} · {flowMonitorObservations[0].action}
+          </span>
+        )}
         <div
           role="group"
           aria-label="Board drain controls"
