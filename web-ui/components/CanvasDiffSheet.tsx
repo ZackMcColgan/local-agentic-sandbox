@@ -134,7 +134,7 @@ export function CanvasDiffSheet({
       )}
 
       {/* Unified diff body */}
-      <div className="flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed">
+      <div className="flex-1 overflow-auto overscroll-contain p-3 font-mono text-xs leading-relaxed">
         {lines.length > 0 ? (
           <div className="min-w-max">
             {lines.map((line, i) => (

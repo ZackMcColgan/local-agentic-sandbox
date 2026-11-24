@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import {
   buildActivityTimeline,
   classifyToolKind,
+  extractTraceError,
   foldTimelineRows,
   traceToTimelineRow,
   type TimelineTraceInput,
 } from "../lib/activityTimeline";
+import * as activityTimelineMod from "../lib/activityTimeline";
+import * as roundLoopMod from "../lib/chat/roundLoop";
 import { parseUnifiedDiffWithLineNumbers } from "../components/CanvasDiffSheet";
 
 describe("activityTimeline — pure row model", () => {
@@ -645,5 +648,167 @@ describe("activityTimeline — pure row model", () => {
     );
     assert.equal(row.status, "error");
     assert.ok(row.label.includes("sqlite3 /data/analytics.db"), row.label);
+  });
+
+  it("U-F1: treats 0-exit git fetch stderr progress and stdout containing '\"exit_code\":1' as success, and failed MCP workspace_run_command as error", () => {
+    const gitFetchRow = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: { command: "git fetch --all" },
+        result: {
+          success: true,
+          exitCode: 0,
+          stdout: "",
+          stderr: "From https://example.com/repo.git\n * [new branch] main -> origin/main",
+          output: "From https://example.com/repo.git\n * [new branch] main -> origin/main",
+        },
+        durationMs: 250,
+      },
+      0
+    );
+    assert.equal(gitFetchRow.status, "success");
+    assert.equal(gitFetchRow.errorSummary, undefined);
+
+    const stdoutFalsePositiveRow = traceToTimelineRow(
+      {
+        tool: "host_run_powershell",
+        args: { command: "Get-Content fixture.json" },
+        result: {
+          success: true,
+          exitCode: 0,
+          stdout: '{"status":"EXECUTION_ERROR","exit_code":1}',
+          stderr: "",
+          output: '{"status":"EXECUTION_ERROR","exit_code":1}',
+        },
+        durationMs: 30,
+      },
+      1
+    );
+    assert.equal(stdoutFalsePositiveRow.status, "success");
+    assert.equal(stdoutFalsePositiveRow.errorSummary, undefined);
+
+    const explicitFalseStringRow = traceToTimelineRow(
+      {
+        tool: "workspace_read_file",
+        args: { path: "notes.txt" },
+        isError: false,
+        result: "Error handling policy notes",
+        durationMs: 12,
+      },
+      2
+    );
+    assert.equal(explicitFalseStringRow.status, "success");
+    assert.equal(explicitFalseStringRow.errorSummary, undefined);
+
+    const failedMcpCmdRow = traceToTimelineRow(
+      {
+        tool: "workspace_run_command",
+        args: { command: "npm test" },
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                status: "EXECUTION_ERROR",
+                command: "npm test",
+                exit_code: 1,
+                stdout: "",
+                stderr: "FAIL tests/foo.test.ts\nAssertionError: expected 1 to equal 2",
+              }),
+            },
+          ],
+        },
+        durationMs: 400,
+      },
+      3
+    );
+    assert.equal(failedMcpCmdRow.status, "error");
+    assert.ok(
+      failedMcpCmdRow.errorSummary?.includes("FAIL tests/foo.test.ts"),
+      `Expected errorSummary to unwrap MCP stderr, got: ${failedMcpCmdRow.errorSummary}`
+    );
+
+    const classifyExecutionError = (
+      roundLoopMod as { classifyExecutionError?: (res: unknown) => boolean }
+    ).classifyExecutionError;
+    assert.equal(
+      typeof classifyExecutionError,
+      "function",
+      "roundLoop must export classifyExecutionError"
+    );
+    assert.equal(
+      classifyExecutionError!({
+        success: true,
+        exitCode: 0,
+        stdout: '{"status":"EXECUTION_ERROR","exit_code":1}',
+        stderr: "From origin/main",
+      }),
+      false,
+      "0-exit host output containing '\"exit_code\":1' text must not classify as error"
+    );
+    assert.equal(
+      classifyExecutionError!({
+        content: [
+          {
+            type: "text",
+            text: 'const x = \'"status":"EXECUTION_ERROR" || "exit_code":1\';',
+          },
+        ],
+      }),
+      false,
+      "workspace_read_file text containing error substrings must not classify as error"
+    );
+    assert.equal(
+      classifyExecutionError!({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ status: "EXECUTION_ERROR", exit_code: 1, stderr: "boom" }),
+          },
+        ],
+      }),
+      true,
+      "MCP EXECUTION_ERROR envelope must classify as error"
+    );
+    assert.equal(
+      classifyExecutionError!({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ status: "SUCCESS", exit_code: 0, stdout: "all good" }),
+          },
+        ],
+      }),
+      false
+    );
+    assert.equal(extractTraceError("Error: bad", false), undefined);
+  });
+
+  it("U-F2: extractTraceOutput preserves multi-line output and tail-preserves beyond 64KB", () => {
+    const extractTraceOutput = (
+      activityTimelineMod as { extractTraceOutput?: (res: unknown) => string | undefined }
+    ).extractTraceOutput;
+    assert.equal(
+      typeof extractTraceOutput,
+      "function",
+      "activityTimeline must export extractTraceOutput"
+    );
+
+    const multi = Array.from({ length: 120 }, (_, i) => `line-${i + 1}: output payload`).join("\n");
+    const extracted = extractTraceOutput!({
+      success: true,
+      exitCode: 0,
+      output: multi,
+    });
+    assert.equal(extracted, multi);
+
+    const huge = `${"A".repeat(70000)}\nFINAL_TAIL_ERROR_LINE`;
+    const clamped = extractTraceOutput!({
+      success: false,
+      exitCode: 1,
+      output: huge,
+    });
+    assert.ok(clamped && clamped.length <= 65536);
+    assert.ok(clamped.includes("FINAL_TAIL_ERROR_LINE"), "tail must be preserved when truncated");
   });
 });

@@ -147,6 +147,56 @@ export interface TraceItem {
   model: string;
   tier?: "sandbox" | "browser" | "workspace" | "host";
   round?: number;
+  isError?: boolean;
+}
+
+/**
+ * Classifies a tool execution result as an error using structured fields
+ * (host `{ success, exitCode }` and parsed MCP `content[0].text` `{ status, exit_code }`)
+ * rather than raw substring matching across serialized output.
+ */
+export function classifyExecutionError(res: unknown): boolean {
+  if (!res || typeof res !== "object") return false;
+  const obj = res as Record<string, unknown>;
+
+  if (obj.isError === true) return true;
+  if (obj.success === false || obj.ok === false) return true;
+  if (typeof obj.exitCode === "number" && obj.exitCode !== 0) return true;
+  if (typeof obj.exit_code === "number" && obj.exit_code !== 0) return true;
+  if (obj.status === "EXECUTION_ERROR") return true;
+
+  const explicitSuccess =
+    obj.success === true ||
+    obj.ok === true ||
+    obj.exitCode === 0 ||
+    obj.exit_code === 0 ||
+    obj.status === "SUCCESS";
+  if (!explicitSuccess && typeof obj.error === "string" && obj.error.trim().length > 0) {
+    return true;
+  }
+
+  if (Array.isArray(obj.content)) {
+    for (const item of obj.content) {
+      if (!item || typeof item !== "object") continue;
+      const text = (item as { text?: unknown }).text;
+      if (typeof text !== "string") continue;
+      const trimmed = text.trim();
+      if (!trimmed.startsWith("{")) continue;
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object") continue;
+        if (parsed.isError === true) return true;
+        if (parsed.success === false || parsed.ok === false) return true;
+        if (parsed.status === "EXECUTION_ERROR") return true;
+        if (typeof parsed.exit_code === "number" && parsed.exit_code !== 0) return true;
+        if (typeof parsed.exitCode === "number" && parsed.exitCode !== 0) return true;
+      } catch {
+        // Non-JSON text (e.g. file reads) is not an error envelope.
+      }
+    }
+  }
+
+  return false;
 }
 
 export interface LlmToolCall {
@@ -1551,20 +1601,6 @@ export async function runChatTurn(
         return { toolCall, toolName, toolArgs, malformedArgsError };
       });
 
-      const classifyExecutionError = (res: unknown): boolean => {
-        try {
-          const resultStr = JSON.stringify(res);
-          if (
-            resultStr.includes('"status":"EXECUTION_ERROR"') ||
-            resultStr.includes('"exit_code":1') ||
-            Boolean((res as { isError?: boolean } | null)?.isError)
-          ) {
-            return true;
-          }
-        } catch {}
-        return false;
-      };
-
       const commitExecutedToolResult = async (params: {
         toolName: string;
         toolArgs: Record<string, unknown>;
@@ -1592,6 +1628,7 @@ export async function runChatTurn(
           model: turnState.activeModel,
           tier: target.tier,
           round: currentRoundNumber,
+          isError: isExecutionError,
         };
         if (
           toolName === "workspace_write_file" &&

@@ -2683,7 +2683,7 @@ export function ChatStream({
                           <summary className="cursor-pointer font-medium hover:underline select-none">
                             Technical details
                           </summary>
-                          <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                          <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono max-h-64 overflow-y-auto overflow-x-auto overscroll-contain whitespace-pre-wrap">
                             {formatted.details}
                           </pre>
                         </details>

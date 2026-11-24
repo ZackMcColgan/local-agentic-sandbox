@@ -337,7 +337,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                           <span className="font-semibold block text-slate-700 dark:text-zinc-300 mb-1">
                             Attributes:
                           </span>
-                          <pre className="p-2 rounded bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 font-mono text-[10px] overflow-x-auto text-slate-800 dark:text-zinc-200">
+                          <pre className="p-2 rounded bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 font-mono text-[10px] max-h-64 overflow-y-auto overflow-x-auto overscroll-contain text-slate-800 dark:text-zinc-200">
                             {JSON.stringify(span.attributes, null, 2)}
                           </pre>
                         </div>
