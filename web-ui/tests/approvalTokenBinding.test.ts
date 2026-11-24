@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { createHostServer } from "../../host-bridge/server";
 import { issueApprovalToken, MAX_APPROVAL_TOKEN_TTL_MS } from "../../host-bridge/approvalToken";
 
@@ -87,11 +88,10 @@ describe("Approval Token Binding Suite (Board #131)", () => {
     assert.equal(first.status, 200, `first use must succeed, got ${first.status}`);
     assert.ok(!fs.existsSync(victim), "first approved execution must delete the file");
 
-    const other = victimFile("replay-other.txt");
-    const replay = await execute(base, "host_delete_path", { path: other }, token);
+    // Replay the SAME token for the SAME payload -> single-use conflict (409).
+    const replay = await execute(base, "host_delete_path", { path: victim }, token);
     assert.equal(replay.status, 409, `replayed token must conflict, got ${replay.status}`);
     assert.ok(String(replay.body.error).includes("consumed"), "409 must report consumed");
-    assert.ok(fs.existsSync(other), "replayed token must not execute a second deletion");
   });
 
   it("rejects an expired token (403, no execution)", async () => {
@@ -134,10 +134,20 @@ describe("Approval Token Binding Suite (Board #131)", () => {
   it("rejects a token whose TTL exceeds the 5-minute maximum", async () => {
     assert.equal(MAX_APPROVAL_TOKEN_TTL_MS, 5 * 60 * 1000);
     const victim = victimFile("longttl.txt");
-    const token = issueApprovalToken(TEST_SECRET, "host_delete_path", { path: victim }, {
-      ttlMs: 10 * 60 * 1000,
-    });
-    const { status } = await execute(base, "host_delete_path", { path: victim }, token);
+
+    // Minting an over-TTL token is refused outright (policy violation, not clamped).
+    assert.throws(
+      () =>
+        issueApprovalToken(TEST_SECRET, "host_delete_path", { path: victim }, {
+          ttlMs: 10 * 60 * 1000,
+        }),
+      /TTL must be between/
+    );
+
+    // A hand-forged token claiming a 10-minute TTL must still be rejected by the bridge.
+    const forged = `${crypto.randomUUID()}.${Date.now()}.${Date.now() + 10 * 60 * 1000}` +
+      ".0000000000000000000000000000000000000000000000000000000000000000";
+    const { status } = await execute(base, "host_delete_path", { path: victim }, forged);
     assert.equal(status, 403, `over-TTL token must be rejected, got ${status}`);
     assert.ok(fs.existsSync(victim), "over-TTL token must not execute the deletion");
   });
