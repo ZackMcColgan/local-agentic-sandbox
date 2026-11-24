@@ -233,7 +233,6 @@ export function submitJob(
 ) {
   const job = queue.enqueue(req);
   const snapshot = queue.snapshot();
-  void queue.drain(executor);
-  const settled = queue.waitForJob(job.id);
+  const settled = queue.drain(executor);
   return { job, snapshot, settled };
 }

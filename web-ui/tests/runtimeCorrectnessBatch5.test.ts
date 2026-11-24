@@ -336,7 +336,7 @@ describe("Batch 5 — Runtime Correctness Cluster", () => {
     }
   });
 
-  it("N-R2/UI-H3: JobQueue per-job settled resolves when Job A completes even while Job B is still running", async () => {
+  it("N-R2/UI-H3: JobQueue waitForJob resolves when Job A completes even while Job B is still running", async () => {
     const queue = new JobQueue();
     let releaseJobB!: () => void;
     const jobBGate = new Promise<void>((r) => {
@@ -350,20 +350,19 @@ describe("Batch 5 — Runtime Correctness Cluster", () => {
       await jobBGate;
     });
 
-    // Job A should settle promptly WITHOUT waiting for Job B to finish
+    // The per-job waitForJob promise resolves as soon as Job A finishes,
+    // WITHOUT waiting for Job B. (submitJob's `settled` keeps its original
+    // whole-queue drain meaning, pinned by AC1 in jobQueueIsolation.test.ts.)
     let jobASettled = false;
-    subA.settled.then(() => {
+    void queue.waitForJob("job-a").then(() => {
       jobASettled = true;
     });
 
     await new Promise((r) => setTimeout(r, 80));
-    assert.equal(
-      jobASettled,
-      true,
-      "Job A's settled promise must resolve without waiting for Job B"
-    );
+    assert.equal(jobASettled, true, "waitForJob('job-a') must resolve without waiting for Job B");
 
     releaseJobB();
     await subB.settled;
+    await subA.settled;
   });
 });
