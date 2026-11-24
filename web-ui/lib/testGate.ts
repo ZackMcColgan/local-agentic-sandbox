@@ -1620,6 +1620,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/modelEval.test.ts"],
   },
   {
+    match: (p) => p.includes("lib/fsAtomic"),
+    tests: ["tests/boardStore.test.ts", "tests/schedulerPlanner.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/board/boardStore"),
     tests: ["tests/boardStore.test.ts"],
   },

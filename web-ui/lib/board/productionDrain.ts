@@ -77,7 +77,13 @@ export type HostCheckoutGroundingResult =
 
 export type JobSummaryClassification = "blocked" | "turn-ended" | "completed";
 
-const INTERRUPTED_THREAD_STATUSES = new Set(["stopped", "failed"]);
+const INTERRUPTED_THREAD_STATUSES = new Set([
+  "stopped",
+  "failed",
+  "paused",
+  "running",
+  "needs_input",
+]);
 
 function getLastAssistantMessage(thread: Thread | null | undefined) {
   const assistantMessages = (thread?.messages ?? []).filter(
@@ -291,7 +297,9 @@ export function inspectThreadPrOrCommitEvidence(thread: Thread): OrphanedThreadE
       if (
         (trace.tool === "host_git_commit" ||
           trace.tool === "host_git_push" ||
-          trace.tool === "host_create_pr") &&
+          trace.tool === "host_create_pr" ||
+          trace.tool === "host_git_pr_create" ||
+          trace.tool === "git_commit") &&
         isSuccessfulTraceResult(trace.result)
       ) {
         const traceMeta = extractJobOutcomeMetadata(resultText);

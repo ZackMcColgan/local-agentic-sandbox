@@ -115,11 +115,12 @@ test("owner preemption: blocks start when owner is mid-turn", async () => {
   assert.ok(logs.some((l) => /owner/i.test(l)));
 });
 
-test("chunk-complete item yields continuation brief from handoff, not fresh composition", () => {
+test("chunk-complete item yields continuation brief from handoff AND retains full item.brief", () => {
+  const longDetails = "Acceptance criteria: ".padEnd(750, "x") + " FINAL-MARKER-TAIL";
   const item = makeItem({
     id: "item-chunk",
     title: "Chunked item",
-    brief: "Original fresh brief that should not be used as primary.",
+    brief: `Original fresh brief that must be retained in full. ${longDetails}`,
     handoff: {
       state: "chunk-complete",
       branch: "feature/chunked-item",
@@ -139,7 +140,8 @@ test("chunk-complete item yields continuation brief from handoff, not fresh comp
   assert.match(brief, /abc1234/);
   assert.match(brief, /Wire Phase 2 and run test:gate/);
   assert.match(brief, /Confirm edge case X/);
-  assert.doesNotMatch(brief, /Original fresh brief that should not be used as primary/);
+  assert.match(brief, /Original fresh brief that must be retained in full/);
+  assert.match(brief, /FINAL-MARKER-TAIL/);
 });
 
 test("shadow mode (default OFF) logs decision and issues NOTHING; flag ON issues thread", async () => {

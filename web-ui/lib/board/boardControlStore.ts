@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveBoardDir, BoardStore } from "./boardStore";
+import { atomicWriteFileSync } from "../fsAtomic";
 import { abortActiveTurn, clearTurnActive, activeExecutionSet } from "../threads/threadStore";
 import { cancelTask } from "../subagents/supervisor";
 import { unloadAllModels } from "../subagents/residency";
@@ -123,10 +124,7 @@ export class BoardControlStore {
       ...existing,
       control: record,
     };
-    fs.writeFileSync(this.metaPath, JSON.stringify(nextMeta, null, 2), {
-      encoding: "utf8",
-      mode: 0o660,
-    });
+    atomicWriteFileSync(this.metaPath, JSON.stringify(nextMeta, null, 2), 0o660);
   }
 
   getState(): BoardControlRecord {
