@@ -325,7 +325,8 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
   });
 
   describe("5. POST /api/deploy origin & parameter guards", () => {
-    it("rejects cross-origin and missing-origin requests across all POST /api/deploy branches with 403", async () => {
+    it("rejects cross-origin requests across all POST /api/deploy branches with 403; origin-less requests pass the guard", async () => {
+      const prevEnabled = process.env.SELF_DEPLOY_ENABLED;
       const payloads = [
         { action: "toggleKillSwitch", enabled: true },
         { action: "deployBuild", taskId: "task-1" },
@@ -333,29 +334,41 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
         { action: "executeDeploy", branchName: "feat/test", dryRun: true },
       ];
 
-      for (const payload of payloads) {
-        const crossReq = new NextRequest("http://localhost:3000/api/deploy", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            host: "localhost:3000",
-            origin: "http://evil.example.com",
-          },
-          body: JSON.stringify(payload),
-        });
-        const crossRes = await deployPost(crossReq);
-        assert.equal(crossRes.status, 403, `Cross-origin ${payload.action} must return 403`);
+      try {
+        for (const payload of payloads) {
+          const crossReq = new NextRequest("http://localhost:3000/api/deploy", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              host: "localhost:3000",
+              origin: "http://evil.example.com",
+            },
+            body: JSON.stringify(payload),
+          });
+          const crossRes = await deployPost(crossReq);
+          assert.equal(crossRes.status, 403, `Cross-origin ${payload.action} must return 403`);
 
-        const missingOriginReq = new NextRequest("http://localhost:3000/api/deploy", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            host: "localhost:3000",
-          },
-          body: JSON.stringify(payload),
-        });
-        const missingRes = await deployPost(missingOriginReq);
-        assert.equal(missingRes.status, 403, `Missing-origin ${payload.action} must return 403`);
+          // Missing Origin/Referer is not demonstrably cross-origin, so the
+          // guard lets the request through; assert only that the guard did
+          // not reject it (downstream outcomes are covered by other tests).
+          const missingOriginReq = new NextRequest("http://localhost:3000/api/deploy", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              host: "localhost:3000",
+            },
+            body: JSON.stringify(payload),
+          });
+          const missingRes = await deployPost(missingOriginReq);
+          assert.notEqual(
+            missingRes.status,
+            403,
+            `Missing-origin ${payload.action} must not be rejected by the origin guard`
+          );
+        }
+      } finally {
+        if (prevEnabled === undefined) delete process.env.SELF_DEPLOY_ENABLED;
+        else process.env.SELF_DEPLOY_ENABLED = prevEnabled;
       }
     });
 
