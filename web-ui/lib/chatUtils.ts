@@ -714,7 +714,7 @@ export function formatMessageTimestamp(
 }
 
 /**
- * Strip local machine/checkout prefixes (e.g. C:\Users\<user>\Desktop\repos\<repo>\)
+ * Strip local machine/checkout prefixes (e.g. C:\repos\<repo>\)
  * so diff headers and citation cards show repo-relative paths.
  */
 export function displayRepoPath(rawPath: string): string {

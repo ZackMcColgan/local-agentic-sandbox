@@ -271,7 +271,7 @@ export function HostZone({
               data-testid="host-allowed-paths-editor"
               defaultValue={(hostSettings.allowedHostPaths || []).join("\n")}
               onBlur={(e) => onAllowedPathsChange(e.target.value)}
-              placeholder="C:\Users\you\Desktop\repos"
+              placeholder="C:\repos\project"
               className="mt-1 w-full rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-850/60 p-2.5 text-xs font-mono text-slate-800 dark:text-zinc-200 min-h-24 resize-y"
             />
             <p className="text-[11px] text-slate-600 dark:text-zinc-400 mt-1">

@@ -197,7 +197,7 @@ const LEADING_DIR_CAPTURE_RE =
 
 /**
  * Elides a single absolute Windows or Unix path to its last two segments
- * (e.g. "C:\Users\...\components\SettingsView.tsx" -> "...\components\SettingsView.tsx").
+ * (e.g. "C:\repo\components\SettingsView.tsx" -> "...\components\SettingsView.tsx").
  */
 export function elidePathToTail(rawPath: string): string {
   const trimmed = rawPath.trim();

@@ -691,7 +691,7 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     });
   });
 
-  describe("Task 10: Multi-Turn OpenAI Tool Message Normalization & K8s Manifests", () => {
+  describe("Task 10: Multi-Turn LLM Tool Message Normalization & K8s Manifests", () => {
     it("normalizeOpenAIMessages formats assistant tool_calls and tool messages correctly", async () => {
       const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
       assert.ok(
@@ -1044,7 +1044,7 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
     });
   });
 
-  describe("Task 12: Multimodal OpenAI Vision Message Normalization (Bug 2)", () => {
+  describe("Task 12: Multimodal Vision Message Normalization (Bug 2)", () => {
     it("normalizeOpenAIMessages converts message.images to OpenAI content parts and deletes images property", async () => {
       const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
 
