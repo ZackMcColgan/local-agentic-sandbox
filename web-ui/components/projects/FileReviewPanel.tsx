@@ -94,7 +94,9 @@ export function FileReviewPanel({
           </div>
 
           {isLoadingTree && (
-            <div className="p-4 text-center text-xs text-slate-600 dark:text-zinc-400">Loading tree...</div>
+            <div className="p-4 text-center text-xs text-slate-600 dark:text-zinc-400">
+              Loading tree...
+            </div>
           )}
 
           {treeError && (
@@ -104,7 +106,9 @@ export function FileReviewPanel({
           )}
 
           {!isLoadingTree && !treeError && tree.length === 0 && (
-            <div className="p-4 text-center text-xs text-slate-600 dark:text-zinc-400">No files found.</div>
+            <div className="p-4 text-center text-xs text-slate-600 dark:text-zinc-400">
+              No files found.
+            </div>
           )}
 
           <div className="space-y-1">
@@ -117,7 +121,9 @@ export function FileReviewPanel({
                   key={node.path}
                   onClick={() => isFile && onSelectFile(node.path)}
                   className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs transition-colors ${
-                    isFile ? "cursor-pointer" : "cursor-default text-slate-600 dark:text-zinc-400 font-semibold"
+                    isFile
+                      ? "cursor-pointer"
+                      : "cursor-default text-slate-600 dark:text-zinc-400 font-semibold"
                   } ${
                     isSelected
                       ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 font-semibold"
@@ -239,7 +245,9 @@ export function FileReviewPanel({
       </div>
 
       {isLoadingDiffs && (
-        <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">Loading diffs...</div>
+        <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">
+          Loading diffs...
+        </div>
       )}
 
       {diffError && (

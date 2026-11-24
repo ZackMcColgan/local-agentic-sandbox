@@ -172,7 +172,8 @@ export function BoardView({
           )}
           {deps.length > 0 && !allDepsDone && (
             <span className="rounded-full border border-zinc-200 dark:border-white/[0.11] bg-zinc-50 dark:bg-white/[0.03] px-2 py-0.5 text-[10.5px] text-zinc-600 dark:text-stone-400">
-              waits on <b className="font-semibold text-zinc-900 dark:text-stone-200">{waitingOn}</b>
+              waits on{" "}
+              <b className="font-semibold text-zinc-900 dark:text-stone-200">{waitingOn}</b>
             </span>
           )}
           {allDepsDone && (

@@ -2322,14 +2322,14 @@ export function ChatStream({
             const hasScopeBadge = Boolean(threadScope || activeTask?.scope);
             const showDisconnectChip = Boolean(
               !activeSimulation &&
-                hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable })
+              hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable })
             );
             const hasStripItems = Boolean(
               hasSupervisorBadge ||
-                activeSimulation ||
-                hasScopeBadge ||
-                threadCompaction ||
-                showDisconnectChip
+              activeSimulation ||
+              hasScopeBadge ||
+              threadCompaction ||
+              showDisconnectChip
             );
             if (!hasStripItems) return null;
             return (

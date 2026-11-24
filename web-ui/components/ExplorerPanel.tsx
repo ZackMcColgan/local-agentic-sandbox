@@ -198,7 +198,9 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
       >
         <FileText
           className={`w-4 h-4 shrink-0 ${
-            isSelected ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-600 dark:text-zinc-400"
+            isSelected
+              ? "text-emerald-700 dark:text-emerald-400"
+              : "text-zinc-600 dark:text-zinc-400"
           }`}
         />
         <span className="truncate min-w-0">{node.name}</span>
