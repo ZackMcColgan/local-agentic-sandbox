@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 import { executeHostTool as defaultExecuteHostTool } from "../hostMode";
 import { ThreadStore, type Thread } from "../threads/threadStore";
 import { prepareSelfDeployPlan } from "../selfDeployMachinery";
+import {
+  buildDetachedRolloutCommand,
+  isDeploySuspended,
+  resolveDeployRecordPath,
+} from "../deploy/deployRecordStore";
 import type { BoardOrchestratorDeps } from "./boardOrchestrator";
 import type { DispatcherBoardItem } from "./dispatcher";
 import type { FlowMonitorBoardItem, PrCheckResult, PrChecksSnapshot } from "./flowMonitor";
@@ -647,8 +652,19 @@ export function createProductionStageDeps(
         };
       }
 
+      if (isDeploySuspended()) {
+        return {
+          built: false,
+          imported: false,
+          imagePresentInNode: false,
+          detail:
+            "Self-deploy is suspended after rollback; explicit owner clearSuspension required.",
+        };
+      }
+
       try {
-        const res = await runHostCommand("node scripts/deploy-cluster.js web-ui", 600);
+        // HO-1 / SYS-1: S2 builds and imports the image only (no kubectl / no pod replacement).
+        const res = await runHostCommand("node scripts/build-import-image.js web-ui", 600);
         const ok = isCommandSuccess(res);
         const stdout = typeof res.stdout === "string" ? res.stdout : "";
         const tagMatch = stdout.match(/local-agentic-sandbox-web-ui:(v-[a-z0-9-]+)/i);
@@ -658,12 +674,12 @@ export function createProductionStageDeps(
             built: false,
             imported: false,
             imagePresentInNode: false,
-            detail: "Could not determine built image tag from deploy-cluster.js output",
+            detail: "Could not determine built image tag from build-import-image.js output",
           };
         }
         const detail = ok
           ? (stdout || `Built and imported ${builtTag}`).trim()
-          : (res.stderr || res.error || stdout || "deploy-cluster.js failed").trim();
+          : (res.stderr || res.error || stdout || "build-import-image.js failed").trim();
         return {
           built: ok,
           imported: ok,
@@ -684,10 +700,14 @@ export function createProductionStageDeps(
     async setImage(tag: string): Promise<{ ok: boolean }> {
       const imageRef = formatImageRef(tag);
       try {
-        const res = await runHostCommand(
-          `kubectl -n local-agentic-sandbox set image deployment/web-ui web-ui=${imageRef}`,
-          60
-        );
+        // HO-1 / SYS-1: Hand rollout + S4 + rollback off to detached host-side script
+        // so it survives web-ui pod replacement under Recreate strategy.
+        const cmd = buildDetachedRolloutCommand({
+          image: imageRef,
+          recordPath: resolveDeployRecordPath(),
+          gatewayUrl: process.env.DEPLOY_URL || "http://127.0.0.1:3001",
+        });
+        const res = await runHostCommand(cmd, 60);
         return { ok: isCommandSuccess(res) };
       } catch {
         return { ok: false };
