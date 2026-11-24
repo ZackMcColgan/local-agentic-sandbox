@@ -70,9 +70,7 @@ type ProjectTaskExecutorOverride = (
 
 let projectTaskExecutorOverride: ProjectTaskExecutorOverride | null = null;
 
-export function setProjectTaskExecutorOverride(
-  override: ProjectTaskExecutorOverride | null
-): void {
+export function setProjectTaskExecutorOverride(override: ProjectTaskExecutorOverride | null): void {
   projectTaskExecutorOverride = override;
 }
 

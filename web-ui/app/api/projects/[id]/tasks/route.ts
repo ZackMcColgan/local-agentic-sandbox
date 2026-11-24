@@ -58,7 +58,10 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     if (effectiveMode !== "now") {
-      return NextResponse.json({ error: `Unsupported task mode: ${String(mode)}` }, { status: 400 });
+      return NextResponse.json(
+        { error: `Unsupported task mode: ${String(mode)}` },
+        { status: 400 }
+      );
     }
 
     const task = await startProjectTask({

@@ -925,9 +925,7 @@ export default function Home() {
   const persistThreadModel = (model: string, effort: "low" | "medium" | "xhigh") => {
     if (!selectedThreadId) return;
     setThreads((prev) =>
-      prev.map((t) =>
-        t.id === selectedThreadId ? { ...t, model, reasoningEffort: effort } : t
-      )
+      prev.map((t) => (t.id === selectedThreadId ? { ...t, model, reasoningEffort: effort } : t))
     );
     fetch(`/api/threads/${encodeURIComponent(selectedThreadId)}`, {
       method: "POST",
