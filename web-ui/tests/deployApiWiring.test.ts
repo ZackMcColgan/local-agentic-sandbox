@@ -134,6 +134,10 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
     try {
       const req = new NextRequest("http://localhost:3000/api/deploy", {
         method: "POST",
+        headers: {
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+        },
         body: JSON.stringify({
           action: "deployBuild",
           taskId: task.taskId,
@@ -186,6 +190,10 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       try {
         const req = new NextRequest("http://localhost:3000/api/deploy", {
           method: "POST",
+          headers: {
+            host: "localhost:3000",
+            origin: "http://localhost:3000",
+          },
           body: JSON.stringify({
             action: "deployBuild",
             taskId: task.taskId,

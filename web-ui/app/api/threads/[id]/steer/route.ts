@@ -6,12 +6,13 @@ import {
   activeExecutionSet,
   interruptActiveTurnStream,
 } from "@/lib/threads/threadStore";
+import { isValidSafeId } from "@/lib/securityHardening";
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    if (!id) {
-      return NextResponse.json({ error: "Missing thread ID" }, { status: 400 });
+    if (!isValidSafeId(id)) {
+      return NextResponse.json({ error: "Invalid thread ID" }, { status: 400 });
     }
 
     const body = await req.json().catch(() => ({}));

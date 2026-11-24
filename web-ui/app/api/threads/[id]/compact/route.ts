@@ -3,6 +3,7 @@ import { ThreadStore } from "@/lib/threads/threadStore";
 import { resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import { getLLMProvider } from "@/lib/llm/provider";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { isValidSafeId } from "@/lib/securityHardening";
 
 const getLlmBaseUrl = () =>
   process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
@@ -10,6 +11,9 @@ const getLlmBaseUrl = () =>
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
+    if (!isValidSafeId(id)) {
+      return NextResponse.json({ error: "Invalid thread ID" }, { status: 400 });
+    }
     const threadStore = new ThreadStore();
     const thread = await threadStore.getThread(id);
     if (!thread) {

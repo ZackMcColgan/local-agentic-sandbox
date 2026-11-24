@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SelfDeployPipeline, isSelfDeployKillSwitchEnabled } from "@/lib/deploy/selfDeploy";
+import {
+  SelfDeployPipeline,
+  isSelfDeployKillSwitchEnabled,
+  validateBranchName,
+  validateHostAddress,
+  validateImageTag,
+  validateK8sResourceName,
+} from "@/lib/deploy/selfDeploy";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { TaskManifest } from "@/lib/subagents/types";
@@ -39,16 +46,17 @@ function isSameOriginRequest(req: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isSameOriginRequest(req)) {
+      return NextResponse.json(
+        { error: "Forbidden: cross-origin deploy request rejected" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { action } = body;
 
     if (action === "toggleKillSwitch") {
-      if (!isSameOriginRequest(req)) {
-        return NextResponse.json(
-          { error: "Forbidden: cross-origin toggleKillSwitch request rejected" },
-          { status: 403 }
-        );
-      }
       const enabled = Boolean(body.enabled);
       process.env.SELF_DEPLOY_ENABLED = enabled ? "true" : "false";
       return NextResponse.json({
@@ -60,6 +68,16 @@ export async function POST(req: NextRequest) {
       const { taskId, threadId, dryRunUrl, dryRunNamespace } = body;
       if (!taskId) {
         return NextResponse.json({ error: "Missing required 'taskId'" }, { status: 400 });
+      }
+      if (dryRunNamespace !== undefined) {
+        try {
+          validateK8sResourceName(String(dryRunNamespace), "namespace");
+        } catch (err: unknown) {
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : String(err) },
+            { status: 400 }
+          );
+        }
       }
 
       const supervisor = new OvernightSupervisor();
@@ -152,6 +170,27 @@ export async function POST(req: NextRequest) {
 
       branchName = branchName || "feat/task-preview";
       newSha = newSha || "HEAD";
+
+      try {
+        validateBranchName(branchName);
+        if (imageTag !== undefined) {
+          validateImageTag(imageTag);
+        }
+        if (hostAddress !== undefined) {
+          validateHostAddress(hostAddress);
+        }
+        if (namespace !== undefined) {
+          validateK8sResourceName(namespace, "namespace");
+        }
+        if (deploymentName !== undefined) {
+          validateK8sResourceName(deploymentName, "deployment");
+        }
+      } catch (validationErr: unknown) {
+        return NextResponse.json(
+          { error: validationErr instanceof Error ? validationErr.message : String(validationErr) },
+          { status: 400 }
+        );
+      }
 
       const pipeline =
         (globalThis as { __mockSelfDeployPipeline?: SelfDeployPipeline })

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { assertValidSafeId, confinePathToRoot, isValidSafeId } from "../securityHardening";
 
 export interface SkillCandidate {
   id: string;
@@ -76,6 +77,7 @@ export function recordObservedPattern(
   details: { title: string; solutionSummary: string },
   options: { skillsDir?: string; minOccurrences?: number } = {}
 ): { candidate: SkillCandidate; isPendingApproval: boolean; promoted: false } {
+  assertValidSafeId(patternKey, "skill candidate ID");
   const minOccurrences = options.minOccurrences ?? 3;
   const store = loadPendingQueue(options.skillsDir);
   const now = new Date().toISOString();
@@ -119,11 +121,17 @@ export function approveSkillCandidate(
   candidateId: string,
   options: { skillsDir?: string } = {}
 ): { promoted: boolean; skillPath?: string; error?: string } {
+  if (!isValidSafeId(candidateId)) {
+    return { promoted: false, error: `Invalid skill candidate ID '${String(candidateId)}'.` };
+  }
   const store = loadPendingQueue(options.skillsDir);
   const candidate = store.candidates[candidateId];
 
   if (!candidate) {
     return { promoted: false, error: `Candidate '${candidateId}' not found in pending queue.` };
+  }
+  if (!isValidSafeId(candidate.id)) {
+    return { promoted: false, error: `Invalid skill candidate ID '${String(candidate.id)}'.` };
   }
 
   const dir = getSkillsBasePath(options.skillsDir);
@@ -133,7 +141,7 @@ export function approveSkillCandidate(
 
   const safeName = candidate.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const filename = `skill-${candidate.id}-${safeName}.md`;
-  const skillPath = path.join(dir, filename);
+  const skillPath = confinePathToRoot(dir, filename);
 
   const skillContent = `---
 name: "${candidate.title}"
@@ -172,6 +180,9 @@ export function rejectSkillCandidate(
   candidateId: string,
   options: { skillsDir?: string } = {}
 ): { rejected: boolean; error?: string } {
+  if (!isValidSafeId(candidateId)) {
+    return { rejected: false, error: `Invalid skill candidate ID '${String(candidateId)}'.` };
+  }
   const store = loadPendingQueue(options.skillsDir);
   const candidate = store.candidates[candidateId];
 

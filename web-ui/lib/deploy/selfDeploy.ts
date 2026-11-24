@@ -3,6 +3,17 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import { RunLedger, getSharedRunLedger } from "../ledger/runLedger";
+import {
+  validateGitBranchName,
+  validateOciImageTag,
+  validateHostAddress,
+} from "../securityHardening";
+
+export {
+  validateGitBranchName as validateBranchName,
+  validateOciImageTag as validateImageTag,
+  validateHostAddress,
+};
 
 const execFileAsync = promisify(execFile);
 
@@ -232,7 +243,15 @@ export class SelfDeployPipeline {
       throw new Error("Self-deploy is disabled by kill switch (SELF_DEPLOY_ENABLED=false)");
     }
 
-    const branchLower = (input.branchName || "").toLowerCase().trim();
+    validateGitBranchName(input.branchName);
+    if (input.imageTag !== undefined) {
+      validateOciImageTag(input.imageTag);
+    }
+    if (input.hostAddress !== undefined) {
+      validateHostAddress(input.hostAddress);
+    }
+
+    const branchLower = input.branchName.toLowerCase().trim();
     if (branchLower === "main" || branchLower === "master") {
       throw new Error("Self-deploy directly from main is strictly blocked by safety rails.");
     }
@@ -247,7 +266,7 @@ export class SelfDeployPipeline {
       if (checkoutRes.exitCode !== 0) {
         throw new Error(`Git checkout develop failed: ${checkoutRes.stderr || checkoutRes.stdout}`);
       }
-      const mergeRes = await this.commandRunner("git", ["merge", "--no-ff", input.branchName], {
+      const mergeRes = await this.commandRunner("git", ["merge", "--no-ff", "--", input.branchName], {
         cwd: this.repoRoot,
       });
       if (mergeRes.exitCode !== 0) {
@@ -285,13 +304,21 @@ export class SelfDeployPipeline {
       throw new Error("Self-deploy is disabled by kill switch (SELF_DEPLOY_ENABLED=false)");
     }
 
-    // 2. Safety Rails: Never deploy directly from main
+    // 2. Security: Validate branchName, imageTag, hostAddress, namespace, deploymentName
+    validateGitBranchName(input.branchName);
+    if (input.imageTag !== undefined) {
+      validateOciImageTag(input.imageTag);
+    }
+    if (input.hostAddress !== undefined) {
+      validateHostAddress(input.hostAddress);
+    }
+
+    // 3. Safety Rails: Never deploy directly from main
     const branchLower = input.branchName.toLowerCase().trim();
     if (branchLower === "main" || branchLower === "master") {
       throw new Error("Self-deploy directly from main is strictly blocked by safety rails.");
     }
 
-    // 3. Security: Validate namespace and deploymentName against strict Kubernetes DNS label regex
     validateK8sResourceName(namespace, "namespace");
     validateK8sResourceName(deploymentName, "deployment");
 

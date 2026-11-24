@@ -9,6 +9,7 @@ import {
   SkillCandidate,
 } from "@/lib/subagents/skillGate";
 import { FlywheelSkillsStore } from "@/lib/flywheel/skillsStore";
+import { isValidSafeId } from "@/lib/securityHardening";
 
 export async function GET(_req: NextRequest) {
   let flywheelStore: FlywheelSkillsStore | null = null;
@@ -59,6 +60,13 @@ export async function POST(req: NextRequest) {
           error:
             "Missing required 'action' or candidate identifier ('candidateId', 'slug', or 'id')",
         },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidSafeId(id)) {
+      return NextResponse.json(
+        { error: "Invalid skill candidate identifier" },
         { status: 400 }
       );
     }

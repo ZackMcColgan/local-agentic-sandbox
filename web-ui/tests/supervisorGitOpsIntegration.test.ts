@@ -248,6 +248,10 @@ describe("Sprint A4 — WorkerGitOps & SelfDeployPipeline Integration Suite", ()
       try {
         const req = new NextRequest("http://localhost:3000/api/deploy", {
           method: "POST",
+          headers: {
+            host: "localhost:3000",
+            origin: "http://localhost:3000",
+          },
           body: JSON.stringify({
             action: "executeSelfDeploy",
             branchName: "feat/task-capstone1",

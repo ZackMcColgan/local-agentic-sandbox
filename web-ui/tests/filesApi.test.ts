@@ -6,21 +6,35 @@ import os from "os";
 import { GET } from "../app/api/files/route.js";
 import { NextRequest } from "next/server";
 
+async function withTempWorkspace(fn: (workspaceDir: string) => Promise<void>): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "filesapi-ws-"));
+  const prevWs = process.env.WORKSPACE_DIR;
+  process.env.WORKSPACE_DIR = tmpDir;
+  try {
+    await fn(tmpDir);
+  } finally {
+    if (prevWs !== undefined) {
+      process.env.WORKSPACE_DIR = prevWs;
+    } else {
+      delete process.env.WORKSPACE_DIR;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 describe("Fix 1.3: Artifact preview files API endpoint", () => {
   it("serves markdown files with HTTP 200 and text/markdown Content-Type", async () => {
-    const fixturePath = path.resolve(process.cwd(), "test-preview-artifact.md");
-    fs.writeFileSync(fixturePath, "# Test Markdown Artifact\n- Item 1\n", "utf8");
+    await withTempWorkspace(async (wsDir) => {
+      const fixturePath = path.resolve(wsDir, "test-preview-artifact.md");
+      fs.writeFileSync(fixturePath, "# Test Markdown Artifact\n- Item 1\n", "utf8");
 
-    try {
       const req = new NextRequest("http://localhost:3000/api/files?path=test-preview-artifact.md");
       const res = await GET(req);
       assert.equal(res.status, 200);
       assert.equal(res.headers.get("content-type"), "text/markdown; charset=utf-8");
       const body = await res.text();
       assert.ok(body.includes("# Test Markdown Artifact"));
-    } finally {
-      if (fs.existsSync(fixturePath)) fs.unlinkSync(fixturePath);
-    }
+    });
   });
 
   it("rejects non-allowlisted executable files with HTTP 415", async () => {
@@ -30,15 +44,15 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
   });
 
   it("serves code and config files (.py, .ts, .yaml) with HTTP 200", async () => {
-    const pyPath = path.resolve(process.cwd(), "test-script.py");
-    const tsPath = path.resolve(process.cwd(), "test-util.ts");
-    const yamlPath = path.resolve(process.cwd(), "test-config.yaml");
+    await withTempWorkspace(async (wsDir) => {
+      const pyPath = path.resolve(wsDir, "test-script.py");
+      const tsPath = path.resolve(wsDir, "test-util.ts");
+      const yamlPath = path.resolve(wsDir, "test-config.yaml");
 
-    fs.writeFileSync(pyPath, "print('hello')", "utf8");
-    fs.writeFileSync(tsPath, "export const x = 1;", "utf8");
-    fs.writeFileSync(yamlPath, "key: value", "utf8");
+      fs.writeFileSync(pyPath, "print('hello')", "utf8");
+      fs.writeFileSync(tsPath, "export const x = 1;", "utf8");
+      fs.writeFileSync(yamlPath, "key: value", "utf8");
 
-    try {
       const resPy = await GET(
         new NextRequest("http://localhost:3000/api/files?path=test-script.py")
       );
@@ -56,11 +70,7 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
       );
       assert.equal(resYaml.status, 200);
       assert.ok(resYaml.headers.get("content-type")?.includes("text/plain"));
-    } finally {
-      if (fs.existsSync(pyPath)) fs.unlinkSync(pyPath);
-      if (fs.existsSync(tsPath)) fs.unlinkSync(tsPath);
-      if (fs.existsSync(yamlPath)) fs.unlinkSync(yamlPath);
-    }
+    });
   });
 
   it("blocks directory traversal with HTTP 403", async () => {
@@ -71,10 +81,10 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
 
   describe("Part 1: Download parameter and Content-Disposition header", () => {
     it("adds Content-Disposition: attachment; filename=... when download=1 is present", async () => {
-      const htmlPath = path.resolve(process.cwd(), "game.html");
-      fs.writeFileSync(htmlPath, "<!DOCTYPE html><html><body>Game</body></html>", "utf8");
+      await withTempWorkspace(async (wsDir) => {
+        const htmlPath = path.resolve(wsDir, "game.html");
+        fs.writeFileSync(htmlPath, "<!DOCTYPE html><html><body>Game</body></html>", "utf8");
 
-      try {
         const req = new NextRequest("http://localhost:3000/api/files?path=game.html&download=1");
         const res = await GET(req);
         assert.equal(res.status, 200);
@@ -83,16 +93,14 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
         assert.ok(disposition, "Content-Disposition header must be present when download=1");
         assert.ok(disposition.includes("attachment"), "Must be attachment disposition");
         assert.ok(disposition.includes('filename="game.html"'), "Must contain filename");
-      } finally {
-        if (fs.existsSync(htmlPath)) fs.unlinkSync(htmlPath);
-      }
+      });
     });
 
     it("omits Content-Disposition header when download parameter is absent", async () => {
-      const htmlPath = path.resolve(process.cwd(), "viewer.html");
-      fs.writeFileSync(htmlPath, "<!DOCTYPE html><html><body>Viewer</body></html>", "utf8");
+      await withTempWorkspace(async (wsDir) => {
+        const htmlPath = path.resolve(wsDir, "viewer.html");
+        fs.writeFileSync(htmlPath, "<!DOCTYPE html><html><body>Viewer</body></html>", "utf8");
 
-      try {
         const req = new NextRequest("http://localhost:3000/api/files?path=viewer.html");
         const res = await GET(req);
         assert.equal(res.status, 200);
@@ -101,16 +109,14 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
           null,
           "Content-Disposition must be omitted without download=1"
         );
-      } finally {
-        if (fs.existsSync(htmlPath)) fs.unlinkSync(htmlPath);
-      }
+      });
     });
 
     it("handles UTF-8 filename encoding properly in Content-Disposition", async () => {
-      const specialPath = path.resolve(process.cwd(), "report-2026-résumé.md");
-      fs.writeFileSync(specialPath, "# Résumé\n", "utf8");
+      await withTempWorkspace(async (wsDir) => {
+        const specialPath = path.resolve(wsDir, "report-2026-résumé.md");
+        fs.writeFileSync(specialPath, "# Résumé\n", "utf8");
 
-      try {
         const req = new NextRequest(
           "http://localhost:3000/api/files?path=report-2026-r%C3%A9sum%C3%A9.md&download=1"
         );
@@ -123,9 +129,7 @@ describe("Fix 1.3: Artifact preview files API endpoint", () => {
           disposition.includes("filename=") || disposition.includes("filename*="),
           "Must contain encoded filename"
         );
-      } finally {
-        if (fs.existsSync(specialPath)) fs.unlinkSync(specialPath);
-      }
+      });
     });
 
     it("preserves traversal rejection (HTTP 403) with download=1", async () => {

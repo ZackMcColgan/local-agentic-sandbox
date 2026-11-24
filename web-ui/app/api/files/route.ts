@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { resolveThreadsDir } from "@/lib/threads/threadStore";
-import { confinePathToRoot } from "@/lib/securityHardening";
+import {
+  confinePathToRoot,
+  isStrictlyInsideRoot,
+  resolveRealConfinedPath,
+} from "@/lib/securityHardening";
 import { resolveHostCheckoutRoot } from "@/lib/explorer/explorerFs";
 
 function resolveAllowlistedProjectRoots(): string[] {
@@ -98,9 +102,14 @@ export async function GET(request: NextRequest) {
     }
 
     const rawTrimmed = requestedPath.trim();
+    if (!rawTrimmed || rawTrimmed.includes("\0")) {
+      return NextResponse.json({ error: "Invalid 'path' query parameter" }, { status: 400 });
+    }
+
     const isAbsoluteHostPath =
       /^[a-zA-Z]:[\\/]/.test(rawTrimmed) ||
-      (process.platform !== "win32" && rawTrimmed.startsWith("/"));
+      rawTrimmed.startsWith("/") ||
+      rawTrimmed.startsWith("\\\\");
     // Clean leading slashes for relative workspace lookups
     const cleanPath = isAbsoluteHostPath ? rawTrimmed : rawTrimmed.replace(/^[\/\\]+/, "").trim();
 
@@ -112,7 +121,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Determine candidate root directories where files might reside
+    // Determine candidate root directories where files might reside (never cwd or "..")
     const cwd = process.cwd();
     const threadsDir = resolveThreadsDir();
     const hostCheckoutRoot = resolveHostCheckoutRoot();
@@ -123,62 +132,69 @@ export async function GET(request: NextRequest) {
         process.env.WORKSPACE_DIR || "/workspace",
         path.resolve(cwd, "..", "workspace"),
         path.resolve(cwd, "workspace"),
-        cwd,
-        path.resolve(cwd, ".."),
         hostCheckoutRoot,
         ...allowlistedProjectRoots,
       ])
     );
 
-    const isInsideRoot = (root: string, candidate: string): boolean => {
-      const resolvedRoot = path.resolve(root);
-      const resolvedCandidate = path.resolve(candidate);
-      const rel = path.relative(resolvedRoot, resolvedCandidate);
-      return !rel.startsWith("..") && !path.isAbsolute(rel) && !/^[a-zA-Z]:/.test(rel);
-    };
-
-    // Check if target is a directory across candidate roots (directory listing is forbidden)
-    let matchedAnyRoot = false;
-    for (const root of candidateRoots) {
-      if (!fs.existsSync(root)) continue;
-      const candidatesToCheck: string[] = [];
+    const buildCandidatesForRoot = (root: string): string[] => {
       if (isAbsoluteHostPath) {
         const resolvedAbs = path.resolve(cleanPath);
-        if (isInsideRoot(root, resolvedAbs)) {
-          matchedAnyRoot = true;
-          candidatesToCheck.push(resolvedAbs);
-        }
-      } else {
+        return isStrictlyInsideRoot(root, resolvedAbs) ? [resolvedAbs] : [];
+      }
+      const list: string[] = [];
+      try {
+        list.push(confinePathToRoot(root, cleanPath));
+      } catch {
+        return list;
+      }
+      if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
+        const stripped = cleanPath.replace(/^workspace[\/\\]/, "");
         try {
-          candidatesToCheck.push(confinePathToRoot(root, cleanPath));
-          matchedAnyRoot = true;
-        } catch {
-          continue;
-        }
-        if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
-          candidatesToCheck.push(path.resolve(root, cleanPath.replace(/^workspace[\/\\]/, "")));
-        }
-        if (
-          root === threadsDir &&
-          (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
-        ) {
-          candidatesToCheck.push(
-            path.resolve(root, cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, ""))
-          );
-        }
+          list.push(confinePathToRoot(root, stripped));
+        } catch {}
+      }
+      if (
+        root === threadsDir &&
+        (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
+      ) {
+        const stripped = cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "");
+        try {
+          list.push(confinePathToRoot(root, stripped));
+        } catch {}
+      }
+      return list;
+    };
+
+    // Enforce confinement, resolve symlinks, forbid directories, and locate target file
+    let matchedAnyRoot = false;
+    let resolvedPath: string | null = null;
+    for (const root of candidateRoots) {
+      if (!fs.existsSync(root)) continue;
+      const candidatesToCheck = buildCandidatesForRoot(root);
+      if (candidatesToCheck.length > 0) {
+        matchedAnyRoot = true;
       }
       for (const candidate of candidatesToCheck) {
-        if (isInsideRoot(root, candidate) && fs.existsSync(candidate)) {
-          try {
-            const stat = fs.statSync(candidate);
-            if (stat.isDirectory()) {
-              return NextResponse.json(
-                { error: "Access forbidden: directory listing not permitted" },
-                { status: 403 }
-              );
-            }
-          } catch {}
+        const confined = resolveRealConfinedPath(root, candidate);
+        if (!confined.ok) {
+          if (confined.reason === "symlink_escape" || confined.reason === "outside_root") {
+            return NextResponse.json({ error: "Access denied: path escapes root" }, { status: 403 });
+          }
+          continue;
         }
+        try {
+          const stat = fs.statSync(confined.canonicalTarget);
+          if (stat.isDirectory()) {
+            return NextResponse.json(
+              { error: "Access forbidden: directory listing not permitted" },
+              { status: 403 }
+            );
+          }
+          if (!resolvedPath && stat.isFile()) {
+            resolvedPath = confined.canonicalTarget;
+          }
+        } catch {}
       }
     }
 
@@ -200,108 +216,48 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let resolvedPath: string | null = null;
-
-    // Check each candidate root
-    for (const root of candidateRoots) {
-      if (!fs.existsSync(root)) continue;
-
-      // Try with direct cleanPath (absolute inside root, or relative under root)
-      const candidate1 = isAbsoluteHostPath
-        ? path.resolve(cleanPath)
-        : path.resolve(root, cleanPath);
-      if (isInsideRoot(root, candidate1) && fs.existsSync(candidate1)) {
-        try {
-          const stat = fs.statSync(candidate1);
-          if (stat.isDirectory()) {
-            return NextResponse.json(
-              { error: "Access forbidden: directory listing not permitted" },
-              { status: 403 }
-            );
-          }
-          if (stat.isFile()) {
-            resolvedPath = candidate1;
-            break;
-          }
-        } catch {}
-      }
-
-      if (isAbsoluteHostPath) continue;
-
-      // If cleanPath starts with "workspace/", strip it when searching inside workspace root
-      if (cleanPath.startsWith("workspace/") || cleanPath.startsWith("workspace\\")) {
-        const stripped = cleanPath.replace(/^workspace[\/\\]/, "");
-        const candidate2 = path.resolve(root, stripped);
-        if (isInsideRoot(root, candidate2) && fs.existsSync(candidate2)) {
-          try {
-            const stat = fs.statSync(candidate2);
-            if (stat.isFile()) {
-              resolvedPath = candidate2;
-              break;
-            }
-          } catch {}
-        }
-      }
-
-      // If resolving against resolveThreadsDir() and cleanPath starts with ".agent/threads/", strip it
-      if (
-        root === threadsDir &&
-        (cleanPath.startsWith(".agent/threads/") || cleanPath.startsWith(".agent\\threads\\"))
-      ) {
-        const stripped = cleanPath.replace(/^\.agent[\/\\]threads[\/\\]/, "");
-        const candidate3 = path.resolve(root, stripped);
-        if (isInsideRoot(root, candidate3) && fs.existsSync(candidate3)) {
-          try {
-            const stat = fs.statSync(candidate3);
-            if (stat.isFile()) {
-              resolvedPath = candidate3;
-              break;
-            }
-          } catch {}
-        }
-      }
-    }
-
     // If file not found locally on disk, try proxying to mcp-server if available
     if (!resolvedPath) {
-      const mcpEnv = process.env.MCP_SERVER_URL || process.env.MCP_URL;
-      const mcpBase = mcpEnv ? mcpEnv.replace(/\/sse\/?$/, "") : "http://localhost:8080";
+      if (!isAbsoluteHostPath) {
+        const mcpEnv = process.env.MCP_SERVER_URL || process.env.MCP_URL;
+        const mcpBase = mcpEnv ? mcpEnv.replace(/\/sse\/?$/, "") : "http://localhost:8080";
 
-      try {
-        const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {
-          signal: AbortSignal.timeout(3000),
-        });
-        if (mcpFileRes.ok) {
-          const fileBuffer = await mcpFileRes.arrayBuffer();
-          const mimeType = getMimeType(cleanPath);
-          if (asJson) {
-            const textContent = new TextDecoder().decode(fileBuffer);
-            return NextResponse.json({
-              path: cleanPath,
-              size: fileBuffer.byteLength,
-              mimeType,
-              content: textContent,
+        try {
+          const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {
+            signal: AbortSignal.timeout(3000),
+          });
+          if (mcpFileRes.ok) {
+            const fileBuffer = await mcpFileRes.arrayBuffer();
+            const mimeType = getMimeType(cleanPath);
+            if (asJson) {
+              const textContent = new TextDecoder().decode(fileBuffer);
+              return NextResponse.json({
+                path: cleanPath,
+                size: fileBuffer.byteLength,
+                mimeType,
+                content: textContent,
+              });
+            }
+            const headers: Record<string, string> = {
+              "Content-Type": mimeType,
+              "Content-Length": fileBuffer.byteLength.toString(),
+              "Cache-Control": "public, max-age=60",
+            };
+            if (isDownload) {
+              const basename = path.basename(cleanPath);
+              const asciiName = basename.replace(/[^\x20-\x7E]/g, "_");
+              const utf8Name = encodeURIComponent(basename);
+              headers["Content-Disposition"] =
+                `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+            }
+            return new NextResponse(Buffer.from(fileBuffer), {
+              status: 200,
+              headers,
             });
           }
-          const headers: Record<string, string> = {
-            "Content-Type": mimeType,
-            "Content-Length": fileBuffer.byteLength.toString(),
-            "Cache-Control": "public, max-age=60",
-          };
-          if (isDownload) {
-            const basename = path.basename(cleanPath);
-            const asciiName = basename.replace(/[^\x20-\x7E]/g, "_");
-            const utf8Name = encodeURIComponent(basename);
-            headers["Content-Disposition"] =
-              `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
-          }
-          return new NextResponse(Buffer.from(fileBuffer), {
-            status: 200,
-            headers,
-          });
+        } catch {
+          // Fallback network attempt failed, proceed to 404
         }
-      } catch {
-        // Fallback network attempt failed, proceed to 404
       }
 
       return NextResponse.json({ error: "File not found" }, { status: 404 });

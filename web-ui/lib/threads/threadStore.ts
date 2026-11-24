@@ -21,6 +21,7 @@ import { superviseStalledThread } from "./inAppSupervisor";
 import { listBoardOwnedThreadIds } from "../board/boardStore";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
+import { assertValidSafeId, isStrictlyInsideRoot, isValidSafeId } from "../securityHardening";
 
 import type {
   TurnConversationPreparation,
@@ -98,7 +99,7 @@ export function computeTurnLiveness(thread: Thread, now: number = Date.now()): T
  * invalidating .summaries-index.json mtimes.
  */
 export function touchActiveTurn(threadId: string, _threadsDir?: string): void {
-  if (!threadId) return;
+  if (!threadId || !isValidSafeId(threadId)) return;
   const nowMs = Date.now();
   turnHeartbeatMsMap.set(threadId, nowMs);
   const existing = activeTurnRegistry.get(threadId);
@@ -326,11 +327,21 @@ export class ThreadStore {
   }
 
   getFilePath(threadId: string): string {
-    return path.join(this.threadsDir, `${threadId}.json`);
+    const safeId = assertValidSafeId(threadId, "threadId");
+    const target = path.resolve(this.threadsDir, `${safeId}.json`);
+    if (!isStrictlyInsideRoot(this.threadsDir, target)) {
+      throw new Error(`Security Violation: Thread path traversal outside threadsDir (${threadId})`);
+    }
+    return target;
   }
 
   getSteerFilePath(threadId: string): string {
-    return path.join(this.threadsDir, `${threadId}.steer.json`);
+    const safeId = assertValidSafeId(threadId, "threadId");
+    const target = path.resolve(this.threadsDir, `${safeId}.steer.json`);
+    if (!isStrictlyInsideRoot(this.threadsDir, target)) {
+      throw new Error(`Security Violation: Steer path traversal outside threadsDir (${threadId})`);
+    }
+    return target;
   }
 
   appendSteer(threadId: string, text: string): number {
@@ -1474,13 +1485,14 @@ export class ThreadStore {
   }
 
   async deleteThread(threadId: string): Promise<boolean> {
+    const safeId = assertValidSafeId(threadId, "threadId");
     // 1. Abort any active streaming turn first & clear live presence
-    abortActiveTurn(threadId);
-    clearTurnActive(threadId);
-    activeExecutionSet.delete(threadId);
-    deletedThreadIds.add(threadId);
+    abortActiveTurn(safeId);
+    clearTurnActive(safeId);
+    activeExecutionSet.delete(safeId);
+    deletedThreadIds.add(safeId);
 
-    const filePath = this.getFilePath(threadId);
+    const filePath = this.getFilePath(safeId);
     let thread: Thread | null = null;
     if (fs.existsSync(filePath)) {
       try {
@@ -1536,8 +1548,8 @@ export class ThreadStore {
     }
 
     // (1) Remove thread's <threadId>/ subdirectory recursively
-    const subDir = path.join(this.threadsDir, threadId);
-    if (fs.existsSync(subDir)) {
+    const subDir = path.resolve(this.threadsDir, safeId);
+    if (isStrictlyInsideRoot(this.threadsDir, subDir) && fs.existsSync(subDir)) {
       try {
         fs.rmSync(subDir, { recursive: true, force: true });
         deletedAny = true;
@@ -1545,7 +1557,7 @@ export class ThreadStore {
     }
 
     // (1) Remove its <threadId>.steer.json sidecar if present
-    const steerFile = path.join(this.threadsDir, `${threadId}.steer.json`);
+    const steerFile = this.getSteerFilePath(safeId);
     if (fs.existsSync(steerFile)) {
       try {
         fs.unlinkSync(steerFile);

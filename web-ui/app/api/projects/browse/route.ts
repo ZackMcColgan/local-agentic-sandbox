@@ -3,6 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
+import {
+  confinePathToRoot,
+  isStrictlyInsideRoot,
+  resolveRealConfinedPath,
+} from "@/lib/securityHardening";
 
 export const dynamic = "force-dynamic";
 
@@ -52,17 +57,25 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const subpath = url.searchParams.get("subpath") || "";
 
-    const candidate = subpath ? path.resolve(allowedRoot, subpath) : allowedRoot;
-    const rootNorm = path.normalize(allowedRoot);
-    const candidateNorm = path.normalize(candidate);
+    if (subpath.includes("\0")) {
+      return NextResponse.json({ error: "Invalid subpath" }, { status: 400 });
+    }
 
-    if (!candidateNorm.startsWith(rootNorm)) {
+    const candidate = subpath ? path.resolve(allowedRoot, subpath) : allowedRoot;
+    if (!isStrictlyInsideRoot(allowedRoot, candidate)) {
       return NextResponse.json({ error: "Access forbidden: directory traversal" }, { status: 403 });
     }
 
-    if (!fs.existsSync(candidateNorm)) {
-      return NextResponse.json({ error: "Directory does not exist" }, { status: 404 });
+    const confined = resolveRealConfinedPath(allowedRoot, candidate);
+    if (!confined.ok) {
+      if (confined.reason === "not_found") {
+        return NextResponse.json({ error: "Directory does not exist" }, { status: 404 });
+      }
+      return NextResponse.json({ error: "Access forbidden: directory traversal" }, { status: 403 });
     }
+
+    const rootNorm = confined.canonicalRoot;
+    const candidateNorm = confined.canonicalTarget;
 
     const stat = fs.statSync(candidateNorm);
     if (!stat.isDirectory()) {
@@ -79,6 +92,7 @@ export async function GET(req: NextRequest) {
 
       if (entry.isDirectory()) {
         const full = path.join(candidateNorm, entry.name);
+        if (!resolveRealConfinedPath(rootNorm, full).ok) continue;
         const isGitRepo = fs.existsSync(path.join(full, ".git"));
         const defaultBranch = isGitRepo ? detectDefaultBranch(full) : "main";
         const toolchain = detectToolchain(full);
@@ -86,7 +100,7 @@ export async function GET(req: NextRequest) {
         items.push({
           name: entry.name,
           path: full,
-          relPath: path.relative(allowedRoot, full).replace(/\\/g, "/"),
+          relPath: path.relative(rootNorm, full).replace(/\\/g, "/"),
           isGitRepo,
           defaultBranch,
           toolchain,
@@ -100,13 +114,13 @@ export async function GET(req: NextRequest) {
       return a.name.localeCompare(b.name);
     });
 
-    const isAtRoot = candidateNorm === rootNorm;
+    const isAtRoot = path.relative(rootNorm, candidateNorm) === "";
     const parentPath = isAtRoot ? null : path.dirname(candidateNorm);
 
     return NextResponse.json({
-      allowedRoot,
+      allowedRoot: rootNorm,
       currentPath: candidateNorm,
-      relPath: path.relative(allowedRoot, candidateNorm).replace(/\\/g, "/") || ".",
+      relPath: path.relative(rootNorm, candidateNorm).replace(/\\/g, "/") || ".",
       isAtRoot,
       parentPath,
       items,
@@ -126,20 +140,34 @@ export async function POST(req: NextRequest) {
     const { action, targetPath, name } = body;
 
     if (action === "init-repo") {
-      if (!targetPath) {
-        return NextResponse.json({ error: "Missing targetPath" }, { status: 400 });
+      if (!targetPath || typeof targetPath !== "string" || targetPath.includes("\0")) {
+        return NextResponse.json({ error: "Missing or invalid targetPath" }, { status: 400 });
       }
 
-      const norm = path.normalize(path.resolve(targetPath));
-      if (
-        !norm.startsWith(path.normalize(allowedRoot)) &&
-        !norm.startsWith(path.normalize(os.tmpdir()))
-      ) {
+      const resolvedTarget = path.resolve(targetPath);
+      const allowedBases = [allowedRoot, os.tmpdir()];
+      if (!allowedBases.some((base) => isStrictlyInsideRoot(base, resolvedTarget))) {
         return NextResponse.json({ error: "Target path outside allowed root" }, { status: 403 });
       }
 
-      if (!fs.existsSync(norm)) {
-        return NextResponse.json({ error: "Target path does not exist" }, { status: 404 });
+      let norm: string | null = null;
+      let sawNotFound = false;
+      for (const base of allowedBases) {
+        const confined = resolveRealConfinedPath(base, resolvedTarget);
+        if (confined.ok) {
+          norm = confined.canonicalTarget;
+          break;
+        }
+        if (confined.reason === "not_found") {
+          sawNotFound = true;
+        }
+      }
+
+      if (!norm) {
+        return NextResponse.json(
+          { error: sawNotFound ? "Target path does not exist" : "Target path outside allowed root" },
+          { status: sawNotFound ? 404 : 403 }
+        );
       }
 
       // Initialize git
@@ -187,13 +215,17 @@ export async function POST(req: NextRequest) {
       const slug = projectName
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, "-")
-        .replace(/-+/g, "-");
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      if (!slug || slug === "." || slug === "..") {
+        return NextResponse.json({ error: "Invalid project name" }, { status: 400 });
+      }
       const projectsDir = path.join(allowedRoot, "projects");
       if (!fs.existsSync(projectsDir)) {
         fs.mkdirSync(projectsDir, { recursive: true });
       }
 
-      const projectPath = path.join(projectsDir, slug);
+      const projectPath = confinePathToRoot(projectsDir, slug);
       if (fs.existsSync(projectPath)) {
         return NextResponse.json(
           { error: `Project directory already exists: ${slug}` },
