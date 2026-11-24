@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { BOARD_SEED_ITEMS } from "./boardSeed";
+import { extractThreadIdFromLink } from "./threadLink";
+
+export { extractThreadIdFromLink };
 
 export type BoardStatus = "queued" | "working" | "pr-open" | "parked" | "needs-attention" | "done";
 export type BoardSource = "assistant" | "manual";
@@ -75,24 +78,6 @@ export interface UpdateBoardItemInput {
   handoff?: BoardHandoff | null;
   autoResumeCount?: number;
   sprint?: string;
-}
-
-export function extractThreadIdFromLink(threadLink?: string): string | null {
-  if (typeof threadLink !== "string") return null;
-  const trimmed = threadLink.trim();
-  if (!trimmed) return null;
-  const queryMatch = /[?&]thread=([^&#]+)/.exec(trimmed);
-  if (queryMatch) {
-    try {
-      return decodeURIComponent(queryMatch[1]);
-    } catch {
-      return queryMatch[1];
-    }
-  }
-  if (!trimmed.includes("/") && !trimmed.includes("?")) {
-    return trimmed;
-  }
-  return null;
 }
 
 /**

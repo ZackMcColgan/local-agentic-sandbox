@@ -330,8 +330,8 @@ export function MorningReportView({
   };
 
   const resolveTaskIdForFlag = (flagId: string): string => {
-    const matchedTask = overnight?.tasks?.find((t) =>
-      Array.isArray(t.ambiguityFlags) && t.ambiguityFlags.some((f) => f.id === flagId)
+    const matchedTask = overnight?.tasks?.find(
+      (t) => Array.isArray(t.ambiguityFlags) && t.ambiguityFlags.some((f) => f.id === flagId)
     );
     return matchedTask?.taskId || report?.taskId || overnight?.tasks?.[0]?.taskId || "";
   };

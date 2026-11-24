@@ -15,7 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { TaskManifest } from "@/lib/subagents/types";
-import { extractThreadIdFromLink } from "@/lib/board/boardStore";
+import { extractThreadIdFromLink } from "@/lib/board/threadLink";
 import { LiveRunBlock } from "./LiveRunBlock";
 
 interface BuildsViewProps {
@@ -411,7 +411,9 @@ export function BuildsView({
                     <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-zinc-400 flex-wrap pt-1 border-t border-slate-50 dark:border-zinc-800/60">
                       <div className="flex items-center gap-1">
                         <GitBranch className="h-3.5 w-3.5 text-slate-400" />
-                        <span className="font-mono">{t.branchName || t.branch || "Unassigned"}</span>
+                        <span className="font-mono">
+                          {t.branchName || t.branch || "Unassigned"}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5 text-slate-400" />

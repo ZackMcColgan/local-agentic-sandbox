@@ -73,61 +73,61 @@ export function SandboxGauge({ hostAccess = false, securityPosture }: SandboxGau
         },
       ]
     : [
-    {
-      title: "Network Egress",
-      value: "Zero Egress (air-gapped)",
-      detail: "ai-mesh (internal: true)",
-      icon: Lock,
-      status: "enforced",
-      accent:
-        "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-500/20",
-    },
-    {
-      title: "Root Filesystem",
-      value: "Read-Only Enforced",
-      detail: "read_only: true",
-      icon: HardDrive,
-      status: "enforced",
-      accent:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-    {
-      title: "Linux Capabilities",
-      value: "cap_drop: ALL",
-      detail: "no-new-privileges: true",
-      icon: ShieldCheck,
-      status: "enforced",
-      accent:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-    {
-      title: "Execution User",
-      value: securityPosture?.execution_uid || "10001:10001",
-      detail: "Unprivileged non-root",
-      icon: UserCheck,
-      status: "enforced",
-      accent:
-        "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-500/20",
-    },
-    {
-      title: "Ephemeral Buffer",
-      value: "/tmp (tmpfs: 64MB)",
-      detail: "rw,noexec,nosuid",
-      icon: Zap,
-      status: "enforced",
-      accent:
-        "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
-    },
-    {
-      title: "Supply-Chain Trust",
-      value: securityPosture?.provenance_level || "SLSA-3 Verified",
-      detail: "SPDX 2.3 SBOM Validated",
-      icon: Activity,
-      status: "enforced",
-      accent:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-  ];
+        {
+          title: "Network Egress",
+          value: "Zero Egress (air-gapped)",
+          detail: "ai-mesh (internal: true)",
+          icon: Lock,
+          status: "enforced",
+          accent:
+            "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-500/20",
+        },
+        {
+          title: "Root Filesystem",
+          value: "Read-Only Enforced",
+          detail: "read_only: true",
+          icon: HardDrive,
+          status: "enforced",
+          accent:
+            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Linux Capabilities",
+          value: "cap_drop: ALL",
+          detail: "no-new-privileges: true",
+          icon: ShieldCheck,
+          status: "enforced",
+          accent:
+            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Execution User",
+          value: securityPosture?.execution_uid || "10001:10001",
+          detail: "Unprivileged non-root",
+          icon: UserCheck,
+          status: "enforced",
+          accent:
+            "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-500/20",
+        },
+        {
+          title: "Ephemeral Buffer",
+          value: "/tmp (tmpfs: 64MB)",
+          detail: "rw,noexec,nosuid",
+          icon: Zap,
+          status: "enforced",
+          accent:
+            "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
+        },
+        {
+          title: "Supply-Chain Trust",
+          value: securityPosture?.provenance_level || "SLSA-3 Verified",
+          detail: "SPDX 2.3 SBOM Validated",
+          icon: Activity,
+          status: "enforced",
+          accent:
+            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+      ];
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 space-y-4 shadow-sm">

@@ -244,9 +244,7 @@ export function BoardView({
 
         {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
           <div
-            className={`pt-2 text-[12px] ${
-              isNeedsAttention ? "text-rose-300" : "text-zinc-300"
-            }`}
+            className={`pt-2 text-[12px] ${isNeedsAttention ? "text-rose-300" : "text-zinc-300"}`}
           >
             {item.parkedReason}
           </div>

@@ -174,9 +174,7 @@ export function SchedulesPanel({ initialSchedules, initialHealth }: SchedulesPan
         <div className="flex items-center gap-2">
           <CalendarClock className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              Scheduled Runs
-            </h2>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Scheduled Runs</h2>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
               Cron schedules and background scheduler daemon health
             </p>

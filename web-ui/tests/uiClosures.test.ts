@@ -128,7 +128,9 @@ describe("U-F8 — ThreadSummary streamingChars, host_replace_string label, pers
     globalThis.window = win as unknown as Window & typeof globalThis;
     globalThis.document = win.document as unknown as Document;
     const div = win.document.createElement("div") as unknown as HTMLDivElement;
-    win.document.body.appendChild(div as unknown as Parameters<typeof win.document.body.appendChild>[0]);
+    win.document.body.appendChild(
+      div as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
     const root = createRoot(div);
 
     const traces = [
@@ -313,17 +315,28 @@ describe("U-F9 — Board DELETE/edit, settled Thread links, rose needs-attention
     );
 
     assert.ok(html.includes("/?thread=thread-done-201"), "Done card must show Thread link");
-    assert.ok(html.includes("/?thread=thread-attn-202"), "Needs-attention card must show Thread link");
+    assert.ok(
+      html.includes("/?thread=thread-attn-202"),
+      "Needs-attention card must show Thread link"
+    );
     assert.ok(
       html.includes("border-rose-") && html.includes("text-rose-"),
       "needs-attention badge/reason must be styled in rose"
     );
     assert.ok(
-      !html.includes("border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300\">needs attention"),
+      !html.includes(
+        'border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">needs attention'
+      ),
       "needs-attention badge must not be emerald"
     );
-    assert.ok(html.includes('data-testid="board-edit-item-done"'), "Edit button must exist on cards");
-    assert.ok(html.includes('data-testid="board-delete-item-done"'), "Delete button must exist on cards");
+    assert.ok(
+      html.includes('data-testid="board-edit-item-done"'),
+      "Edit button must exist on cards"
+    );
+    assert.ok(
+      html.includes('data-testid="board-delete-item-done"'),
+      "Delete button must exist on cards"
+    );
   });
 
   it("SchedulesPanel lists schedules and triggers runs via /api/schedules", async () => {
@@ -405,7 +418,9 @@ describe("U-F9 — Board DELETE/edit, settled Thread links, rose needs-attention
       await flushEffects();
 
       assert.ok(
-        calls.some((c) => c.url.includes("/api/schedules/sched-nightly/trigger") && c.method === "POST"),
+        calls.some(
+          (c) => c.url.includes("/api/schedules/sched-nightly/trigger") && c.method === "POST"
+        ),
         "Trigger click must POST /api/schedules/sched-nightly/trigger"
       );
     } finally {
@@ -440,7 +455,12 @@ describe("U-F9 — Board DELETE/edit, settled Thread links, rose needs-attention
                 title: "Board Fallback Job",
                 status: "working",
                 threadLink: "/?thread=thread-b1",
-                handoff: { branch: "feat/real-branch-b1", state: "working", headSha: "abc", nextStep: "test" },
+                handoff: {
+                  branch: "feat/real-branch-b1",
+                  state: "working",
+                  headSha: "abc",
+                  nextStep: "test",
+                },
                 createdAt: "2026-11-23T00:00:00.000Z",
                 updatedAt: "2026-11-23T00:00:00.000Z",
               },
@@ -526,7 +546,11 @@ describe("U-F10 — Honest host badges, live engine/sandbox telemetry, Morning R
       gaugeHtml.includes("Host Bridge") || gaugeHtml.includes("Host Execution"),
       "SandboxGauge with hostAccess must indicate Host Bridge"
     );
-    assert.equal(gaugeHtml.includes("air-gapped"), false, "Host SandboxGauge must not say air-gapped");
+    assert.equal(
+      gaugeHtml.includes("air-gapped"),
+      false,
+      "Host SandboxGauge must not say air-gapped"
+    );
     assert.equal(
       gaugeHtml.includes("Read-Only Enforced"),
       false,

@@ -206,9 +206,7 @@ export function readCandidateSkillMarkdown(
 ): { markdown: string; filePath: string; fromDisk: boolean } {
   const dir = getSkillsBasePath(skillsDir);
   const safeId = /^[A-Za-z0-9._-]+$/.test(candidate.id) ? candidate.id : "";
-  const safeName = (candidate.title || candidate.id)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-");
+  const safeName = (candidate.title || candidate.id).toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
   if (safeId) {
     const candidates: Array<{ abs: string; rel: string }> = [
