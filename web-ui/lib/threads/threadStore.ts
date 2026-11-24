@@ -1255,9 +1255,9 @@ export class ThreadStore {
       const cached = this.summaryCache.get(file);
       const cacheFresh = Boolean(
         cached &&
-          cached.mtimeMs === stat.mtimeMs &&
-          typeof cached.summary.hasStreamingMessage === "boolean" &&
-          typeof cached.summary.traceCount === "number"
+        cached.mtimeMs === stat.mtimeMs &&
+        typeof cached.summary.hasStreamingMessage === "boolean" &&
+        typeof cached.summary.traceCount === "number"
       );
 
       if (cacheFresh && cached && typeof cached.searchDigest === "string") {

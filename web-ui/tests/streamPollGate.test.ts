@@ -220,11 +220,7 @@ test("P-F3: GET /api/threads/[id] returns deterministic ETag, 304 on matching If
     assert.equal(resCompact.status, 200);
     const etagCompact = resCompact.headers.get("etag");
     assert.ok(etagCompact && etagCompact.length > 0, "Expected ETag header on compact GET");
-    assert.notEqual(
-      etagCompact,
-      etagFull,
-      "Compact mode ETag must differ from full mode ETag"
-    );
+    assert.notEqual(etagCompact, etagFull, "Compact mode ETag must differ from full mode ETag");
     const bodyCompact = (await resCompact.json()) as {
       thread: { messages: Array<{ traces?: Array<{ result?: unknown }> }> };
     };

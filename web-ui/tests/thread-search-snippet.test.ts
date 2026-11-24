@@ -208,14 +208,18 @@ describe("P-F4: Indexed thread search + raw pre-check & 300ms AbortController de
         );
       });
 
-      const searchToggle = container.querySelector('button[aria-label="Search sessions"]') as HTMLButtonElement | null;
+      const searchToggle = container.querySelector(
+        'button[aria-label="Search sessions"]'
+      ) as HTMLButtonElement | null;
       if (searchToggle) {
         await act(async () => {
           searchToggle.click();
         });
       }
 
-      const input = container.querySelector('input[type="text"], input[placeholder*="Search"]') as HTMLInputElement;
+      const input = container.querySelector(
+        'input[type="text"], input[placeholder*="Search"]'
+      ) as HTMLInputElement;
       assert.ok(input, "Expected search input in ThreadsSidebar");
 
       const setInputValue = async (val: string) => {
@@ -265,9 +269,7 @@ describe("P-F4: Indexed thread search + raw pre-check & 300ms AbortController de
       assert.equal(requests.length, 2, "Expected second debounced request for 'alpha'");
       assert.ok(requests[1].url.includes("/api/threads?q=alpha"));
       await act(async () => {
-        requests[1].resolve(
-          new Response(JSON.stringify({ threads: [] }), { status: 200 })
-        );
+        requests[1].resolve(new Response(JSON.stringify({ threads: [] }), { status: 200 }));
         await new Promise((r) => setTimeout(r, 20));
       });
     } finally {

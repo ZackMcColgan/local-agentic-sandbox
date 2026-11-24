@@ -5,7 +5,11 @@ import type { ChatMessage } from "@/components/ChatStream";
 import { useLiveTraces } from "@/lib/hooks/useLiveTraces";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread, type ActiveTurnInfo, type ThreadCompactionBoundary } from "@/lib/threads/threadStore";
+import {
+  Thread,
+  type ActiveTurnInfo,
+  type ThreadCompactionBoundary,
+} from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { isSseStreamDelivering, shouldPollLiveThread } from "@/lib/streamPollGate";

@@ -316,7 +316,9 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       String(lastMsg?.content?.length ?? 0),
       String(lastMsg?.traces?.length ?? 0),
       lastMsg?.status || "",
-      activeTurn ? `${activeTurn.status}:${activeTurn.lastActivityAtMs ?? activeTurn.startedAt}` : "none",
+      activeTurn
+        ? `${activeTurn.status}:${activeTurn.lastActivityAtMs ?? activeTurn.startedAt}`
+        : "none",
       task ? `${task.status}:${task.updatedAt || ""}` : "none",
       omitHeavyTraceResults ? "compact" : "full",
     ].join("|");

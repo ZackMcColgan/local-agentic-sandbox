@@ -1044,327 +1044,329 @@ export function ChatStream({
 
     onLocalSseOpenChangeRef.current?.(true);
     try {
-    const decoder = new TextDecoder();
-    let streamBuffer = "";
-    let accumulatedRawContent = "";
-    let currentTraces: ExecutionTraceItem[] = [];
-    let currentModel = activeModel;
-    let compactedThisTurn = false;
-    let tokensBeforeCompaction: number | undefined = undefined;
-    let tokensAfterCompaction: number | undefined = undefined;
+      const decoder = new TextDecoder();
+      let streamBuffer = "";
+      let accumulatedRawContent = "";
+      let currentTraces: ExecutionTraceItem[] = [];
+      let currentModel = activeModel;
+      let compactedThisTurn = false;
+      let tokensBeforeCompaction: number | undefined = undefined;
+      let tokensAfterCompaction: number | undefined = undefined;
 
-    const upsertAssistant = (
-      prev: ChatMessage[],
-      patch: (existing: ChatMessage) => ChatMessage
-    ): ChatMessage[] => {
-      const exists = prev.some((msg) => msg.id === assistantMsgId);
-      const base: ChatMessage = {
-        id: assistantMsgId,
-        role: "assistant",
-        content: "",
-        thought: "",
-        traces: [],
-        modelUsed: currentModel,
-        selectedModel: activeModel,
-      };
-      if (!exists) {
-        return [...prev, patch(base)];
-      }
-      return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
-    };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      streamBuffer += decoder.decode(value, { stream: true });
-      const blocks = streamBuffer.split("\n\n");
-      streamBuffer = blocks.pop() || "";
-
-      for (const block of blocks) {
-        const trimmed = block.trim();
-        if (trimmed.startsWith(":")) {
-          // SSE comment keepalive counts as heartbeat activity
-          setLastActivityAtMs(Date.now());
-          continue;
+      const upsertAssistant = (
+        prev: ChatMessage[],
+        patch: (existing: ChatMessage) => ChatMessage
+      ): ChatMessage[] => {
+        const exists = prev.some((msg) => msg.id === assistantMsgId);
+        const base: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          thought: "",
+          traces: [],
+          modelUsed: currentModel,
+          selectedModel: activeModel,
+        };
+        if (!exists) {
+          return [...prev, patch(base)];
         }
-        if (!trimmed.startsWith("data:")) continue;
-        const jsonStr = trimmed.replace(/^data:\s*/, "");
-        if (!jsonStr) continue;
+        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+      };
 
-        try {
-          const event = JSON.parse(jsonStr);
-          setLastActivityAtMs(typeof event.ts === "number" ? event.ts : Date.now());
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          if (event.type === "ping") {
+        streamBuffer += decoder.decode(value, { stream: true });
+        const blocks = streamBuffer.split("\n\n");
+        streamBuffer = blocks.pop() || "";
+
+        for (const block of blocks) {
+          const trimmed = block.trim();
+          if (trimmed.startsWith(":")) {
+            // SSE comment keepalive counts as heartbeat activity
+            setLastActivityAtMs(Date.now());
             continue;
-          } else if (event.type === "metrics") {
-            if (
-              typeof event.roundOutputTokens === "number" &&
-              typeof event.roundElapsedMs === "number"
-            ) {
-              setLiveTokPerSec((prev) =>
-                computeLiveTokPerSec(event.roundOutputTokens, event.roundElapsedMs, prev)
-              );
-            }
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                outputTokens:
-                  typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
-                roundGenerationMs: Array.isArray(event.roundGenerationMs)
-                  ? event.roundGenerationMs
-                  : msg.roundGenerationMs,
-              }))
-            );
-          } else if (event.type === "round_narration") {
-            // U1: commit intermediate round commentary to the timeline and reset
-            // the live tail buffer so final summary text stays cleanly separated.
-            accumulatedRawContent = "";
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                content: "",
-                roundNarrations: Array.isArray(event.roundNarrations)
-                  ? event.roundNarrations
-                  : [
-                      ...(msg.roundNarrations || []),
-                      {
-                        round: typeof event.round === "number" ? event.round : 1,
-                        text: String(event.text || ""),
-                      },
-                    ],
-              }))
-            );
-          } else if (event.type === "meta") {
-            if (event.model) currentModel = event.model;
-            if (event.context) {
-              setContextStats((prev) => ({
-                ...prev,
-                estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
-                budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
-                compactedThisTurn: event.context.compactedThisTurn,
-                tokensBeforeCompaction: event.context.tokensBeforeCompaction,
-                tokensAfterCompaction: event.context.tokensAfterCompaction,
-              }));
-              if (event.context.compactedThisTurn) {
-                compactedThisTurn = true;
-                tokensBeforeCompaction = event.context.tokensBeforeCompaction;
-                tokensAfterCompaction = event.context.tokensAfterCompaction;
-                setMessages((prev) =>
-                  upsertAssistant(prev, (msg) => ({
-                    ...msg,
-                    compactedThisTurn: true,
-                    tokensBeforeCompaction,
-                    tokensAfterCompaction,
-                  }))
+          }
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, "");
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+            setLastActivityAtMs(typeof event.ts === "number" ? event.ts : Date.now());
+
+            if (event.type === "ping") {
+              continue;
+            } else if (event.type === "metrics") {
+              if (
+                typeof event.roundOutputTokens === "number" &&
+                typeof event.roundElapsedMs === "number"
+              ) {
+                setLiveTokPerSec((prev) =>
+                  computeLiveTokPerSec(event.roundOutputTokens, event.roundElapsedMs, prev)
                 );
               }
-            }
-          } else if (event.type === "compaction") {
-            compactedThisTurn = true;
-            tokensBeforeCompaction = event.tokensBefore;
-            tokensAfterCompaction = event.tokensAfter;
-            setContextStats((prev) => ({
-              ...prev,
-              estimatedTokens: event.tokensAfter,
-              compactedThisTurn: true,
-              tokensBeforeCompaction: event.tokensBefore,
-              tokensAfterCompaction: event.tokensAfter,
-            }));
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  outputTokens:
+                    typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
+                  roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                    ? event.roundGenerationMs
+                    : msg.roundGenerationMs,
+                }))
+              );
+            } else if (event.type === "round_narration") {
+              // U1: commit intermediate round commentary to the timeline and reset
+              // the live tail buffer so final summary text stays cleanly separated.
+              accumulatedRawContent = "";
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: "",
+                  roundNarrations: Array.isArray(event.roundNarrations)
+                    ? event.roundNarrations
+                    : [
+                        ...(msg.roundNarrations || []),
+                        {
+                          round: typeof event.round === "number" ? event.round : 1,
+                          text: String(event.text || ""),
+                        },
+                      ],
+                }))
+              );
+            } else if (event.type === "meta") {
+              if (event.model) currentModel = event.model;
+              if (event.context) {
+                setContextStats((prev) => ({
+                  ...prev,
+                  estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
+                  budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
+                  compactedThisTurn: event.context.compactedThisTurn,
+                  tokensBeforeCompaction: event.context.tokensBeforeCompaction,
+                  tokensAfterCompaction: event.context.tokensAfterCompaction,
+                }));
+                if (event.context.compactedThisTurn) {
+                  compactedThisTurn = true;
+                  tokensBeforeCompaction = event.context.tokensBeforeCompaction;
+                  tokensAfterCompaction = event.context.tokensAfterCompaction;
+                  setMessages((prev) =>
+                    upsertAssistant(prev, (msg) => ({
+                      ...msg,
+                      compactedThisTurn: true,
+                      tokensBeforeCompaction,
+                      tokensAfterCompaction,
+                    }))
+                  );
+                }
+              }
+            } else if (event.type === "compaction") {
+              compactedThisTurn = true;
+              tokensBeforeCompaction = event.tokensBefore;
+              tokensAfterCompaction = event.tokensAfter;
+              setContextStats((prev) => ({
+                ...prev,
+                estimatedTokens: event.tokensAfter,
                 compactedThisTurn: true,
                 tokensBeforeCompaction: event.tokensBefore,
                 tokensAfterCompaction: event.tokensAfter,
-                compactionActions: event.actions,
-              }))
-            );
-          } else if (event.type === "status") {
-            setStreamStatus(event.status);
-          } else if (event.type === "thought") {
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                thought: event.thought,
-                thinkingSegments: Array.isArray(event.thinkingSegments)
-                  ? event.thinkingSegments
-                  : msg.thinkingSegments,
-              }))
-            );
-          } else if (event.type === "thinking") {
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                thought: msg.thought ? msg.thought + (event.content || "") : event.content || "",
-              }))
-            );
-          } else if (event.type === "token") {
-            accumulatedRawContent = appendNarrationChunk(
-              accumulatedRawContent,
-              event.content || ""
-            );
-            const parsed = parseThinkingAndContent(accumulatedRawContent);
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                content: parsed.content,
-                thought: parsed.thought,
-                modelUsed: currentModel,
-              }))
-            );
-          } else if (event.type === "trace") {
-            currentTraces = [...currentTraces, event.trace];
-            onTracesUpdate(currentTraces);
-            // UI-003 / UI-011b: mirror the trace into ChatStream's own live-turn
-            // state so rows survive a mid-turn stream cut even if the messages
-            // prop cannot reflect them (severed-stream end-state assertion).
-            setLiveTurnTraces((prev) => [...prev, event.trace]);
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                traces: currentTraces,
-              }))
-            );
-          } else if (event.type === "approval_required") {
-            const approval = event.approval;
-            if (approval && approval.id) {
-              setHostApprovals((prev) => {
-                const idx = prev.findIndex((a) => a.id === approval.id);
-                const item: UiHostApproval = {
-                  id: approval.id,
-                  threadId: approval.threadId || targetThreadId || activeThreadId || threadId,
-                  tool: approval.tool,
-                  args: approval.args || {},
-                  riskReason: approval.riskReason || "Destructive action requires approval",
-                  createdAt: approval.createdAt || Date.now(),
-                  expiresAt: approval.expiresAt || Date.now() + 10 * 60 * 1000,
-                  status: "pending",
-                };
-                if (idx >= 0) {
-                  const copy = [...prev];
-                  copy[idx] = { ...copy[idx], ...item };
-                  return copy;
-                }
-                return [...prev, item];
-              });
-            }
-          } else if (event.type === "done") {
-            const durationMs = Math.round(performance.now() - startTime);
-            const hasRoundNarrations =
-              Array.isArray(event.roundNarrations) && event.roundNarrations.length > 0;
-            const mergedRaw = hasRoundNarrations
-              ? typeof event.content === "string"
-                ? event.content
-                : accumulatedRawContent
-              : mergeStreamedTokens(accumulatedRawContent, event.content);
-            const parsed = parseThinkingAndContent(mergedRaw);
-            const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
-            const finalModel = event.model || currentModel;
-            const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
-            const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
-            const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
-            const finalStatus =
-              event.status ||
-              (event.isIncomplete ? "incomplete" : undefined) ||
-              (event.content?.includes("⚠️ [Turn paused:") ||
-              event.content?.includes("⚠️ [Turn incomplete:")
-                ? "incomplete"
-                : undefined);
-
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                content: parsed.content,
-                thought: finalThought,
-                traces: event.traces || currentTraces,
-                attachments: event.attachments || msg.attachments,
-                diffs: event.diffs || msg.diffs,
-                modelUsed: finalModel,
-                selectedModel: msg.selectedModel || activeModel,
-                durationMs: event.durationMs || durationMs,
-                thinkingDurationMs:
-                  typeof event.thinkingDurationMs === "number"
-                    ? event.thinkingDurationMs
-                    : msg.thinkingDurationMs,
-                phaseTimings: event.phaseTimings || msg.phaseTimings,
-                compactedThisTurn: finalCompacted || undefined,
-                tokensBeforeCompaction: finalTokensBefore,
-                tokensAfterCompaction: finalTokensAfter,
-                compactionActions: event.compactionActions || msg.compactionActions,
-                roundPromptTokens: Array.isArray(event.roundPromptTokens)
-                  ? event.roundPromptTokens
-                  : msg.roundPromptTokens,
-                roundGenerationMs: Array.isArray(event.roundGenerationMs)
-                  ? event.roundGenerationMs
-                  : msg.roundGenerationMs,
-                thinkingSegments: Array.isArray(event.thinkingSegments)
-                  ? event.thinkingSegments
-                  : msg.thinkingSegments,
-                roundNarrations: Array.isArray(event.roundNarrations)
-                  ? event.roundNarrations
-                  : msg.roundNarrations,
-                outputTokens:
-                  typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
-                status: finalStatus,
-              }))
-            );
-
-            // uir-1: the DONE chip replaces the Live Activity Header on the
-            // message this turn just completed.
-            setCompletedTurnMsgId(assistantMsgId);
-
-            // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
-            setPendingSteers([]);
-            if (
-              Array.isArray(event.pendingSteers) &&
-              event.pendingSteers.length > 0 &&
-              chatQueueRef.current
-            ) {
-              for (const s of event.pendingSteers) {
-                chatQueueRef.current.enqueue(s);
-              }
-              setQueueItems(chatQueueRef.current.items());
-            }
-          } else if (event.type === "steer") {
-            // Render mid-turn consumed steer into messages in place and remove from pendingSteers
-            if (Array.isArray(event.texts) && event.texts.length > 0) {
-              setPendingSteers((prev) => prev.filter((p) => !event.texts.includes(p)));
-              const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
-                id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                role: "user",
-                content: `[Steer from user, mid-turn] ${t}`,
               }));
-              setMessages((prev) => [...prev, ...steerMessages]);
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  compactedThisTurn: true,
+                  tokensBeforeCompaction: event.tokensBefore,
+                  tokensAfterCompaction: event.tokensAfter,
+                  compactionActions: event.actions,
+                }))
+              );
+            } else if (event.type === "status") {
+              setStreamStatus(event.status);
+            } else if (event.type === "thought") {
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  thought: event.thought,
+                  thinkingSegments: Array.isArray(event.thinkingSegments)
+                    ? event.thinkingSegments
+                    : msg.thinkingSegments,
+                }))
+              );
+            } else if (event.type === "thinking") {
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  thought: msg.thought ? msg.thought + (event.content || "") : event.content || "",
+                }))
+              );
+            } else if (event.type === "token") {
+              accumulatedRawContent = appendNarrationChunk(
+                accumulatedRawContent,
+                event.content || ""
+              );
+              const parsed = parseThinkingAndContent(accumulatedRawContent);
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: parsed.thought,
+                  modelUsed: currentModel,
+                }))
+              );
+            } else if (event.type === "trace") {
+              currentTraces = [...currentTraces, event.trace];
+              onTracesUpdate(currentTraces);
+              // UI-003 / UI-011b: mirror the trace into ChatStream's own live-turn
+              // state so rows survive a mid-turn stream cut even if the messages
+              // prop cannot reflect them (severed-stream end-state assertion).
+              setLiveTurnTraces((prev) => [...prev, event.trace]);
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  traces: currentTraces,
+                }))
+              );
+            } else if (event.type === "approval_required") {
+              const approval = event.approval;
+              if (approval && approval.id) {
+                setHostApprovals((prev) => {
+                  const idx = prev.findIndex((a) => a.id === approval.id);
+                  const item: UiHostApproval = {
+                    id: approval.id,
+                    threadId: approval.threadId || targetThreadId || activeThreadId || threadId,
+                    tool: approval.tool,
+                    args: approval.args || {},
+                    riskReason: approval.riskReason || "Destructive action requires approval",
+                    createdAt: approval.createdAt || Date.now(),
+                    expiresAt: approval.expiresAt || Date.now() + 10 * 60 * 1000,
+                    status: "pending",
+                  };
+                  if (idx >= 0) {
+                    const copy = [...prev];
+                    copy[idx] = { ...copy[idx], ...item };
+                    return copy;
+                  }
+                  return [...prev, item];
+                });
+              }
+            } else if (event.type === "done") {
+              const durationMs = Math.round(performance.now() - startTime);
+              const hasRoundNarrations =
+                Array.isArray(event.roundNarrations) && event.roundNarrations.length > 0;
+              const mergedRaw = hasRoundNarrations
+                ? typeof event.content === "string"
+                  ? event.content
+                  : accumulatedRawContent
+                : mergeStreamedTokens(accumulatedRawContent, event.content);
+              const parsed = parseThinkingAndContent(mergedRaw);
+              const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
+              const finalModel = event.model || currentModel;
+              const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
+              const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
+              const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
+              const finalStatus =
+                event.status ||
+                (event.isIncomplete ? "incomplete" : undefined) ||
+                (event.content?.includes("⚠️ [Turn paused:") ||
+                event.content?.includes("⚠️ [Turn incomplete:")
+                  ? "incomplete"
+                  : undefined);
+
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: finalThought,
+                  traces: event.traces || currentTraces,
+                  attachments: event.attachments || msg.attachments,
+                  diffs: event.diffs || msg.diffs,
+                  modelUsed: finalModel,
+                  selectedModel: msg.selectedModel || activeModel,
+                  durationMs: event.durationMs || durationMs,
+                  thinkingDurationMs:
+                    typeof event.thinkingDurationMs === "number"
+                      ? event.thinkingDurationMs
+                      : msg.thinkingDurationMs,
+                  phaseTimings: event.phaseTimings || msg.phaseTimings,
+                  compactedThisTurn: finalCompacted || undefined,
+                  tokensBeforeCompaction: finalTokensBefore,
+                  tokensAfterCompaction: finalTokensAfter,
+                  compactionActions: event.compactionActions || msg.compactionActions,
+                  roundPromptTokens: Array.isArray(event.roundPromptTokens)
+                    ? event.roundPromptTokens
+                    : msg.roundPromptTokens,
+                  roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                    ? event.roundGenerationMs
+                    : msg.roundGenerationMs,
+                  thinkingSegments: Array.isArray(event.thinkingSegments)
+                    ? event.thinkingSegments
+                    : msg.thinkingSegments,
+                  roundNarrations: Array.isArray(event.roundNarrations)
+                    ? event.roundNarrations
+                    : msg.roundNarrations,
+                  outputTokens:
+                    typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
+                  status: finalStatus,
+                }))
+              );
+
+              // uir-1: the DONE chip replaces the Live Activity Header on the
+              // message this turn just completed.
+              setCompletedTurnMsgId(assistantMsgId);
+
+              // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
+              setPendingSteers([]);
+              if (
+                Array.isArray(event.pendingSteers) &&
+                event.pendingSteers.length > 0 &&
+                chatQueueRef.current
+              ) {
+                for (const s of event.pendingSteers) {
+                  chatQueueRef.current.enqueue(s);
+                }
+                setQueueItems(chatQueueRef.current.items());
+              }
+            } else if (event.type === "steer") {
+              // Render mid-turn consumed steer into messages in place and remove from pendingSteers
+              if (Array.isArray(event.texts) && event.texts.length > 0) {
+                setPendingSteers((prev) => prev.filter((p) => !event.texts.includes(p)));
+                const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
+                  id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  role: "user",
+                  content: `[Steer from user, mid-turn] ${t}`,
+                }));
+                setMessages((prev) => [...prev, ...steerMessages]);
+              }
+            } else if (event.type === "error") {
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  status: "error",
+                }))
+              );
+              // Server explicitly reported a terminal turn error (e.g. engine offline,
+              // simulation error event). This is a verdict, not a disconnect: never
+              // route it into the detached-turn reconciliation path.
+              const terminalErr = new Error(
+                event.error || "Streaming error encountered"
+              ) as Error & {
+                isTerminalServerError?: boolean;
+              };
+              terminalErr.isTerminalServerError = true;
+              throw terminalErr;
             }
-          } else if (event.type === "error") {
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                status: "error",
-              }))
-            );
-            // Server explicitly reported a terminal turn error (e.g. engine offline,
-            // simulation error event). This is a verdict, not a disconnect: never
-            // route it into the detached-turn reconciliation path.
-            const terminalErr = new Error(event.error || "Streaming error encountered") as Error & {
-              isTerminalServerError?: boolean;
-            };
-            terminalErr.isTerminalServerError = true;
-            throw terminalErr;
-          }
-        } catch (parseErr: unknown) {
-          if (
-            parseErr instanceof Error &&
-            parseErr.message &&
-            !parseErr.message.includes("JSON.parse")
-          ) {
-            throw parseErr;
+          } catch (parseErr: unknown) {
+            if (
+              parseErr instanceof Error &&
+              parseErr.message &&
+              !parseErr.message.includes("JSON.parse")
+            ) {
+              throw parseErr;
+            }
           }
         }
       }
-    }
     } finally {
       onLocalSseOpenChangeRef.current?.(false);
     }

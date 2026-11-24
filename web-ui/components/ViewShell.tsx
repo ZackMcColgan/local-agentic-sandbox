@@ -11,7 +11,11 @@ import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread, type ActiveTurnInfo, type ThreadCompactionBoundary } from "@/lib/threads/threadStore";
+import {
+  Thread,
+  type ActiveTurnInfo,
+  type ThreadCompactionBoundary,
+} from "@/lib/threads/threadStore";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   ArrowLeft,
