@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
+import { atomicWriteFileSync } from "../fsAtomic";
 
 export interface FinishVerificationInput {
   workspaceRoot: string;
@@ -63,8 +64,7 @@ export interface MilestoneHandoffState {
 }
 
 export function writeMilestoneHandoff(handoffPath: string, state: MilestoneHandoffState): void {
-  fs.mkdirSync(path.dirname(handoffPath), { recursive: true });
-  fs.writeFileSync(handoffPath, JSON.stringify(state, null, 2), "utf8");
+  atomicWriteFileSync(handoffPath, JSON.stringify(state, null, 2), 0o660);
 }
 
 export function readMilestoneHandoff(handoffPath: string): MilestoneHandoffState | null {

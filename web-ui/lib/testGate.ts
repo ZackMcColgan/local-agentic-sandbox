@@ -38,6 +38,61 @@ export interface TestGateOptions {
   dryRun?: boolean;
   repoRoot?: string;
   sinceRef?: string;
+  /** Explicit test set (used by --all discovery); bypasses change-aware mapping. */
+  testsOverride?: string[];
+}
+
+/**
+ * Host-bridge daemon suites. The daemon's real tests live in web-ui/tests/
+ * (they import ../../host-bridge/*), so host-bridge/package.json delegates to
+ * them instead of pointing at a nonexistent host-bridge/tests/ directory.
+ * When host-bridge:tests is included, these run via host-bridge's npm test
+ * and are excluded from the web-ui tsx batch to avoid double execution.
+ */
+export const HOST_BRIDGE_SUITES = [
+  "tests/approvalTokenBinding.test.ts",
+  "tests/engineSlotReleaseDuringToolWait.test.ts",
+  "tests/hostAsyncJobs.test.ts",
+  "tests/hostDaemon.test.ts",
+  "tests/hostFourState.test.ts",
+  "tests/hostGitSafetyBattery.test.ts",
+  "tests/hostMode.test.ts",
+  "tests/hostMultiRead.test.ts",
+  "tests/hostRunnerScript.test.ts",
+  "tests/hostSettingsDefault.test.ts",
+  "tests/patchTools.test.ts",
+  "tests/unattendedGitOps.test.ts",
+];
+
+/**
+ * Full on-disk test discovery for `test-gate --all`. Enumerates every web-ui
+ * unit suite, every Playwright spec, the repo-root supervisor-control suite,
+ * and the workspace suite tokens. Ghost suites (nonexistent files) can never
+ * appear because discovery is filesystem-driven.
+ */
+export function discoverAllTests(repoRoot: string = ANCHORED_REPO_ROOT): string[] {
+  const webUiTestsDir = path.resolve(repoRoot, "web-ui", "tests");
+  const e2eDir = path.join(webUiTestsDir, "e2e");
+  const tests: string[] = [];
+
+  if (fs.existsSync(webUiTestsDir)) {
+    for (const f of fs.readdirSync(webUiTestsDir)) {
+      if (f.endsWith(".test.ts")) tests.push(`tests/${f}`);
+    }
+  }
+  if (fs.existsSync(e2eDir)) {
+    for (const f of fs.readdirSync(e2eDir)) {
+      if (f.endsWith(".spec.ts")) tests.push(`tests/e2e/${f}`);
+    }
+  }
+  if (fs.existsSync(path.resolve(repoRoot, "scripts", "tests", "supervisorControl.test.js"))) {
+    tests.push("scripts/tests/supervisorControl.test.js");
+  }
+  if (fs.existsSync(path.resolve(repoRoot, "mcp-server"))) tests.push("mcp-server:tests");
+  if (fs.existsSync(path.resolve(repoRoot, "browser-mcp"))) tests.push("browser-mcp:tests");
+  if (fs.existsSync(path.resolve(repoRoot, "host-bridge"))) tests.push("host-bridge:tests");
+
+  return tests;
 }
 
 export interface TestGateOutcome {
@@ -242,6 +297,82 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("explorerPanel.spec.ts") || p.includes("ExplorerPanel.tsx"),
     tests: ["tests/e2e/explorerPanel.spec.ts"],
+  },
+  // Playwright specs previously unmapped from the gate (#58). Each rule ties the
+  // spec to the source surfaces it exercises so a change to those surfaces runs it.
+  {
+    match: (p) =>
+      p.includes("boardControl.spec.ts") ||
+      p.includes("lib/board/boardControl") ||
+      p.includes("app/api/board/control") ||
+      p.includes("components/NavigationDrawer"),
+    tests: ["tests/e2e/boardControl.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("flows.spec.ts") ||
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("components/ProjectsView") ||
+      p.includes("components/BuildsView") ||
+      p.includes("components/NavigationDrawer"),
+    tests: ["tests/e2e/flows.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("layoutInvariants.spec.ts") ||
+      p.includes("components/NavigationDrawer") ||
+      p.includes("app/page.tsx"),
+    tests: ["tests/e2e/layoutInvariants.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("realmode.spec.ts") ||
+      p.includes("components/ChatStream") ||
+      p.includes("components/ThinkingPanel"),
+    tests: ["tests/e2e/realmode.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("regressions.spec.ts") ||
+      p.includes("components/ChatStream") ||
+      p.includes("components/NavigationDrawer") ||
+      p.includes("app/page.tsx"),
+    tests: ["tests/e2e/regressions.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("scenarios.spec.ts") ||
+      p.includes("lib/simulator") ||
+      p.includes("components/ChatStream") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("components/ThinkingPanel"),
+    tests: ["tests/e2e/scenarios.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("settingsMobile.spec.ts") ||
+      p.includes("components/SettingsView") ||
+      p.includes("components/NavigationDrawer"),
+    tests: ["tests/e2e/settingsMobile.spec.ts"],
+  },
+  // Specs relocated from tests-live/ into tests/e2e/ (#58): stubbed-engine board specs.
+  {
+    match: (p) =>
+      p.includes("board-intake.spec.ts") ||
+      p.includes("lib/board/monsterIntake") ||
+      p.includes("app/api/board/intake") ||
+      p.includes("components/BoardAddSheet"),
+    tests: ["tests/e2e/board-intake.spec.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("board-orchestrator.spec.ts") || p.includes("lib/board/boardOrchestrator"),
+    tests: ["tests/e2e/board-orchestrator.spec.ts"],
+  },
+  // Orphaned supervisor-control suite (#58): standalone llamacpp launcher control.
+  {
+    match: (p) => p.includes("scripts/llamacpp-standalone") || p.includes("supervisorControl"),
+    tests: ["scripts/tests/supervisorControl.test.js"],
   },
   {
     match: (p) =>
@@ -1168,6 +1299,53 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("selfDeployArchitectureBatch7.test.ts"),
     tests: ["tests/selfDeployArchitectureBatch7.test.ts"],
   },
+  {
+    match: (p) =>
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("lib/board/reviewerAuditEvaluate") ||
+      p.includes("lib/board/flowMonitor") ||
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("lib/deploy/selfDeployVerified") ||
+      p.includes("app/api/sandbox-status/route") ||
+      p.includes("handoverPrereqsBatch6.test.ts"),
+    tests: ["tests/handoverPrereqsBatch6.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("host-bridge/powershellRunner") ||
+      p.includes("lib/llm/provider") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("lib/board/boardControlStore") ||
+      p.includes("lib/jobQueue") ||
+      p.includes("lib/chatTurnGate") ||
+      p.includes("runtimeCorrectnessBatch5.test.ts"),
+    tests: ["tests/runtimeCorrectnessBatch5.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("host-bridge/manifest") ||
+      p.includes("host-bridge/replaceString") ||
+      p.includes("host-bridge/dialectGuard") ||
+      p.includes("host-bridge/multiRead") ||
+      p.includes("hostBridgePureModules.test.ts"),
+    tests: ["tests/hostBridgePureModules.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/fsAtomic") ||
+      p.includes("lib/ledger/sqliteConfig") ||
+      p.includes("lib/board/boardStore") ||
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/ledger/runLedger") ||
+      p.includes("lib/flywheel/skillsStore") ||
+      p.includes("lib/hostSettings") ||
+      p.includes("lib/subagents/checkpointSaver") ||
+      p.includes("lib/subagents/skillGate") ||
+      p.includes("dataDurability.test.ts"),
+    tests: ["tests/dataDurability.test.ts"],
+  },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
@@ -1636,18 +1814,6 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Charter modules (P0.1)
   {
-    match: (p) => p.includes("lib/liveStatus"),
-    tests: ["tests/liveStatus.test.ts"],
-  },
-  {
-    match: (p) => p.includes("lib/executionSummary"),
-    tests: ["tests/executionSummary.test.ts"],
-  },
-  {
-    match: (p) => p.includes("lib/modelEval"),
-    tests: ["tests/modelEval.test.ts"],
-  },
-  {
     match: (p) => p.includes("lib/fsAtomic"),
     tests: ["tests/boardStore.test.ts", "tests/schedulerPlanner.test.ts"],
   },
@@ -1945,6 +2111,14 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
   for (const rawPath of changedFiles) {
     const normalized = rawPath.replace(/\\/g, "/").replace(/^\/+/, "");
 
+    // Playwright spec files map to themselves. This must be evaluated BEFORE
+    // isIgnoredFile(): the ignore list used to swallow tests/e2e/ paths first,
+    // which made the explorerPanel.spec.ts mapping rule dead code.
+    if (/^(web-ui\/)?tests\/e2e\/[^/]+\.spec\.ts$/.test(normalized)) {
+      testSet.add(normalized.replace(/^web-ui\//, ""));
+      continue;
+    }
+
     // Ignore non-code files
     if (isIgnoredFile(normalized)) {
       ignored.push(rawPath);
@@ -2160,7 +2334,9 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
   const startTime = Date.now();
 
   const changed = options.changedFiles ?? getGitChangedFiles(options.repoRoot, options.sinceRef);
-  const resolved = resolveAffectedTests(changed);
+  const resolved = options.testsOverride
+    ? { tests: options.testsOverride, uncoveredFiles: [], ignoredFiles: [] }
+    : resolveAffectedTests(changed);
 
   // Zero-coverage rejection
   if (resolved.uncoveredFiles.length > 0) {
@@ -2204,17 +2380,32 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
 
   const mcpIncluded = resolved.tests.includes("mcp-server:tests");
   const browserMcpIncluded = resolved.tests.includes("browser-mcp:tests");
+  const hostBridgeIncluded = resolved.tests.includes("host-bridge:tests");
+  const hostBridgeCwd = path.resolve(repoRoot, "host-bridge");
+  // Repo-root standalone suites (CommonJS, run with node --test at repo root).
+  const rootJsTests = resolved.tests.filter(
+    (t) => t.startsWith("scripts/") && t.endsWith(".test.js")
+  );
   const webUiTestsToRun = resolved.tests.filter(
-    (t) => t !== "mcp-server:tests" && t !== "browser-mcp:tests"
+    (t) =>
+      t !== "mcp-server:tests" &&
+      t !== "browser-mcp:tests" &&
+      t !== "host-bridge:tests" &&
+      !rootJsTests.includes(t) &&
+      // When the host-bridge stage runs, its daemon suites execute via
+      // host-bridge's npm test; drop them from the web-ui batch to avoid
+      // double execution.
+      !(hostBridgeIncluded && HOST_BRIDGE_SUITES.includes(t))
   );
 
-  if (webUiTestsToRun.length === 0 && !mcpIncluded && !browserMcpIncluded) {
+  if (webUiTestsToRun.length === 0 && !mcpIncluded && !browserMcpIncluded && !hostBridgeIncluded) {
     webUiTestsToRun.push("tests/toolParser.test.ts");
   }
 
-  const allTestsRan = [...webUiTestsToRun];
+  const allTestsRan = [...webUiTestsToRun, ...rootJsTests];
   if (mcpIncluded) allTestsRan.push("mcp-server");
   if (browserMcpIncluded) allTestsRan.push("browser-mcp");
+  if (hostBridgeIncluded) allTestsRan.push("host-bridge");
 
   let testOutput = "";
   let passedCount = 0;
@@ -2460,6 +2651,85 @@ export function runTestGate(options: TestGateOptions = {}): TestGateOutcome {
       const stdout = e.stdout ? e.stdout.toString() : "";
       const stderr = e.stderr ? e.stderr.toString() : "";
       testOutput += `\n--- Browser MCP Failure ---\n${stdout}\n${stderr}`;
+      const counts = parseTapCounts(stdout + "\n" + stderr);
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed > 0 ? counts.failed : 1;
+      }
+      runError = e.message ?? String(err);
+    }
+  }
+
+  // 4. Run host-bridge daemon suites via host-bridge's npm test (delegates to
+  //    web-ui/tests suites that import ../../host-bridge/*) when host-bridge is touched.
+  if (hostBridgeIncluded && fs.existsSync(hostBridgeCwd) && !runError) {
+    try {
+      const remainingTime = Math.max(
+        1,
+        budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+      );
+      const hbOut = execSync("npm test", {
+        cwd: hostBridgeCwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv,
+        timeout: remainingTime,
+      });
+      testOutput += `\n--- Host Bridge Test Suite ---\n${hbOut}`;
+      const counts = parseTapCounts(hbOut);
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+        runError = "host-bridge test runner produced unparseable TAP output";
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed;
+      }
+    } catch (err: unknown) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+      const stdout = e.stdout ? e.stdout.toString() : "";
+      const stderr = e.stderr ? e.stderr.toString() : "";
+      testOutput += `\n--- Host Bridge Failure ---\n${stdout}\n${stderr}`;
+      const counts = parseTapCounts(stdout + "\n" + stderr);
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed > 0 ? counts.failed : 1;
+      }
+      runError = e.message ?? String(err);
+    }
+  }
+
+  // 5. Run repo-root standalone CommonJS suites (node --test at repo root).
+  if (rootJsTests.length > 0 && !runError) {
+    try {
+      const remainingTime = Math.max(
+        1,
+        budgetSeconds * 1000 - (Date.now() - startTime - playwrightDurationMs)
+      );
+      const jsOut = execSync(`node --test ${rootJsTests.join(" ")}`, {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: childEnv,
+        timeout: remainingTime,
+      });
+      testOutput += `\n--- Repo-Root JS Suite ---\n${jsOut}`;
+      const counts = parseTapCounts(jsOut);
+      if (counts.passed === 0 && counts.failed === 0) {
+        failedCount += 1;
+        runError = "repo-root JS test runner produced unparseable TAP output";
+      } else {
+        passedCount += counts.passed;
+        failedCount += counts.failed;
+      }
+    } catch (err: unknown) {
+      const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+      const stdout = e.stdout ? e.stdout.toString() : "";
+      const stderr = e.stderr ? e.stderr.toString() : "";
+      testOutput += `\n--- Repo-Root JS Suite Failure ---\n${stdout}\n${stderr}`;
       const counts = parseTapCounts(stdout + "\n" + stderr);
       if (counts.passed === 0 && counts.failed === 0) {
         failedCount += 1;

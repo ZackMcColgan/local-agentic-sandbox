@@ -451,10 +451,12 @@ export function createProductionStageDeps(
       ]);
 
       let diff = "";
+      let diffError: string | undefined;
       if (isCommandSuccess(diffRes) && typeof diffRes.stdout === "string") {
         diff = diffRes.stdout;
       } else {
-        log(`[production-stage-deps] ${describeBridgeFailure(diffCmd, diffRes)}`);
+        diffError = describeBridgeFailure(diffCmd, diffRes);
+        log(`[production-stage-deps] ${diffError}`);
       }
 
       let commitSubjects: string[] = [];
@@ -495,6 +497,7 @@ export function createProductionStageDeps(
 
       return {
         diff,
+        ...(diffError ? { diffError } : {}),
         allowlist: extractItemAllowlist(item),
         commitSubjects,
         branchName,

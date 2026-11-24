@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setupStubbedEngineRoutes } from "../tests/e2e/helpers/mockEngine";
+import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
 
 async function openBoardView(page: import("@playwright/test").Page, isMobile: boolean) {
   await page.goto("/");

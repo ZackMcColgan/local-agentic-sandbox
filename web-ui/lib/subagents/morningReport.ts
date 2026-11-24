@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync } from "../fsAtomic";
 import { AmbiguityFlag, TaskManifest } from "./types.js";
 import { getSharedSlotScheduler, SlotUtilizationMetrics } from "../slotScheduler";
 import type { DrainReport } from "../board/boardOrchestrator";
@@ -573,7 +574,7 @@ export function persistOvernightMorningReport(
     fs.mkdirSync(dir, { recursive: true });
   }
   const filePath = path.join(dir, "overnight-morning-report.json");
-  fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
+  atomicWriteFileSync(filePath, JSON.stringify(report, null, 2), 0o660);
   return filePath;
 }
 

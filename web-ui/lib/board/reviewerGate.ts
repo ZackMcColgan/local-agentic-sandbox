@@ -17,12 +17,14 @@ export function isReviewerGateStage3Enabled(
 }
 
 export interface MechanicalFailure {
-  check: "allowlist" | "hygiene" | "no-test-weakened";
+  check: "allowlist" | "hygiene" | "no-test-weakened" | "diff-unavailable";
   evidence: string;
 }
 
 export interface MechanicalCheckInput {
   diff: string;
+  /** Optional error reason when `gh pr diff` failed (forces fail-closed FAIL). */
+  diffError?: string;
   allowlist: string[];
   commitSubjects: string[];
   branchName: string;
@@ -113,6 +115,18 @@ function countAssertions(lines: string[]): number {
  */
 export function runMechanicalChecks(input: MechanicalCheckInput): MechanicalCheckResult {
   const failures: MechanicalFailure[] = [];
+  // HO-10: Fail closed when diff is empty or failed to fetch.
+  if (input.diffError && input.diffError.trim()) {
+    failures.push({
+      check: "diff-unavailable",
+      evidence: input.diffError.trim(),
+    });
+  } else if (!input.diff || !input.diff.trim()) {
+    failures.push({
+      check: "diff-unavailable",
+      evidence: "Empty PR diff; refusing to pass mechanical checks on empty input.",
+    });
+  }
   const parsedFiles = parseUnifiedDiff(input.diff);
   const changedFiles = parsedFiles.map((f) => f.path);
   const normalizedAllowlist = (input.allowlist ?? [])

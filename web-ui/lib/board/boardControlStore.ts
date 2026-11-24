@@ -216,6 +216,20 @@ export class BoardControlStore {
         lastAction: "start",
       };
       this.writeControl(next);
+      // HO-6: Explicit owner start re-queues items previously parked by owner stop/pause.
+      try {
+        const boardStore = new BoardStore(this.boardDir);
+        for (const item of boardStore.list()) {
+          if (
+            item.status === "parked" &&
+            (item.parkedReason === "Stopped by owner" || item.parkedReason === "Paused by owner")
+          ) {
+            boardStore.update(item.id, { status: "queued", parkedReason: null });
+          }
+        }
+      } catch {
+        // Non-fatal board update error on start
+      }
       return { control: next };
     }
 
@@ -229,6 +243,21 @@ export class BoardControlStore {
         lastAction: "pause",
       };
       this.writeControl(next);
+      // HO-6: Transition working items out of "working" so reconciliation does not auto-requeue them.
+      try {
+        const boardStore = new BoardStore(this.boardDir);
+        for (const item of boardStore.list()) {
+          if (item.status === "working") {
+            boardStore.update(item.id, {
+              status: "parked",
+              parkedReason: "Paused by owner",
+              needsAttention: false,
+            });
+          }
+        }
+      } catch {
+        // Non-fatal board update error on pause
+      }
       return { control: next };
     }
 
@@ -249,6 +278,22 @@ export class BoardControlStore {
         abortedTurns.push(threadId);
       }
       activeExecutionSet.delete(threadId);
+    }
+
+    // HO-6: Transition working items out of "working" so drain reconciliation does NOT auto-requeue them.
+    try {
+      const boardStore = new BoardStore(this.boardDir);
+      for (const item of boardStore.list()) {
+        if (item.status === "working") {
+          boardStore.update(item.id, {
+            status: "parked",
+            parkedReason: "Stopped by owner",
+            needsAttention: false,
+          });
+        }
+      }
+    } catch {
+      // Non-fatal board update error on stop
     }
 
     const cancelledTasks: string[] = [];

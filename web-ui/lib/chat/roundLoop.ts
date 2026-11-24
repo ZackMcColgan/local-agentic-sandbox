@@ -2490,7 +2490,7 @@ export async function runChatTurn(
       const roundThought =
         accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
       streamSnapshot.maybeWrite(
-        "",
+        turnState.accumulatedStreamedTokens || "",
         roundThought,
         traces as unknown as Parameters<typeof streamSnapshot.maybeWrite>[2],
         {

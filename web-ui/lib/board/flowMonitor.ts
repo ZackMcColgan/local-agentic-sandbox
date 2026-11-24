@@ -81,10 +81,64 @@ export function isFlowMonitorStage2Enabled(
   override?: boolean,
   env: Record<string, string | undefined> = process.env
 ): boolean {
+  return isFlowMonitorArmEnabled(override, env);
+}
+
+/**
+ * HO-5: Observe-only mode for flow-monitor (records observed calls without arming fix cycles).
+ * Defaults to OFF.
+ */
+export function isFlowMonitorObserveEnabled(
+  override?: boolean,
+  env: Record<string, string | undefined> = process.env
+): boolean {
   if (typeof override === "boolean") {
     return override;
   }
-  return env.FLOW_MONITOR_STAGE2 === "true";
+  return env.BOARD_STAGE_FLOW_MONITOR_OBSERVE === "true";
+}
+
+/**
+ * HO-5: Armed mode for flow-monitor (issues fix cycles on red PR checks).
+ * Defaults to OFF. Preserves legacy FLOW_MONITOR_STAGE2 / BOARD_STAGE_FLOW_MONITOR env compatibility.
+ */
+export function isFlowMonitorArmEnabled(
+  override?: boolean,
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  if (typeof override === "boolean") {
+    return override;
+  }
+  return (
+    env.BOARD_STAGE_FLOW_MONITOR_ARM === "true" ||
+    env.FLOW_MONITOR_STAGE2 === "true" ||
+    env.BOARD_STAGE_FLOW_MONITOR === "true"
+  );
+}
+
+export interface FlowMonitorObservation {
+  itemKey: string;
+  prNumber?: number;
+  action: MonitorPrResult["action"];
+  verdictStatus: PrCheckVerdict["status"];
+  reason: string;
+  observedAt: string;
+}
+
+const MAX_FLOW_OBSERVATIONS = 25;
+const flowObservations: FlowMonitorObservation[] = [];
+
+export function recordFlowMonitorObservation(
+  obs: Omit<FlowMonitorObservation, "observedAt">
+): void {
+  flowObservations.unshift({ ...obs, observedAt: new Date().toISOString() });
+  if (flowObservations.length > MAX_FLOW_OBSERVATIONS) {
+    flowObservations.length = MAX_FLOW_OBSERVATIONS;
+  }
+}
+
+export function getFlowMonitorObservations(): FlowMonitorObservation[] {
+  return [...flowObservations];
 }
 
 function isCheckRunning(check: PrCheckResult): boolean {

@@ -520,8 +520,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 6. Action: Set Model & Reasoning Effort
     if (body.action === "setModel") {
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
       if (typeof body.model === "string" && body.model.trim()) {
-        thread.model = body.model.trim();
+        freshThread.model = body.model.trim();
       }
       if (body.reasoningEffort !== undefined) {
         if (
@@ -529,13 +530,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           body.reasoningEffort === "medium" ||
           body.reasoningEffort === "xhigh"
         ) {
-          thread.reasoningEffort = body.reasoningEffort;
+          freshThread.reasoningEffort = body.reasoningEffort;
         } else {
           return NextResponse.json({ error: "Invalid reasoningEffort" }, { status: 400 });
         }
       }
-      getThreadStore().saveThread(thread);
-      return NextResponse.json({ thread });
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
