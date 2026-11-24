@@ -713,6 +713,6 @@ test("A10: post-restart non-board taskId sweep reads raw active thread before re
     assert.ok(oldThread.stalledReason);
     assert.ok(oldThread.resumedToThreadId);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTempDirWithRetries(dir);
   }
 });
