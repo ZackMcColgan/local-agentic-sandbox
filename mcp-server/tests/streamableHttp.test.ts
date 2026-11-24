@@ -122,7 +122,11 @@ describe("MCP Server Streamable HTTP Transport & Stateless Core", () => {
         params: {},
       }),
     });
-    assert.equal(res3.status, 200, "Request with bogus mcp-session-id must succeed in stateless mode");
+    assert.equal(
+      res3.status,
+      200,
+      "Request with bogus mcp-session-id must succeed in stateless mode"
+    );
     const body3 = await res3.text();
     assert.ok(body3.includes("execute_sandboxed_python"), "Bogus-session request should succeed");
   });

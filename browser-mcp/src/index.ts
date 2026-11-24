@@ -64,10 +64,10 @@ const HOST = "0.0.0.0";
 
 const isMainModule = Boolean(
   typeof process !== "undefined" &&
-    process.argv?.[1] &&
-    (process.argv[1].endsWith("index.js") || process.argv[1].endsWith("index.ts")) &&
-    !process.env.NODE_TEST_CONTEXT &&
-    !process.argv[1].includes(".test.")
+  process.argv?.[1] &&
+  (process.argv[1].endsWith("index.js") || process.argv[1].endsWith("index.ts")) &&
+  !process.env.NODE_TEST_CONTEXT &&
+  !process.argv[1].includes(".test.")
 );
 
 if (isMainModule) {
