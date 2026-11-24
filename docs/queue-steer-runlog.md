@@ -308,3 +308,17 @@ docs/queue-steer-runlog.md` -> clean. `git diff --ignore-cr-at-eol --stat` -> em
   logged, out of brief evidence scope).
 - Verification: `npx tsx web-ui/tests/repoHygiene.test.ts` -> 0 violations;
   `npm run test:gate` -> PASSED 15/15 in 13.5s.
+
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24 re-verification #3) - COMPLETE, PR #252 merged
+
+- Banked state on resume: scope (`parseRetryAfter`, AC-2-1/2-2/2-3) MERGED via PR #217;
+  `web-ui/lib/retryAfter.mjs` and `web-ui/tests/retryAfter.test.ts` confirmed present on
+  `origin/develop` via `git cat-file -e`. No restart, no re-implementation.
+- Follow-up PR #252 (`feature/eol-renormalize`) is now MERGED into develop (merge commit
+  `09d7626`, mergedAt 2026-11-24T09:54:39Z); renormalize commit `1271b44` confirmed an
+  ancestor of `origin/develop` via `git merge-base --is-ancestor`.
+- Gate re-run on develop tip: `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts`
+  -> PASSED, 14 pass / 0 fail in 8.0s (<90s budget). `npx prettier --check
+docs/queue-steer-runlog.md` -> clean.
+- develop tip advanced to `dda3602` (PR #262 hygiene scrub merged); does not affect this scope.
+- Status: COMPLETE. Scope and follow-up both merged into develop; nothing left in scope.
