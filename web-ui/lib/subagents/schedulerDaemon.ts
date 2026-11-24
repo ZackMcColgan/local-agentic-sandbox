@@ -179,7 +179,8 @@ export class SchedulerDaemon {
 
   async checkStartupRecovery(): Promise<void> {
     const hb = this.readHeartbeat();
-    const schedHb = typeof this.scheduler.readHeartbeat === "function" ? this.scheduler.readHeartbeat() : null;
+    const schedHb =
+      typeof this.scheduler.readHeartbeat === "function" ? this.scheduler.readHeartbeat() : null;
     if ((hb && hb.active) || (schedHb && schedHb.active)) {
       if (hb && hb.active) {
         this.log(

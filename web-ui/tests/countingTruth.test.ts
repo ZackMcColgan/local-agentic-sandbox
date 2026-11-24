@@ -671,8 +671,7 @@ describe("Batch C — Counting truth (F10, F11, F12)", () => {
       const res = await POST(req);
       const events = await readSseEvents(res);
       const done = events.find((e) => e.type === "done") as
-        | (SseEvent & { phaseTimings?: { contextPrepMs?: number } })
-        | undefined;
+        (SseEvent & { phaseTimings?: { contextPrepMs?: number } }) | undefined;
       assert.ok(done, "turn must emit done event");
       assert.ok(firstProviderRequestMs !== null, "provider must have received request");
 

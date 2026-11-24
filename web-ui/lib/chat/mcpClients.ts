@@ -42,9 +42,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
         timer = setTimeout(() => {
           reject(new Error(`${label} timed out after ${timeoutMs}ms`));
         }, timeoutMs);
-        if (typeof timer.unref === "function") {
-          timer.unref();
-        }
       }),
     ]);
   } finally {
