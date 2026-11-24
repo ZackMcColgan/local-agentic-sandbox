@@ -648,3 +648,217 @@ test("shadow guarantee: with stage flags OFF, drain with production deps never c
     fs.rmSync(boardDir, { recursive: true, force: true });
   }
 });
+
+test("resolveHeadShaDetailed returns 40-hex SHA on host-bridge success payload", async () => {
+  const SHA = "98f0d203f5dad1d68e2f64b9be69d245440c9f7b";
+  const logs: string[] = [];
+  const bridge: HostBridgeExecutor = async (tool, args) => {
+    assert.equal(tool, "host_run_powershell");
+    assert.equal(args.command, "gh pr view 244 --json headRefOid");
+    assert.equal(args.cwd, "C:\\repo");
+    return {
+      success: true,
+      exitCode: 0,
+      stdout: `${JSON.stringify({ headRefOid: SHA })}\n`,
+      stderr: "",
+    };
+  };
+
+  const { store } = makeStubThreadStore();
+  const deps = createProductionStageDeps({
+    executeHostTool: bridge,
+    threadStore: store,
+    hostCheckoutPath: "C:\\repo",
+    log: (msg) => logs.push(msg),
+  });
+
+  const detailed = await deps.resolveHeadShaDetailed(244);
+  assert.deepEqual(detailed, { ok: true, headSha: SHA });
+  assert.equal(await deps.resolveHeadSha(244), SHA);
+  assert.equal(logs.length, 0, "successful resolution must not emit error logs");
+});
+
+test("resolveHeadShaDetailed logs and surfaces bridge error, non-zero exit, malformed JSON, and thrown errors", async () => {
+  const { store } = makeStubThreadStore();
+
+  // 1. Bridge error result (success: false with error text, no exitCode — real host-bridge shape)
+  {
+    const logs: string[] = [];
+    const deps = createProductionStageDeps({
+      executeHostTool: async () => ({
+        success: false,
+        error: "Directory not found: C:\\missing-repo",
+      }),
+      threadStore: store,
+      log: (msg) => logs.push(msg),
+    });
+
+    const res = await deps.resolveHeadShaDetailed(245);
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.match(res.reason, /Directory not found: C:\\missing-repo/);
+    }
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /Directory not found: C:\\missing-repo/);
+  }
+
+  // 2. Non-zero exit code with stderr
+  {
+    const logs: string[] = [];
+    const deps = createProductionStageDeps({
+      executeHostTool: async () => ({
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "failed to run git: fatal: not a git repository",
+      }),
+      threadStore: store,
+      log: (msg) => logs.push(msg),
+    });
+
+    const res = await deps.resolveHeadShaDetailed(246);
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.match(res.reason, /exit 1/i);
+      assert.match(res.reason, /not a git repository/);
+    }
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /not a git repository/);
+  }
+
+  // 3. Malformed JSON stdout
+  {
+    const logs: string[] = [];
+    const deps = createProductionStageDeps({
+      executeHostTool: async () => ({
+        success: true,
+        exitCode: 0,
+        stdout: "not valid json {{{",
+        stderr: "",
+      }),
+      threadStore: store,
+      log: (msg) => logs.push(msg),
+    });
+
+    const res = await deps.resolveHeadShaDetailed(247);
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.match(res.reason, /invalid json/i);
+    }
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /invalid json/i);
+  }
+
+  // 4. Bridge throws (e.g. HTTP 401 or daemon disconnected)
+  {
+    const logs: string[] = [];
+    const deps = createProductionStageDeps({
+      executeHostTool: async () => {
+        throw new Error("Host runner returned HTTP 401");
+      },
+      threadStore: store,
+      log: (msg) => logs.push(msg),
+    });
+
+    const res = await deps.resolveHeadShaDetailed(248);
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.match(res.reason, /HTTP 401/);
+    }
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /HTTP 401/);
+  }
+});
+
+test("getMechanicalInput logs specific failure reasons when gh commands fail or return malformed JSON", async () => {
+  const logs: string[] = [];
+  const bridge: HostBridgeExecutor = async (_tool, args) => {
+    const cmd = String(args.command);
+    if (cmd.includes("gh pr diff")) {
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: "gh: diff failed (not a git repo)",
+      };
+    }
+    if (cmd.includes("--json commits")) {
+      return { success: true, exitCode: 0, stdout: "{bad-json", stderr: "" };
+    }
+    if (cmd.includes("--json headRefName")) {
+      throw new Error("Host runner daemon disconnected");
+    }
+    return { success: true, exitCode: 0, stdout: "", stderr: "" };
+  };
+
+  const { store } = makeStubThreadStore();
+  const deps = createProductionStageDeps({
+    executeHostTool: bridge,
+    threadStore: store,
+    log: (msg) => logs.push(msg),
+  });
+
+  const input = await deps.reviewerGate.getMechanicalInput(makeBoardItem(), {
+    prNumber: 249,
+    headSha: "unknown-head",
+  });
+  assert.equal(input.diff, "");
+  assert.deepEqual(input.commitSubjects, []);
+  assert.equal(input.branchName, "");
+  assert.ok(logs.some((l) => /gh pr diff/i.test(l) && /not a git repo/i.test(l)));
+  assert.ok(logs.some((l) => /commits/i.test(l) && /json/i.test(l)));
+  assert.ok(logs.some((l) => /headRefName/i.test(l) && /disconnected/i.test(l)));
+});
+
+test("issueReviewerThread does not fail prematurely when getThread reconciles to stopped before dispatch settles", async () => {
+  const noopBridge: HostBridgeExecutor = async () => ({
+    success: true,
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+  });
+
+  const { store, threads } = makeStubThreadStore();
+  let dispatchFinished = false;
+  const reconcilingStore: StageThreadStore = {
+    createThread: (input) => store.createThread(input),
+    getThread: (id) => {
+      const t = threads.get(id);
+      if (!t) return null;
+      if (!dispatchFinished) {
+        // Simulate ThreadStore.reconcileThread flipping an active/queued thread to stopped
+        // before chatPost registers the active turn.
+        return { ...t, status: "stopped" };
+      }
+      return t;
+    },
+  };
+
+  const deps = createProductionStageDeps({
+    executeHostTool: noopBridge,
+    threadStore: reconcilingStore,
+    dispatchChatTurn: async ({ threadId }) => {
+      await new Promise((r) => setTimeout(r, 15));
+      const record = threads.get(threadId);
+      assert.ok(record);
+      record.status = "completed";
+      record.messages.push({
+        id: "msg-substantive-1",
+        role: "assistant",
+        content: "## Verdict: **PASS**\n- Substantive review completed.",
+        timestamp: new Date().toISOString(),
+      });
+      dispatchFinished = true;
+      return { ok: true, status: 200 };
+    },
+    reviewerPollIntervalMs: 2,
+    reviewerTimeoutMs: 500,
+  });
+
+  const res = await deps.reviewerGate.issueReviewerThread({
+    itemId: "pr-244",
+    brief: "Review PR #244",
+  });
+  assert.equal(res.verdict, "PASS");
+  assert.ok(res.evidence.some((e) => /Substantive review completed/i.test(e)));
+});

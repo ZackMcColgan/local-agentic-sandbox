@@ -2,6 +2,7 @@ import { getAgreementLedgerStore, type AgreementLedgerEntry } from "./agreementL
 import type { GateVerdict, MechanicalCheckInput, ReviewerVerdict } from "./reviewerGate";
 import { evaluateReviewerGate } from "./reviewerGate";
 import type { DispatcherBoardItem } from "./dispatcher";
+import type { HeadShaResolutionResult } from "./productionStageDeps";
 
 /**
  * Stage 0 measurement: evaluate ANY PR (including operator-flowed PRs built
@@ -12,6 +13,7 @@ import type { DispatcherBoardItem } from "./dispatcher";
 export interface ReviewerEvaluateDeps {
   getMechanicalInput: (prNumber: number, allowlist: string[]) => Promise<MechanicalCheckInput>;
   resolveHeadSha: (prNumber: number) => Promise<string | null>;
+  resolveHeadShaDetailed?: (prNumber: number) => Promise<HeadShaResolutionResult>;
   issueReviewerThread: (params: { itemId: string; brief: string }) => Promise<ReviewerVerdict>;
 }
 
@@ -23,6 +25,7 @@ export interface ReviewerEvaluateResult {
   threadId: string;
   headSha: string;
   headShaResolved: boolean;
+  headShaError?: string;
   mergeAuthorized: false;
 }
 
@@ -50,23 +53,42 @@ export async function evaluatePrShadowVerdict(
 
   let headSha = PLACEHOLDER_HEAD_SHA;
   let headShaResolved = false;
+  let headShaError: string | undefined;
   let reason: string | undefined;
   try {
-    const resolved = await deps.resolveHeadSha(prNumber);
-    if (resolved && HEAD_SHA_PATTERN.test(resolved)) {
-      headSha = resolved;
-      headShaResolved = true;
+    if (deps.resolveHeadShaDetailed) {
+      const detailed = await deps.resolveHeadShaDetailed(prNumber);
+      if (detailed.ok) {
+        if (HEAD_SHA_PATTERN.test(detailed.headSha)) {
+          headSha = detailed.headSha;
+          headShaResolved = true;
+        } else {
+          headShaError = `Resolved head SHA '${detailed.headSha}' is not a valid 40-char hex SHA`;
+        }
+      } else {
+        headShaError = detailed.reason;
+      }
+    } else {
+      const resolved = await deps.resolveHeadSha(prNumber);
+      if (resolved && HEAD_SHA_PATTERN.test(resolved)) {
+        headSha = resolved;
+        headShaResolved = true;
+      } else if (resolved) {
+        headShaError = `Resolved head SHA '${resolved}' is not a valid 40-char hex SHA`;
+      } else {
+        headShaError = "head SHA resolver returned null";
+      }
     }
   } catch (err) {
-    log?.(
-      `[reviewer-audit] head sha resolution threw for PR ${prNumber}: ${
-        err instanceof Error ? err.message : String(err)
-      }`
-    );
+    headShaError = err instanceof Error ? err.message : String(err);
+    log?.(`[reviewer-audit] head sha resolution threw for PR ${prNumber}: ${headShaError}`);
   }
   if (!headShaResolved) {
-    reason = `Head sha unresolved for PR ${prNumber}; recorded placeholder '${PLACEHOLDER_HEAD_SHA}'.`;
-    log?.(`[reviewer-audit] head sha unresolved for PR ${prNumber}; recording placeholder`);
+    const detail = headShaError ?? "head SHA resolver returned null";
+    reason = `Head sha unresolved for PR ${prNumber} (${detail}); recorded placeholder '${PLACEHOLDER_HEAD_SHA}'.`;
+    log?.(
+      `[reviewer-audit] head sha unresolved for PR ${prNumber}: ${detail}; recording placeholder`
+    );
   }
 
   const ledger = getAgreementLedgerStore().recordShadowVerdict({
@@ -89,15 +111,18 @@ export async function evaluatePrShadowVerdict(
     threadId: gateResult.reviewer.threadId,
     headSha,
     headShaResolved,
+    ...(headShaError ? { headShaError } : {}),
     mergeAuthorized: false,
   };
 }
 
 /** Production wiring: same mechanical collection and reviewer dispatch the drain uses. */
-export function createProductionEvaluateDeps(): ReviewerEvaluateDeps {
+export function createProductionEvaluateDeps(
+  options: { log?: (message: string) => void } = {}
+): ReviewerEvaluateDeps {
   async function stageDeps() {
     const { createProductionStageDeps } = await import("./productionStageDeps");
-    return createProductionStageDeps();
+    return createProductionStageDeps({ log: options.log });
   }
 
   return {
@@ -116,6 +141,10 @@ export function createProductionEvaluateDeps(): ReviewerEvaluateDeps {
     async resolveHeadSha(prNumber) {
       const deps = await stageDeps();
       return await deps.resolveHeadSha(prNumber);
+    },
+    async resolveHeadShaDetailed(prNumber) {
+      const deps = await stageDeps();
+      return await deps.resolveHeadShaDetailed(prNumber);
     },
     async issueReviewerThread(params) {
       const deps = await stageDeps();

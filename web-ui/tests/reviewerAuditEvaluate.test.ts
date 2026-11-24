@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { AgreementLedgerStore } from "../lib/board/agreementLedger";
+import { evaluatePrShadowVerdict } from "../lib/board/reviewerAuditEvaluate";
 import { POST as postReviewerAudit } from "../app/api/board/reviewer-audit/route";
 
 // Stage 0 measurement repair: the reviewer-audit route gains an "evaluate"
@@ -19,6 +20,9 @@ interface MockReviewerEvaluateDeps {
     branchName: string;
   }>;
   resolveHeadSha: (prNumber: number) => Promise<string | null>;
+  resolveHeadShaDetailed?: (
+    prNumber: number
+  ) => Promise<{ ok: true; headSha: string } | { ok: false; reason: string }>;
   issueReviewerThread: (params: { itemId: string; brief: string }) => Promise<{
     threadId: string;
     verdict: "PASS" | "FAIL";
@@ -178,6 +182,67 @@ test("evaluate action records the placeholder head SHA with a note when head res
         "unresolved head SHA must be noted on the entry"
       );
     });
+  } finally {
+    if (prevBoardDir === undefined) delete process.env.BOARD_DIR;
+    else process.env.BOARD_DIR = prevBoardDir;
+    fs.rmSync(boardDir, { recursive: true, force: true });
+  }
+});
+
+test("evaluate action surfaces and logs specific head-SHA resolution failure reason", async () => {
+  const boardDir = fs.mkdtempSync(path.join(os.tmpdir(), "item134-evaluate-reason-"));
+  const prevBoardDir = process.env.BOARD_DIR;
+  process.env.BOARD_DIR = boardDir;
+
+  const failureReason =
+    "gh pr view 302 --json headRefOid failed (exit 1): fatal: not a git repository";
+  const mock: MockReviewerEvaluateDeps = {
+    getMechanicalInput: async () => ({
+      diff: "diff --git a/x b/x\n+ok",
+      allowlist: [],
+      commitSubjects: [],
+      branchName: "",
+    }),
+    resolveHeadSha: async () => null,
+    resolveHeadShaDetailed: async () => ({ ok: false, reason: failureReason }),
+    issueReviewerThread: async () => ({
+      threadId: "rev-eval-3",
+      verdict: "PASS",
+      evidence: ["ok"],
+    }),
+  };
+
+  try {
+    await withMock(mock, async () => {
+      const res = await postReviewerAudit(makeRequest({ action: "evaluate", pr: 302, brief: "b" }));
+      assert.equal(res.status, 200);
+      const payload = (await res.json()) as {
+        headSha: string;
+        headShaResolved: boolean;
+        headShaError?: string;
+        entry: { headSha: string; reason?: string };
+      };
+      assert.equal(payload.headSha, "unknown-head");
+      assert.equal(payload.headShaResolved, false);
+      assert.equal(payload.headShaError, failureReason);
+      assert.ok(
+        payload.entry.reason && payload.entry.reason.includes(failureReason),
+        `ledger entry reason must carry specific resolution failure, got: ${payload.entry.reason}`
+      );
+    });
+
+    const logs: string[] = [];
+    const direct = await evaluatePrShadowVerdict(mock, {
+      prNumber: 303,
+      brief: "direct visibility check",
+      log: (msg) => logs.push(msg),
+    });
+    assert.equal(direct.headShaResolved, false);
+    assert.equal(direct.headShaError, failureReason);
+    assert.ok(
+      logs.some((line) => line.includes(failureReason)),
+      `expected log to include specific failure reason, got: ${JSON.stringify(logs)}`
+    );
   } finally {
     if (prevBoardDir === undefined) delete process.env.BOARD_DIR;
     else process.env.BOARD_DIR = prevBoardDir;
