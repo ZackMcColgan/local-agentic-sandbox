@@ -21,11 +21,14 @@ export const DEFAULT_REVIEWER_POLL_INTERVAL_MS = 2_000;
 
 export interface HostBridgeCommandResult {
   ok?: boolean;
+  success?: boolean;
   exitCode?: number;
   stdout?: string;
   stderr?: string;
   error?: string;
 }
+
+export type HeadShaResolutionResult = { ok: true; headSha: string } | { ok: false; reason: string };
 
 export type HostBridgeExecutor = (
   tool: string,
@@ -60,12 +63,14 @@ export interface ProductionStageDepsOptions {
   reviewerPollIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  log?: (message: string) => void;
 }
 
 export interface ProductionStageDeps {
   flowMonitor: NonNullable<BoardOrchestratorDeps["flowMonitor"]>;
   reviewerGate: NonNullable<BoardOrchestratorDeps["reviewerGate"]>;
   resolveHeadSha: NonNullable<BoardOrchestratorDeps["resolveHeadSha"]>;
+  resolveHeadShaDetailed: (prNumber: number) => Promise<HeadShaResolutionResult>;
   selfDeploy: {
     deps: SelfDeployVerifiedDeps;
   };
@@ -114,9 +119,66 @@ async function defaultDispatchChatTurn(params: {
 
 function isCommandSuccess(res: HostBridgeCommandResult | null | undefined): boolean {
   if (!res) return false;
-  if (res.ok === false) return false;
+  if (res.ok === false || res.success === false) return false;
   if (typeof res.exitCode === "number" && res.exitCode !== 0) return false;
   return true;
+}
+
+export function describeBridgeFailure(
+  commandLabel: string,
+  res: HostBridgeCommandResult | null | undefined
+): string {
+  if (!res) {
+    return `${commandLabel} failed: empty bridge response`;
+  }
+  const parts: string[] = [];
+  if (typeof res.exitCode === "number" && res.exitCode !== 0) {
+    parts.push(`exit ${res.exitCode}`);
+  }
+  const detail = [res.error, res.stderr]
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim())
+    .join("; ");
+  if (detail) {
+    return parts.length > 0
+      ? `${commandLabel} failed (${parts.join(", ")}): ${detail}`
+      : `${commandLabel} failed: ${detail}`;
+  }
+  if (parts.length > 0) {
+    return `${commandLabel} failed (${parts.join(", ")})`;
+  }
+  if (res.ok === false || res.success === false) {
+    return `${commandLabel} failed: bridge reported unsuccessful result without stderr or error text`;
+  }
+  if (typeof res.stdout !== "string") {
+    return `${commandLabel} failed: bridge returned non-string stdout`;
+  }
+  return `${commandLabel} failed: unknown bridge error`;
+}
+
+export function parseHeadRefOid(commandLabel: string, stdout: string): HeadShaResolutionResult {
+  let parsedHead: unknown;
+  try {
+    parsedHead = JSON.parse(stdout);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      reason: `${commandLabel} returned invalid JSON: ${msg}`,
+    };
+  }
+  const rawHeadSha =
+    parsedHead && typeof parsedHead === "object" && !Array.isArray(parsedHead)
+      ? (parsedHead as { headRefOid?: unknown }).headRefOid
+      : undefined;
+  const headSha = typeof rawHeadSha === "string" ? rawHeadSha.trim() : "";
+  if (headSha.length === 0) {
+    return {
+      ok: false,
+      reason: `${commandLabel} returned JSON without a non-empty headRefOid`,
+    };
+  }
+  return { ok: true, headSha };
 }
 
 function mapGhCheckRow(row: GhPrCheckRow): PrCheckResult | null {
@@ -267,6 +329,7 @@ export function createProductionStageDeps(
     options.reviewerPollIntervalMs ?? DEFAULT_REVIEWER_POLL_INTERVAL_MS;
   const sleep = options.sleep ?? defaultSleep;
   const now = options.now ?? (() => Date.now());
+  const log = options.log ?? ((msg: string) => console.info(msg));
 
   async function runHostCommand(
     command: string,
@@ -281,29 +344,39 @@ export function createProductionStageDeps(
 
   /**
    * Resolve the real head SHA for a PR via `gh pr view --json headRefOid`.
-   * Returns the reported head string, or null when the PR number is invalid or
-   * the command fails. Used by check polling and by shadow-verdict recording;
-   * verdict recording additionally requires a 40-char hex SHA.
+   * Returns a structured result with the specific failure reason on any error
+   * and logs every failure via the stage log channel.
    */
-  async function resolvePrHeadSha(prNumber: number): Promise<string | null> {
+  async function resolvePrHeadShaDetailed(prNumber: number): Promise<HeadShaResolutionResult> {
     if (typeof prNumber !== "number" || !Number.isInteger(prNumber) || prNumber <= 0) {
-      return null;
+      const reason = `Invalid PR number for head SHA resolution: ${String(prNumber)}`;
+      log(`[production-stage-deps] ${reason}`);
+      return { ok: false, reason };
     }
+    const command = `gh pr view ${prNumber} --json headRefOid`;
     try {
-      const headRes = await runHostCommand(`gh pr view ${prNumber} --json headRefOid`, 60);
+      const headRes = await runHostCommand(command, 60);
       if (!isCommandSuccess(headRes) || typeof headRes.stdout !== "string") {
-        return null;
+        const reason = describeBridgeFailure(command, headRes);
+        log(`[production-stage-deps] ${reason}`);
+        return { ok: false, reason };
       }
-      const parsedHead: unknown = JSON.parse(headRes.stdout);
-      const rawHeadSha =
-        parsedHead && typeof parsedHead === "object" && !Array.isArray(parsedHead)
-          ? (parsedHead as { headRefOid?: unknown }).headRefOid
-          : undefined;
-      const headSha = typeof rawHeadSha === "string" ? rawHeadSha.trim() : "";
-      return headSha.length > 0 ? headSha : null;
-    } catch {
-      return null;
+      const parsed = parseHeadRefOid(command, headRes.stdout);
+      if (!parsed.ok) {
+        log(`[production-stage-deps] ${parsed.reason}`);
+      }
+      return parsed;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const reason = `${command} threw: ${msg}`;
+      log(`[production-stage-deps] ${reason}`);
+      return { ok: false, reason };
     }
+  }
+
+  async function resolvePrHeadSha(prNumber: number): Promise<string | null> {
+    const res = await resolvePrHeadShaDetailed(prNumber);
+    return res.ok ? res.headSha : null;
   }
 
   const flowMonitor: NonNullable<BoardOrchestratorDeps["flowMonitor"]> = {
@@ -353,14 +426,31 @@ export function createProductionStageDeps(
       pr: { prNumber: number; headSha: string }
     ): Promise<MechanicalCheckInput> {
       const prNum = pr.prNumber;
+      const diffCmd = `gh pr diff ${prNum}`;
+      const commitsCmd = `gh pr view ${prNum} --json commits`;
+      const branchCmd = `gh pr view ${prNum} --json headRefName`;
+
+      const runSafe = async (command: string): Promise<HostBridgeCommandResult> => {
+        try {
+          return await runHostCommand(command, 60);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { ok: false, success: false, error: msg };
+        }
+      };
+
       const [diffRes, commitsRes, branchRes] = await Promise.all([
-        runHostCommand(`gh pr diff ${prNum}`, 60),
-        runHostCommand(`gh pr view ${prNum} --json commits`, 60),
-        runHostCommand(`gh pr view ${prNum} --json headRefName`, 60),
+        runSafe(diffCmd),
+        runSafe(commitsCmd),
+        runSafe(branchCmd),
       ]);
 
-      const diff =
-        isCommandSuccess(diffRes) && typeof diffRes.stdout === "string" ? diffRes.stdout : "";
+      let diff = "";
+      if (isCommandSuccess(diffRes) && typeof diffRes.stdout === "string") {
+        diff = diffRes.stdout;
+      } else {
+        log(`[production-stage-deps] ${describeBridgeFailure(diffCmd, diffRes)}`);
+      }
 
       let commitSubjects: string[] = [];
       if (isCommandSuccess(commitsRes) && typeof commitsRes.stdout === "string") {
@@ -373,9 +463,13 @@ export function createProductionStageDeps(
               .map((c) => c.messageHeadline ?? c.message?.split(/\r?\n/)[0] ?? "")
               .filter((s) => s.length > 0);
           }
-        } catch {
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log(`[production-stage-deps] ${commitsCmd} returned invalid JSON: ${msg}`);
           commitSubjects = [];
         }
+      } else {
+        log(`[production-stage-deps] ${describeBridgeFailure(commitsCmd, commitsRes)}`);
       }
 
       let branchName = "";
@@ -385,9 +479,13 @@ export function createProductionStageDeps(
           if (typeof parsed.headRefName === "string") {
             branchName = parsed.headRefName.trim();
           }
-        } catch {
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log(`[production-stage-deps] ${branchCmd} returned invalid JSON: ${msg}`);
           branchName = "";
         }
+      } else {
+        log(`[production-stage-deps] ${describeBridgeFailure(branchCmd, branchRes)}`);
       }
 
       return {
@@ -406,6 +504,7 @@ export function createProductionStageDeps(
       const deadline = now() + reviewerTimeoutMs;
 
       let dispatchError: string | null = null;
+      let dispatchSettled = false;
       const dispatchPromise = dispatchChatTurn({
         threadId: thread.id,
         brief,
@@ -420,13 +519,16 @@ export function createProductionStageDeps(
             err instanceof Error
               ? err.message
               : `Reviewer chat dispatch threw for thread ${thread.id}: ${String(err)}`;
+        })
+        .finally(() => {
+          dispatchSettled = true;
         });
       void dispatchPromise;
 
       while (true) {
         const record = await threadStore.getThread(thread.id);
         if (record) {
-          if (record.status === "failed" || record.status === "stopped") {
+          if (record.status === "failed" || (record.status === "stopped" && dispatchSettled)) {
             return {
               threadId: thread.id,
               verdict: "FAIL",
@@ -669,6 +771,7 @@ export function createProductionStageDeps(
     flowMonitor,
     reviewerGate,
     resolveHeadSha: resolvePrHeadSha,
+    resolveHeadShaDetailed: resolvePrHeadShaDetailed,
     selfDeploy: {
       deps: selfDeployDeps,
     },

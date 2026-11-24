@@ -111,15 +111,17 @@ async function handleEvaluate(body: {
       )
     : [];
 
+  const log = (message: string) => console.info(message);
   const mock = (globalThis as { __mockReviewerEvaluateDeps?: ReviewerEvaluateDeps | null })
     .__mockReviewerEvaluateDeps;
-  const deps = mock ?? createProductionEvaluateDeps();
+  const deps = mock ?? createProductionEvaluateDeps({ log });
 
   try {
     const result = await evaluatePrShadowVerdict(deps, {
       prNumber: body.pr,
       brief: body.brief.trim(),
       allowlist,
+      log,
     });
     return NextResponse.json({
       entry: result.entry,
@@ -129,6 +131,7 @@ async function handleEvaluate(body: {
       threadId: result.threadId,
       headSha: result.headSha,
       headShaResolved: result.headShaResolved,
+      ...(result.headShaError ? { headShaError: result.headShaError } : {}),
       mergeAuthorized: result.mergeAuthorized,
     });
   } catch (err) {
