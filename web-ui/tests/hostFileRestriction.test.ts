@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import http from "node:http";
 import React from "react";
@@ -30,7 +31,7 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
   beforeEach(() => {
     // Isolate the server-side settings store in a temp dir (SETTINGS_DIR override)
     // so concurrent gate-batch processes never read a restriction we toggled ON.
-    isolatedDir = fs.mkdtempSync(path.join(fs.tmpdir(), "b132-settings-"));
+    isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "b132-settings-"));
     prevSettingsDir = process.env.SETTINGS_DIR;
     process.env.SETTINGS_DIR = isolatedDir;
     settingsFile = getHostSettingsFilePath();
