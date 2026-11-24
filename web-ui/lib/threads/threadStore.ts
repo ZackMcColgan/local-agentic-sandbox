@@ -22,6 +22,7 @@ import { listBoardOwnedThreadIds } from "../board/boardStore";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
 import { assertValidSafeId, isStrictlyInsideRoot, isValidSafeId } from "../securityHardening";
+import { atomicWriteFile, atomicWriteFileSync } from "../fsAtomic";
 
 import type {
   TurnConversationPreparation,
@@ -259,7 +260,7 @@ export function markTurnQueued(threadId: string, threadsDir?: string): void {
     const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
     if (!raw || raw.id !== threadId) return;
     raw.queuedForExecution = true;
-    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+    atomicWriteFileSync(filePath, JSON.stringify(raw, null, 2), 0o660);
   } catch {}
 }
 
@@ -282,7 +283,7 @@ export function markTurnExecuting(threadId: string, threadsDir?: string): void {
     if (!raw || raw.id !== threadId) return;
     delete raw.queuedForExecution;
     raw.updatedAt = nowIso;
-    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+    atomicWriteFileSync(filePath, JSON.stringify(raw, null, 2), 0o660);
   } catch {}
 }
 
@@ -297,7 +298,7 @@ export function clearTurnQueued(threadId: string, threadsDir?: string): void {
     const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
     if (!raw || raw.id !== threadId || !raw.queuedForExecution) return;
     delete raw.queuedForExecution;
-    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
+    atomicWriteFileSync(filePath, JSON.stringify(raw, null, 2), 0o660);
   } catch {}
 }
 
@@ -358,10 +359,7 @@ export class ThreadStore {
     } catch {}
     pending.push(trimmed);
     try {
-      fs.writeFileSync(steerFile, JSON.stringify(pending, null, 2), {
-        encoding: "utf8",
-        mode: 0o660,
-      });
+      atomicWriteFileSync(steerFile, JSON.stringify(pending, null, 2), 0o660);
     } catch {}
     return pending.length;
   }
@@ -959,6 +957,9 @@ export class ThreadStore {
     return path.join(this.threadsDir, ".summaries-index.json");
   }
 
+  private summaryIndexWriteChain: Promise<void> = Promise.resolve();
+  private summaryIndexWriteQueued = false;
+
   private async loadSummaryIndex(): Promise<void> {
     if (this.summaryIndexLoaded) return;
     this.summaryIndexLoaded = true;
@@ -975,7 +976,13 @@ export class ThreadStore {
       >;
       if (parsed && typeof parsed === "object") {
         for (const [k, v] of Object.entries(parsed)) {
-          if (v && typeof v.mtimeMs === "number" && v.summary && typeof v.summary.id === "string") {
+          if (
+            v &&
+            typeof v.mtimeMs === "number" &&
+            v.summary &&
+            typeof v.summary.id === "string" &&
+            !this.summaryCache.has(k)
+          ) {
             this.summaryCache.set(k, v);
           }
         }
@@ -985,8 +992,31 @@ export class ThreadStore {
     }
   }
 
+  private scheduleSummaryIndexSave(): void {
+    if (this.summaryIndexWriteQueued) return;
+    this.summaryIndexWriteQueued = true;
+    this.summaryIndexWriteChain = this.summaryIndexWriteChain
+      .then(async () => {
+        this.summaryIndexWriteQueued = false;
+        await this.saveSummaryIndex();
+      })
+      .catch(() => {
+        this.summaryIndexWriteQueued = false;
+      });
+  }
+
+  public async flushSummaryIndexForTest(): Promise<void> {
+    if (this.summaryIndexDirtyDirs.has(this.threadsDir) && !this.summaryIndexWriteQueued) {
+      this.scheduleSummaryIndexSave();
+    }
+    await this.summaryIndexWriteChain;
+  }
+
   private async saveSummaryIndex(): Promise<void> {
     try {
+      if (!this.summaryIndexLoaded) {
+        await this.loadSummaryIndex();
+      }
       const obj: Record<
         string,
         {
@@ -999,7 +1029,7 @@ export class ThreadStore {
       for (const [k, v] of this.summaryCache.entries()) {
         obj[k] = v;
       }
-      await fs.promises.writeFile(this.summaryIndexPath, JSON.stringify(obj), "utf8");
+      await atomicWriteFile(this.summaryIndexPath, JSON.stringify(obj), 0o660);
     } catch {
       // Best-effort sidecar persistence
     }
@@ -1438,37 +1468,7 @@ export class ThreadStore {
     // save from the per-turn rollups recorded on assistant messages.
     thread.tokenEconomics = computeThreadTokenEconomics(thread);
     const targetFile = this.getFilePath(thread.id);
-    const tempFile = path.join(
-      this.threadsDir,
-      `.${thread.id}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
-    );
-    try {
-      fs.writeFileSync(tempFile, JSON.stringify(thread, null, 2), {
-        encoding: "utf8",
-        mode: 0o660,
-      });
-      try {
-        fs.chmodSync(tempFile, 0o660);
-      } catch {}
-      fs.renameSync(tempFile, targetFile);
-      try {
-        fs.chmodSync(targetFile, 0o660);
-      } catch {}
-    } catch {
-      if (fs.existsSync(tempFile)) {
-        try {
-          fs.unlinkSync(tempFile);
-        } catch {}
-      }
-      // Fallback to direct write if rename fails across partitions
-      fs.writeFileSync(targetFile, JSON.stringify(thread, null, 2), {
-        encoding: "utf8",
-        mode: 0o660,
-      });
-      try {
-        fs.chmodSync(targetFile, 0o660);
-      } catch {}
-    }
+    atomicWriteFileSync(targetFile, JSON.stringify(thread, null, 2), 0o660);
 
     try {
       const stat = fs.statSync(targetFile);
@@ -1480,9 +1480,7 @@ export class ThreadStore {
         searchDigestComplete: built.searchDigestComplete,
       });
       this.summaryIndexDirtyDirs.add(this.threadsDir);
-      if (this.summaryIndexLoaded) {
-        void this.saveSummaryIndex();
-      }
+      this.scheduleSummaryIndexSave();
     } catch {}
   }
 
@@ -1715,7 +1713,7 @@ export class ThreadStore {
     this.summaryCache.delete(`${threadId}.json`);
     this.summaryIndexDirtyDirs.add(this.threadsDir);
     if (this.summaryIndexLoaded) {
-      void this.saveSummaryIndex();
+      this.scheduleSummaryIndexSave();
     }
 
     // (1) Remove thread's <threadId>/ subdirectory recursively

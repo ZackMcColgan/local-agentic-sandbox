@@ -8,6 +8,8 @@ import {
   migrateLegacyFileIfNeeded,
   resolvePersistentStoragePath,
 } from "../storageMigration";
+import { atomicWriteFileSync } from "../fsAtomic";
+import { configureSqliteHandle, runImmediateTransaction } from "./sqliteConfig";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -132,7 +134,9 @@ function openSqliteDatabase(dbPath: string): SqliteDatabase {
   const { DatabaseSync } = requireModule("node:sqlite") as {
     DatabaseSync: new (filename: string) => SqliteDatabase;
   };
-  return new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  configureSqliteHandle(db, dbPath);
+  return db;
 }
 
 export class RunLedger {
@@ -284,25 +288,27 @@ export class RunLedger {
         slot_metrics_json = excluded.slot_metrics_json
     `);
 
-    stmt.run(
-      input.runId,
-      input.parentRunId ?? null,
-      input.threadId,
-      input.prompt,
-      input.status,
-      input.startedAt,
-      nowIso,
-      input.completedAt ?? null,
-      lastHeartbeatAt,
-      input.model,
-      JSON.stringify(input.gitShas),
-      JSON.stringify(input.milestoneSummary),
-      input.deploymentRef,
-      input.checkpointPath ?? null,
-      resumableInt,
-      input.errorMessage ?? null,
-      input.slotMetrics ? JSON.stringify(input.slotMetrics) : null
-    );
+    runImmediateTransaction(this.db, () => {
+      stmt.run(
+        input.runId,
+        input.parentRunId ?? null,
+        input.threadId,
+        input.prompt,
+        input.status,
+        input.startedAt,
+        nowIso,
+        input.completedAt ?? null,
+        lastHeartbeatAt,
+        input.model,
+        JSON.stringify(input.gitShas),
+        JSON.stringify(input.milestoneSummary),
+        input.deploymentRef,
+        input.checkpointPath ?? null,
+        resumableInt,
+        input.errorMessage ?? null,
+        input.slotMetrics ? JSON.stringify(input.slotMetrics) : null
+      );
+    });
 
     const saved = this.getRun(input.runId);
     if (!saved) {
@@ -387,23 +393,25 @@ export class RunLedger {
       WHERE run_id = ?
     `);
 
-    stmt.run(
-      nextStatus,
-      nowIso,
-      nextCompletedAt ?? null,
-      nextHeartbeat,
-      nextModel,
-      JSON.stringify(nextGitShas),
-      JSON.stringify(nextMilestones),
-      nextDeployRef,
-      nextCheckpoint ?? null,
-      nextResumable ? 1 : 0,
-      nextError ?? null,
-      (update.slotMetrics ?? existing.slotMetrics)
-        ? JSON.stringify(update.slotMetrics ?? existing.slotMetrics)
-        : null,
-      runId
-    );
+    runImmediateTransaction(this.db, () => {
+      stmt.run(
+        nextStatus,
+        nowIso,
+        nextCompletedAt ?? null,
+        nextHeartbeat,
+        nextModel,
+        JSON.stringify(nextGitShas),
+        JSON.stringify(nextMilestones),
+        nextDeployRef,
+        nextCheckpoint ?? null,
+        nextResumable ? 1 : 0,
+        nextError ?? null,
+        (update.slotMetrics ?? existing.slotMetrics)
+          ? JSON.stringify(update.slotMetrics ?? existing.slotMetrics)
+          : null,
+        runId
+      );
+    });
 
     return this.getRun(runId)!;
   }
@@ -457,7 +465,7 @@ export class RunLedger {
       savedAt: new Date().toISOString(),
     };
 
-    fs.writeFileSync(checkpointPath, JSON.stringify(payloadToSave, null, 2), "utf8");
+    atomicWriteFileSync(checkpointPath, JSON.stringify(payloadToSave, null, 2));
 
     return this.updateRunProgress(runId, {
       status: "paused",

@@ -13,7 +13,8 @@ export async function GET() {
   try {
     const store = getBoardStore();
     const items = await mergeThreadsIntoBoard(seedBoardIfEmpty(store));
-    return NextResponse.json({ items });
+    const quarantinedFile = store.getLastQuarantinePath();
+    return NextResponse.json(quarantinedFile ? { items, quarantinedFile } : { items });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load board";
     return NextResponse.json({ error: message }, { status: 500 });
