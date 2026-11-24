@@ -1291,6 +1291,16 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("scripts/build-import-image") ||
+      p.includes("scripts/rollout-deploy") ||
+      p.includes("scripts/deploy-cluster") ||
+      p.includes("deploy/k8s/web-ui.yaml") ||
+      p.includes("lib/deploy/deployRecordStore") ||
+      p.includes("selfDeployArchitectureBatch7.test.ts"),
+    tests: ["tests/selfDeployArchitectureBatch7.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/agreementLedger") ||
       p.includes("lib/board/reviewerGate") ||
       p.includes("lib/board/reviewerAuditEvaluate") ||

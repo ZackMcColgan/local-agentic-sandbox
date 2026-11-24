@@ -8,6 +8,11 @@ import {
   validateK8sResourceName,
 } from "@/lib/deploy/selfDeploy";
 import { validateDeployDryRunUrl } from "@/lib/deploy/dryRunUrlGuard";
+import {
+  clearDeploySuspension,
+  isDeploySuspended,
+  readDeployRecord,
+} from "@/lib/deploy/deployRecordStore";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { TaskManifest } from "@/lib/subagents/types";
@@ -18,9 +23,12 @@ export async function GET(_req: NextRequest) {
     const pipeline = new SelfDeployPipeline();
     const selfDeployEnabled = isSelfDeployKillSwitchEnabled();
     const deployHistory = pipeline.getDeployHistory();
+    const deployRecord = readDeployRecord();
 
     return NextResponse.json({
       selfDeployEnabled,
+      deploySuspended: isDeploySuspended(),
+      deployRecord,
       deployHistory,
     });
   } catch (err: unknown) {
@@ -62,6 +70,14 @@ export async function POST(req: NextRequest) {
       );
     }
     const { action } = body;
+
+    if (action === "clearSuspension") {
+      const deployRecord = clearDeploySuspension();
+      return NextResponse.json({
+        deploySuspended: deployRecord.suspended,
+        deployRecord,
+      });
+    }
 
     if (action === "toggleKillSwitch") {
       const enabled = Boolean(body.enabled);
