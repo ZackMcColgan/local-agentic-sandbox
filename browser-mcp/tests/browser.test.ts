@@ -1,11 +1,16 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   registerBrowserTools,
   htmlToMarkdown,
   evaluateContentQuality,
 } from "../src/tools/browser.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type RegisteredTool = {
   handler: (
@@ -36,23 +41,14 @@ describe("Browser MCP Toolchain Suite", () => {
       assert.ok(tools["fetch_webpage_markdown"], "fetch_webpage_markdown should be registered");
     });
 
-    it("returns empty results immediately when SEARCH_FORCE_EMPTY_RESULTS=1", async () => {
-      const orig = process.env.SEARCH_FORCE_EMPTY_RESULTS;
-      try {
-        process.env.SEARCH_FORCE_EMPTY_RESULTS = "1";
-        registerBrowserTools(mcp);
-        const handler = getRegisteredTools(mcp)["search_web"].handler;
-        const res = await handler({ query: "weather in Spanish Fort AL", limit: 5 });
-        assert.ok(res.content && res.content[0], "Response content should be present");
-        const parsed = JSON.parse(res.content[0].text);
-        assert.deepEqual(parsed, { results: [] });
-      } finally {
-        if (orig !== undefined) {
-          process.env.SEARCH_FORCE_EMPTY_RESULTS = orig;
-        } else {
-          delete process.env.SEARCH_FORCE_EMPTY_RESULTS;
-        }
-      }
+    it("does not expose SEARCH_FORCE_EMPTY_RESULTS test hook in production code path", () => {
+      const browserSrcPath = path.resolve(__dirname, "../src/tools/browser.ts");
+      const src = fs.readFileSync(browserSrcPath, "utf8");
+      assert.doesNotMatch(
+        src,
+        /SEARCH_FORCE_EMPTY_RESULTS/,
+        "browser-mcp/src/tools/browser.ts must not contain the SEARCH_FORCE_EMPTY_RESULTS test hook"
+      );
     });
   });
 

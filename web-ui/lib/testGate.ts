@@ -376,6 +376,21 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("reviewerVerdictParser.test.ts"),
+    tests: ["tests/reviewerVerdictParser.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("app/api/board/reviewer-audit") ||
+      p.includes("lib/board/reviewerAuditEvaluate") ||
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("reviewerAuditEvaluate.test.ts"),
+    tests: ["tests/reviewerAuditEvaluate.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/boardOrchestrator") ||
       p.includes("lib/board/boardControl.ts") ||
       p.includes("app/api/board/drain") ||
@@ -992,6 +1007,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/memory"),
     tests: ["tests/userProfile.test.ts"],
   },
+  // Persistent storage migration helper
+  {
+    match: (p) => p.includes("lib/storageMigration"),
+    tests: ["tests/ledger.test.ts", "tests/userProfile.test.ts", "tests/flywheelSkills.test.ts"],
+  },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
@@ -1082,6 +1102,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("app/api/chat/route") ||
+      p.includes("lib/chat/roundLoop") ||
       p.includes("lib/progressiveTools") ||
       p.includes("lib/conversationCompaction"),
     tests: [
@@ -1605,6 +1626,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/modelEval.test.ts"],
   },
   {
+    match: (p) => p.includes("lib/fsAtomic"),
+    tests: ["tests/boardStore.test.ts", "tests/schedulerPlanner.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/board/boardStore"),
     tests: ["tests/boardStore.test.ts"],
   },
@@ -1702,6 +1727,67 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ChatStream") ||
       p.includes("heartbeatWrites.test.ts"),
     tests: ["tests/heartbeatWrites.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("app/page.tsx") ||
+      p.includes("app/api/skills/route") ||
+      p.includes("lib/flywheel/skillsStore") ||
+      p.includes("lib/hostMode") ||
+      p.includes("lib/hostSettings") ||
+      p.includes("lib/chat/mcpClients") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/readDedup") ||
+      p.includes("backgroundLoadPerf.test.ts"),
+    tests: ["tests/backgroundLoadPerf.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("wireDeadActions.test.ts") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/page.tsx") ||
+      p.includes("app/api/threads/[id]/route") ||
+      p.includes("app/api/threads/[id]/compact/route") ||
+      p.includes("app/api/projects/[id]/tasks/route") ||
+      p.includes("lib/projects/projectRunner") ||
+      p.includes("lib/projects/projectStore") ||
+      p.includes("components/ProjectsView") ||
+      p.includes("components/projects/ProjectTaskList"),
+    tests: ["tests/wireDeadActions.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/apiJson") ||
+      p.includes("lib/subagents/scheduler") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/jobChunking") ||
+      p.includes("lib/chat/mcpClients") ||
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("app/api/board/intake/route") ||
+      p.includes("app/api/deploy/route") ||
+      p.includes("app/api/settings/host/route") ||
+      p.includes("app/api/settings/memory/route") ||
+      p.includes("app/api/settings/notifications/route") ||
+      p.includes("app/api/skills/route") ||
+      p.includes("app/api/tasks/route") ||
+      p.includes("app/api/schedules/route") ||
+      p.includes("app/api/threads/route") ||
+      p.includes("app/api/threads/[id]/route") ||
+      p.includes("app/api/projects/browse/route") ||
+      p.includes("schedulerHygiene.test.ts"),
+    tests: ["tests/schedulerHygiene.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("components/chat/messageRender") ||
+      p.includes("components/ActivityTimeline") ||
+      p.includes("components/StintCard") ||
+      p.includes("components/ChatStream") ||
+      p.includes("lib/stintDerivation") ||
+      p.includes("lib/chatStatus") ||
+      p.includes("renderMemoization.test.ts"),
+    tests: ["tests/renderMemoization.test.ts"],
   },
   {
     match: (p) =>
@@ -1813,8 +1899,12 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
       continue;
     }
 
-    // Direct test file changed
-    if (/tests\/[^/]+\.test\.(ts|js)$/.test(normalized)) {
+    // Direct test file changed (web-ui tests only; workspace tests map via MAPPING_RULES)
+    if (
+      !normalized.startsWith("browser-mcp/") &&
+      !normalized.startsWith("mcp-server/") &&
+      /tests\/[^/]+\.test\.(ts|js)$/.test(normalized)
+    ) {
       const testFile = normalized.startsWith("web-ui/")
         ? normalized.replace(/^web-ui\//, "")
         : normalized;

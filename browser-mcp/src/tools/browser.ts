@@ -1,36 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-
-function isPrivateIpOrLocalhost(urlString: string): boolean {
-  try {
-    const parsed = new URL(urlString);
-    const host = parsed.hostname.toLowerCase();
-
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "0.0.0.0" ||
-      host === "::1" ||
-      host.endsWith(".local") ||
-      host.endsWith(".internal") ||
-      host === "169.254.169.254" // Cloud metadata endpoint
-    ) {
-      return true;
-    }
-
-    // Check private IPv4 subnets
-    const parts = host.split(".").map(Number);
-    if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
-      if (parts[0] === 10) return true; // 10.0.0.0/8
-      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
-      if (parts[0] === 192 && parts[1] === 168) return true; // 192.168.0.0/16
-    }
-
-    return false;
-  } catch {
-    return true;
-  }
-}
+import { safeFetchWithSsrfGuard, SsrfBlockedError } from "./ssrfGuard.js";
 
 export function htmlToMarkdown(html: string): string {
   // Strip non-content and boilerplate layout tags (nav, header, footer, aside, scripts, styles)
@@ -107,18 +77,6 @@ export function registerBrowserTools(mcp: McpServer) {
     },
     async ({ query, limit }) => {
       try {
-        // Test hook: when SEARCH_FORCE_EMPTY_RESULTS=1, return empty results immediately without touching the network.
-        if (process.env.SEARCH_FORCE_EMPTY_RESULTS === "1") {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({ results: [] }),
-              },
-            ],
-          };
-        }
-
         const results: Array<{ title: string; snippet: string; url: string }> = [];
 
         // DuckDuckGo Lite Search (POST method, scriptless, zero CAPTCHAs)
@@ -223,9 +181,8 @@ export function registerBrowserTools(mcp: McpServer) {
 
         if (candidates.length > 0) {
           const fetchPromises = candidates.map(async (c) => {
-            if (isPrivateIpOrLocalhost(c.url)) return null;
             try {
-              const pageRes = await fetch(c.url, {
+              const pageRes = await safeFetchWithSsrfGuard(c.url, {
                 headers: {
                   "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -333,31 +290,10 @@ export function registerBrowserTools(mcp: McpServer) {
         .describe("Target documentation or website URL to scrape (must be public HTTP/HTTPS)"),
     },
     async ({ url }) => {
-      if (isPrivateIpOrLocalhost(url)) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  status: "BLOCKED_SSRF",
-                  error:
-                    "Access to private or local network hosts is strictly prohibited by security policy.",
-                  url,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-
-        const res = await fetch(url, {
+        const res = await safeFetchWithSsrfGuard(url, {
           signal: controller.signal,
           headers: {
             "User-Agent":
@@ -365,7 +301,6 @@ export function registerBrowserTools(mcp: McpServer) {
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           },
         });
-        clearTimeout(timeout);
 
         if (!res.ok) {
           throw new Error(`Target returned HTTP status ${res.status}`);
@@ -396,6 +331,25 @@ export function registerBrowserTools(mcp: McpServer) {
           ],
         };
       } catch (err: unknown) {
+        if (err instanceof SsrfBlockedError) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    status: "BLOCKED_SSRF",
+                    error:
+                      "Access to private or local network hosts is strictly prohibited by security policy.",
+                    url,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
         const message = err instanceof Error ? err.message : String(err);
         return {
           content: [
@@ -413,6 +367,8 @@ export function registerBrowserTools(mcp: McpServer) {
             },
           ],
         };
+      } finally {
+        clearTimeout(timeout);
       }
     }
   );

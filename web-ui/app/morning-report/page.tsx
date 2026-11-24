@@ -32,7 +32,7 @@ export default function MorningReportPage() {
       const urlParams = new URLSearchParams(window.location.search);
       const queryTheme = urlParams.get("theme");
       const saved =
-        queryTheme || localStorage.getItem("app-theme") || localStorage.getItem("theme");
+        queryTheme || localStorage.getItem("theme") || localStorage.getItem("app-theme");
       const isDark = saved
         ? saved === "dark"
         : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -56,7 +56,7 @@ export default function MorningReportPage() {
               <span>Sessions</span>
             </Link>
             <div className="flex items-center gap-2">
-              <Sun className="h-5 w-5 text-amber-500" />
+              <Sun className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
                 Morning Report
               </h1>

@@ -8,6 +8,7 @@ import {
   isStrictlyInsideRoot,
   resolveRealConfinedPath,
 } from "@/lib/securityHardening";
+import { parseJsonBody } from "@/lib/apiJson";
 
 export const dynamic = "force-dynamic";
 
@@ -135,8 +136,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const allowedRoot = getAllowedRoot();
-    const body = await req.json();
     const { action, targetPath, name } = body;
 
     if (action === "init-repo") {
@@ -165,7 +168,9 @@ export async function POST(req: NextRequest) {
 
       if (!norm) {
         return NextResponse.json(
-          { error: sawNotFound ? "Target path does not exist" : "Target path outside allowed root" },
+          {
+            error: sawNotFound ? "Target path does not exist" : "Target path outside allowed root",
+          },
           { status: sawNotFound ? 404 : 403 }
         );
       }

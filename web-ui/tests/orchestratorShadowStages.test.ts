@@ -319,6 +319,95 @@ test("3. POST /api/board/reviewer-audit persists agreement ledger, tracks escape
   }
 });
 
+test("5. shadow verdict records the resolved 40-char head SHA when the PR record carries the unknown-head placeholder", async () => {
+  const boardDir = makeTempBoardDir();
+  const logs: string[] = [];
+  const RESOLVED_SHA = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+
+  try {
+    const item = makeItem({ id: "item-pr-5", key: "#140", title: "Head SHA resolution" });
+    const orchestrator = new BoardOrchestrator({
+      boardDir,
+      items: [item],
+      getControlState: () => makeControl(),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      log: (msg) => logs.push(msg),
+      issueAndWait: async (): Promise<JobExecutionOutcome> => ({
+        status: "completed",
+        threadId: "t-pr-5",
+        summary: "Opened PR #140",
+        prNumber: 140,
+        headSha: "unknown-head",
+      }),
+      reviewerGate: {
+        getMechanicalInput: () => makeCleanMechanicalInput(),
+        issueReviewerThread: async () => ({
+          threadId: "rev-thread-140",
+          verdict: "PASS",
+          evidence: ["All behavioral checks passed."],
+        }),
+      },
+      resolveHeadSha: async () => RESOLVED_SHA,
+    });
+
+    await orchestrator.drain();
+    const ledger = new AgreementLedgerStore(boardDir).read();
+    assert.equal(ledger.entries.length, 1);
+    assert.equal(ledger.entries[0].prNumber, 140);
+    assert.equal(ledger.entries[0].headSha, RESOLVED_SHA);
+    assert.equal(ledger.entries[0].reviewerVerdict, "PASS");
+  } finally {
+    fs.rmSync(boardDir, { recursive: true, force: true });
+  }
+});
+
+test("6. shadow verdict keeps the placeholder head SHA but logs a note when head resolution fails", async () => {
+  const boardDir = makeTempBoardDir();
+  const logs: string[] = [];
+
+  try {
+    const item = makeItem({ id: "item-pr-6", key: "#141", title: "Head SHA fallback" });
+    const orchestrator = new BoardOrchestrator({
+      boardDir,
+      items: [item],
+      getControlState: () => makeControl(),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      log: (msg) => logs.push(msg),
+      issueAndWait: async (): Promise<JobExecutionOutcome> => ({
+        status: "completed",
+        threadId: "t-pr-6",
+        summary: "Opened PR #141",
+        prNumber: 141,
+        headSha: "unknown-head",
+      }),
+      reviewerGate: {
+        getMechanicalInput: () => makeCleanMechanicalInput(),
+        issueReviewerThread: async () => ({
+          threadId: "rev-thread-141",
+          verdict: "PASS",
+          evidence: ["All behavioral checks passed."],
+        }),
+      },
+      resolveHeadSha: async () => null,
+    });
+
+    await orchestrator.drain();
+    const ledger = new AgreementLedgerStore(boardDir).read();
+    assert.equal(ledger.entries.length, 1);
+    assert.equal(ledger.entries[0].headSha, "unknown-head");
+    assert.ok(
+      logs.some(
+        (l) => l.includes("#141") && /head sha/i.test(l) && /placeholder|unresolved/i.test(l)
+      ),
+      "a failed head resolution must be noted in the log, never recorded silently"
+    );
+  } finally {
+    fs.rmSync(boardDir, { recursive: true, force: true });
+  }
+});
+
 test("4. runSelfDeployVerified with stage OFF returns shadow_prepared and never invokes deploy pipeline", async () => {
   const boardDir = makeTempBoardDir();
   const executedSteps: string[] = [];

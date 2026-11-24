@@ -27,7 +27,11 @@ import type { ProjectRecord } from "../lib/projects/projectStore.js";
 
 function createSymlinkOrJunction(target: string, linkPath: string, isDir: boolean): boolean {
   try {
-    fs.symlinkSync(target, linkPath, isDir ? (process.platform === "win32" ? "junction" : "dir") : "file");
+    fs.symlinkSync(
+      target,
+      linkPath,
+      isDir ? (process.platform === "win32" ? "junction" : "dir") : "file"
+    );
     return true;
   } catch {
     if (process.platform === "win32" && !isDir) {
@@ -40,7 +44,9 @@ function createSymlinkOrJunction(target: string, linkPath: string, isDir: boolea
 describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guards", () => {
   describe("1. GET /api/files path confinement", () => {
     it("rejects /api/files?path=/etc/hosts and non-workspace absolute paths with 400/403", async () => {
-      const resEtcHosts = await filesGet(new NextRequest("http://localhost:3000/api/files?path=/etc/hosts"));
+      const resEtcHosts = await filesGet(
+        new NextRequest("http://localhost:3000/api/files?path=/etc/hosts")
+      );
       assert.ok(
         resEtcHosts.status === 400 || resEtcHosts.status === 403,
         `Expected 400/403 for /etc/hosts, got ${resEtcHosts.status}`
@@ -244,7 +250,11 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
             body: JSON.stringify({ action, id: "../../etc/evil", title: "Evil" }),
           });
           const res = await skillsPost(req);
-          assert.equal(res.status, 400, `POST /api/skills (${action}) must reject invalid id with 400`);
+          assert.equal(
+            res.status,
+            400,
+            `POST /api/skills (${action}) must reject invalid id with 400`
+          );
         }
       } finally {
         if (prevSkills === undefined) delete process.env.SKILLS_DIR;
@@ -334,11 +344,7 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
           body: JSON.stringify(payload),
         });
         const crossRes = await deployPost(crossReq);
-        assert.equal(
-          crossRes.status,
-          403,
-          `Cross-origin ${payload.action} must return 403`
-        );
+        assert.equal(crossRes.status, 403, `Cross-origin ${payload.action} must return 403`);
 
         const missingOriginReq = new NextRequest("http://localhost:3000/api/deploy", {
           method: "POST",
@@ -349,11 +355,7 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
           body: JSON.stringify(payload),
         });
         const missingRes = await deployPost(missingOriginReq);
-        assert.equal(
-          missingRes.status,
-          403,
-          `Missing-origin ${payload.action} must return 403`
-        );
+        assert.equal(missingRes.status, 403, `Missing-origin ${payload.action} must return 403`);
       }
     });
 
@@ -380,12 +382,23 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
         );
 
       try {
-        for (const badBranch of ["--upload-pack=evil", "-f", "feat/a..b", "feat/a;id", "feat/a b"]) {
+        for (const badBranch of [
+          "--upload-pack=evil",
+          "-f",
+          "feat/a..b",
+          "feat/a;id",
+          "feat/a b",
+        ]) {
           const res = await postSameOrigin({ branchName: badBranch });
           assert.equal(res.status, 400, `Invalid branchName '${badBranch}' must return 400`);
         }
 
-        for (const badTag of ["--build-arg=evil", "web-ui:latest;rm", "web-ui:$(id)", "web-ui:a b"]) {
+        for (const badTag of [
+          "--build-arg=evil",
+          "web-ui:latest;rm",
+          "web-ui:$(id)",
+          "web-ui:a b",
+        ]) {
           const res = await postSameOrigin({ branchName: "feat/ok", imageTag: badTag });
           assert.equal(res.status, 400, `Invalid imageTag '${badTag}' must return 400`);
         }
@@ -474,7 +487,14 @@ describe("R6: API Path Confinement, ID Validation, and Deploy/Git Parameter Guar
           updated_at: new Date().toISOString(),
         };
 
-        for (const badRef of ["--output=/tmp/pwn", "-p", "--exec=id", "HEAD;id", "main..evil", "a b"]) {
+        for (const badRef of [
+          "--output=/tmp/pwn",
+          "-p",
+          "--exec=id",
+          "HEAD;id",
+          "main..evil",
+          "a b",
+        ]) {
           assert.throws(
             () => getProjectDiffSummary(project, "task-1", badRef),
             /invalid/i,

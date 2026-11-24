@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
+import { extractTraceError } from "@/lib/activityTimeline";
 
 export interface ExecutionTraceItem {
   tool: string;
@@ -23,6 +24,7 @@ export interface ExecutionTraceItem {
   model?: string;
   tier?: "sandbox" | "browser";
   round?: number;
+  isError?: boolean;
 }
 
 interface ExecutionTraceProps {
@@ -48,7 +50,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
   if (!traces || traces.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] p-6 text-center shadow-sm">
-        <Terminal className="h-8 w-8 text-slate-400 dark:text-zinc-400 mx-auto mb-2 opacity-50" />
+        <Terminal className="h-8 w-8 text-slate-600 dark:text-zinc-400 mx-auto mb-2 opacity-50" />
         <h4 className="text-sm font-medium text-slate-700 dark:text-zinc-100">
           No Tool Executions Yet
         </h4>
@@ -82,7 +84,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               ? (trace.result as { isError?: boolean; content?: Array<{ text?: string }> })
               : null;
           const isSuccess =
-            !resObj?.isError && !resObj?.content?.[0]?.text?.includes("EXECUTION_ERROR");
+            trace.isError !== undefined ? !trace.isError : !extractTraceError(trace.result);
 
           // Parse result text if it's formatted as stringified JSON
           let parsedResult: unknown = trace.result;
@@ -108,9 +110,9 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               >
                 <div className="flex items-center gap-2.5">
                   {isOpen ? (
-                    <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-400" />
+                    <ChevronDown className="h-4 w-4 text-slate-600 dark:text-zinc-400" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-400" />
+                    <ChevronRight className="h-4 w-4 text-slate-600 dark:text-zinc-400" />
                   )}
                   {isSuccess ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
@@ -122,9 +124,9 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2.5 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                <div className="flex items-center gap-2.5 text-[11px] font-mono text-slate-600 dark:text-zinc-400">
                   {trace.model && (
-                    <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20 text-[10px]">
+                    <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 text-[10px]">
                       {trace.model}
                     </span>
                   )}
@@ -163,17 +165,17 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                         )}
                       </button>
                     </div>
-                    <pre className="text-xs font-mono bg-slate-900 dark:bg-black p-2.5 rounded-lg border border-slate-800 dark:border-zinc-800 text-cyan-300 overflow-x-auto max-h-48">
+                    <pre className="text-xs font-mono bg-zinc-50 dark:bg-black p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-emerald-700 dark:text-emerald-300 max-h-64 overflow-y-auto overflow-x-auto overscroll-contain">
                       {JSON.stringify(trace.args, null, 2)}
                     </pre>
                   </div>
 
                   {/* Execution Output */}
                   <div>
-                    <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-300 mb-1">
+                    <div className="text-[11px] font-mono text-slate-600 dark:text-zinc-300 mb-1">
                       Execution Result & Sandbox Attestation:
                     </div>
-                    <pre className="text-xs font-mono bg-slate-900 dark:bg-black p-2.5 rounded-lg border border-slate-800 dark:border-zinc-800 text-emerald-300 overflow-x-auto max-h-56">
+                    <pre className="text-xs font-mono bg-zinc-50 dark:bg-black p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-emerald-800 dark:text-emerald-300 max-h-64 overflow-y-auto overflow-x-auto overscroll-contain">
                       {typeof parsedResult === "object"
                         ? JSON.stringify(parsedResult, null, 2)
                         : String(parsedResult)}
@@ -184,7 +186,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     {trace.tier === "browser" ? (
                       <>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/30">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30">
                           <ShieldCheck className="h-3 w-3" />
                           Egress: PERMITTED (Isolated Scraper)
                         </span>

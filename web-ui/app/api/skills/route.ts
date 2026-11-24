@@ -8,11 +8,10 @@ import {
   listActiveSkills,
   SkillCandidate,
 } from "@/lib/subagents/skillGate";
-import { FlywheelSkillsStore } from "@/lib/flywheel/skillsStore";
+import { getSharedSkillsStore } from "@/lib/flywheel/skillsStore";
 import { isValidSafeId } from "@/lib/securityHardening";
-
+import { parseJsonBody } from "@/lib/apiJson";
 export async function GET(_req: NextRequest) {
-  let flywheelStore: FlywheelSkillsStore | null = null;
   try {
     const queue = loadPendingQueue();
     const allCandidates = Object.values(queue.candidates || {});
@@ -23,8 +22,7 @@ export async function GET(_req: NextRequest) {
 
     let flywheelSkills: unknown[] = [];
     try {
-      flywheelStore = new FlywheelSkillsStore();
-      flywheelSkills = flywheelStore.listSkills();
+      flywheelSkills = getSharedSkillsStore().listSkills();
     } catch {}
 
     return NextResponse.json({
@@ -39,18 +37,14 @@ export async function GET(_req: NextRequest) {
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
-  } finally {
-    if (flywheelStore) {
-      try {
-        flywheelStore.close();
-      } catch {}
-    }
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const action = body.action;
     const id = body.candidateId || body.slug || body.id;
 
@@ -65,10 +59,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!isValidSafeId(id)) {
-      return NextResponse.json(
-        { error: "Invalid skill candidate identifier" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid skill candidate identifier" }, { status: 400 });
     }
 
     if (action === "propose") {

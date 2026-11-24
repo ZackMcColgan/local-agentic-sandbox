@@ -343,6 +343,7 @@ export interface AbortedAssistantMessageInput {
   turnSignalAborted: boolean;
   accumulatedStreamedTokens: string;
   accumulatedThoughts: string[];
+  inFlightThinking?: string;
   traces: unknown[];
   activeModel: string;
   requestedModel?: string;
@@ -375,12 +376,16 @@ export function buildAbortedAssistantMessage(input: AbortedAssistantMessageInput
     input.turnOutputTokens ??
     (input.accumulatedStreamedTokens ? estimateTokens(input.accumulatedStreamedTokens) : 0);
 
+  const trimmedInFlight = input.inFlightThinking?.trim();
+  const allThoughts = trimmedInFlight
+    ? [...input.accumulatedThoughts, trimmedInFlight]
+    : input.accumulatedThoughts;
+
   return {
     id: input.assistantMessageId,
     role: "assistant" as const,
     content: abortContent,
-    thought:
-      input.accumulatedThoughts.length > 0 ? input.accumulatedThoughts.join("\n\n") : undefined,
+    thought: allThoughts.length > 0 ? allThoughts.join("\n\n") : undefined,
     traces:
       input.traces.length > 0
         ? (input.traces as unknown as Parameters<ThreadStore["addMessage"]>[1]["traces"])
@@ -410,6 +415,10 @@ export interface SynthesisPassChunk {
   prompt_eval_count?: number;
   outputTokens?: number;
   eval_count?: number;
+  toolCallProgress?: {
+    name?: string;
+    argumentChars: number;
+  };
   message?: {
     thinking?: string;
     content?: string;
@@ -435,6 +444,8 @@ export interface RunSynthesisPassParams {
   onFinishReason: (reason: string) => void;
   onPromptTokens: (tokens: number) => void;
   onOutputTokens: (tokens: number) => void;
+  onThinkingChunk?: (thinkingSoFar: string) => void;
+  isSnapshotDue?: () => boolean;
   maybeWriteSnapshot: (content: string, thought: string | undefined) => void;
   sendEvent: (data: Record<string, unknown>) => Promise<void>;
   streamChat: (
@@ -443,6 +454,10 @@ export interface RunSynthesisPassParams {
   ) => AsyncIterable<SynthesisPassChunk>;
   deadlines?: { inactivityMs: number; totalMs: number };
   log?: (...args: unknown[]) => void;
+  /** Pre-computed estimateTokens(conversationMessages) to reuse instead of re-scanning (Perf P6). */
+  precomputedRawMessageTokens?: number;
+  /** Pre-computed estimateToolSchemaTokens(tools) to reuse instead of re-stringifying (Perf P6). */
+  precomputedToolSchemaTokens?: number;
 }
 
 /**
@@ -466,11 +481,15 @@ export async function runSynthesisPass(
     onFinishReason,
     onPromptTokens,
     onOutputTokens,
+    onThinkingChunk,
+    isSnapshotDue,
     maybeWriteSnapshot,
     sendEvent,
     streamChat,
     deadlines,
     log = console.log,
+    precomputedRawMessageTokens,
+    precomputedToolSchemaTokens,
   } = params;
 
   let passContent = "";
@@ -485,6 +504,8 @@ export async function runSynthesisPass(
       messages: fitContextWindow(conversationMessages, {
         isArtifactTurn: isArtifactRequest,
         tools: hasTools ? tools : undefined,
+        ...(precomputedRawMessageTokens !== undefined ? { precomputedRawMessageTokens } : {}),
+        ...(precomputedToolSchemaTokens !== undefined ? { precomputedToolSchemaTokens } : {}),
       }),
       ...(hasTools ? { tools, tool_choice: "none" as const } : {}),
       signal: AbortSignal.any([turnAbortSignal, passAbortController.signal]),
@@ -504,14 +525,20 @@ export async function runSynthesisPass(
       } else if (typeof chunk.eval_count === "number") {
         onOutputTokens(chunk.eval_count);
       }
+      if (chunk.toolCallProgress) {
+        passDeadline.arm();
+      }
       if (chunk.message?.thinking) {
         passThinking += chunk.message.thinking;
+        onThinkingChunk?.(passThinking);
         passDeadline.arm();
-        const currentCumulativeThought =
-          accumulatedThoughts.length > 0
-            ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
-            : passThinking;
-        maybeWriteSnapshot(getAccumulatedStreamedTokens(), currentCumulativeThought);
+        if (!isSnapshotDue || isSnapshotDue()) {
+          const currentCumulativeThought =
+            accumulatedThoughts.length > 0
+              ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
+              : passThinking;
+          maybeWriteSnapshot(getAccumulatedStreamedTokens(), currentCumulativeThought);
+        }
         // PERF-P3: per-token delta only. The cumulative thought reaches the
         // client via the throttled snapshot and the terminal `done` event;
         // re-sending the full cumulative string per token was O(T^2) SSE bytes.
@@ -535,13 +562,15 @@ export async function runSynthesisPass(
           passAbortController.abort();
           break;
         }
-        const currentCumulativeThought =
-          accumulatedThoughts.length > 0
-            ? passThinking
-              ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
-              : accumulatedThoughts.join("\n\n")
-            : passThinking || undefined;
-        maybeWriteSnapshot(nextStreamed, currentCumulativeThought);
+        if (!isSnapshotDue || isSnapshotDue()) {
+          const currentCumulativeThought =
+            accumulatedThoughts.length > 0
+              ? passThinking
+                ? `${accumulatedThoughts.join("\n\n")}\n\n${passThinking}`
+                : accumulatedThoughts.join("\n\n")
+              : passThinking || undefined;
+          maybeWriteSnapshot(nextStreamed, currentCumulativeThought);
+        }
         await sendEvent({ type: "token", content: chunk.message.content });
       }
     }

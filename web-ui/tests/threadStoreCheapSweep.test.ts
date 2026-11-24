@@ -11,6 +11,33 @@ function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+// Teardown races a late sweep write under loaded CI runners: a file that
+// appears during the recursive delete defeats one rmSync's built-in
+// retries, so re-attempt the whole delete for up to ~10s and name the
+// leftovers on final failure instead of throwing a bare ENOTEMPTY.
+function removeTempDirWithRetries(dir: string): void {
+  const deadline = Date.now() + 10_000;
+  let lastError: unknown = null;
+  let leftovers = "<unreadable>";
+  while (Date.now() < deadline) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      return;
+    } catch (err) {
+      lastError = err;
+      try {
+        leftovers = fs.readdirSync(dir).join(", ") || "<empty>";
+      } catch {
+        leftovers = "<unreadable>";
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    }
+  }
+  throw new Error(
+    `removeTempDirWithRetries failed for ${dir} (leftovers: ${leftovers}): ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 function writeThreadFile(dir: string, thread: Record<string, unknown>): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${thread.id}.json`), JSON.stringify(thread), "utf8");
@@ -66,7 +93,7 @@ test("A1: sweepStalledThreads with no candidates does not call listThreads or ge
     );
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -131,7 +158,7 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeTempDirWithRetries(dir);
   }
 });
 
@@ -181,7 +208,7 @@ test("A3: message-level streaming on a non-active thread is still detected and e
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -240,7 +267,7 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -280,7 +307,7 @@ test("A4c: mergeThreadsIntoBoard excludes plain chat threads without taskId", as
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -325,7 +352,7 @@ test("A4b: mergeThreadsIntoBoard dedupes ghost when stored thread carries matchi
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -365,7 +392,7 @@ test("A4c: mergeThreadsIntoBoard excludes plain chat threads without taskId", as
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -432,7 +459,7 @@ test("A5: listThreadSummaries(query) matches title, preview, and body without ca
     assert.equal(results[2].matchSnippet, "early message with needle inside body");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -481,7 +508,7 @@ test("A6: sweepStalledThreads does not block the event loop (>1000ms) on large s
     assert.ok(timerLagMs < 1000, `Expected event-loop timer lag < 1000ms, got ${timerLagMs}ms`);
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -532,7 +559,7 @@ test("A7: auto-resume for stale streaming JOB thread is preserved", async () => 
     assert.equal(allSummaries.length, 2, "auto-resume should have created a fresh thread");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -601,7 +628,7 @@ test("A8: supervisor sweep is a process-wide singleton across multiple ThreadSto
     for (const t of createdTimers) {
       origClearInterval(t);
     }
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -634,6 +661,58 @@ test("A9: createThread persists isSubagent and isScheduled when provided and omi
     assert.equal("isSubagent" in reloadedPlain, false);
     assert.equal("isScheduled" in reloadedPlain, false);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeTempDirWithRetries(dir);
+  }
+});
+
+test("A10: post-restart non-board taskId sweep reads raw active thread before reconcileThread stops it and auto-resumes", async () => {
+  const dir = makeTempDir("sweep-a10-");
+  try {
+    const now = Date.now();
+    const staleIso = new Date(now - STALL_WINDOW_MS - 60_000).toISOString();
+    const jobId = "job-post-restart-1";
+    const taskDir = path.join(dir, "tasks", jobId);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "runlog.md"), "# Runlog\nStep 1 banked.\n", "utf8");
+
+    writeThreadFile(dir, {
+      id: "t-job-post-restart",
+      title: "Post Restart Job Thread",
+      status: "active",
+      taskId: jobId,
+      autoResumeCount: 0,
+      createdAt: staleIso,
+      updatedAt: staleIso,
+      messages: [
+        { id: "m1", role: "user", content: "execute job", createdAt: staleIso },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "step 1 done...",
+          status: "streaming",
+          createdAt: staleIso,
+        },
+      ],
+    });
+
+    // Simulate fresh server restart: do NOT call markTurnActive("t-job-post-restart")
+    const store = new ThreadStore(dir);
+    store.stopSupervisorSweep();
+    const dispatched: Array<{ threadId: string; prompt: string }> = [];
+    store.setSupervisorDispatchTurn((threadId, prompt) => {
+      dispatched.push({ threadId, prompt });
+    });
+
+    const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
+    assert.equal(acted, 1, "post-restart stale taskId thread must be supervised and resumed");
+    assert.equal(dispatched.length, 1, "auto-resume must dispatch a fresh turn");
+
+    const oldThread = await store.getThread("t-job-post-restart");
+    assert.ok(oldThread);
+    assert.equal(oldThread.status, "stopped");
+    assert.ok(oldThread.stalledReason);
+    assert.ok(oldThread.resumedToThreadId);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });

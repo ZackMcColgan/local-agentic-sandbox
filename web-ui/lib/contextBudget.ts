@@ -125,6 +125,7 @@ export interface ContextMessage {
   name?: string;
   tool_call_id?: string;
   tool_calls?: ContextToolCall[];
+  isDirective?: boolean;
   [key: string]: unknown;
 }
 
@@ -246,6 +247,8 @@ export interface PromptTokenCalibration {
   lastMeasuredEstimateTokens?: number;
   /** Pre-computed tool-schema token count for the current round. */
   toolSchemaTokens?: number;
+  /** Pre-computed tool-schema token count (alias for toolSchemaTokens). */
+  precomputedToolSchemaTokens?: number;
   /** Tool-schema array for the current round (used if toolSchemaTokens is omitted). */
   tools?: unknown[];
 }
@@ -268,7 +271,9 @@ export function estimateEffectivePromptTokens(
       ? calibration.precomputedRawMessageTokens
       : estimateTokens(messages);
   const schemaTokens =
-    calibration?.toolSchemaTokens ?? estimateToolSchemaTokens(calibration?.tools);
+    calibration?.precomputedToolSchemaTokens ??
+    calibration?.toolSchemaTokens ??
+    estimateToolSchemaTokens(calibration?.tools);
   const rawTotal = rawMessageTokens + schemaTokens;
 
   const measured = calibration?.lastMeasuredPromptTokens;
@@ -362,6 +367,7 @@ export function appendTrailingDirective<T extends { role?: string; content?: unk
   messages.push({
     role: "user",
     content: trimmed,
+    isDirective: true,
   } as unknown as T);
   return messages;
 }
@@ -488,6 +494,7 @@ export interface FitContextOptions {
   reserveOutputTokens?: number;
   outputHeadroomTokens?: number;
   toolSchemaTokens?: number;
+  precomputedToolSchemaTokens?: number;
   compactHistory?: boolean;
   /**
    * Pre-computed estimateTokens(messages) to reuse instead of re-stringifying the
@@ -495,6 +502,23 @@ export interface FitContextOptions {
    * (no compaction, no stray-system merge), so the fitted array has identical tokens.
    */
   precomputedRawMessageTokens?: number;
+}
+
+/**
+ * Returns the number of contiguous messages to evict atomically at `idx`:
+ * an `assistant` message carrying `tool_calls` plus all immediately following
+ * paired `role: "tool"` messages, or `1` for any other message.
+ */
+function countAtomicToolGroupSize(messages: ContextMessage[], idx: number): number {
+  const msg = messages[idx];
+  if (msg?.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+    let count = 1;
+    while (idx + count < messages.length && messages[idx + count]?.role === "tool") {
+      count++;
+    }
+    return count;
+  }
+  return 1;
 }
 
 /**
@@ -574,7 +598,11 @@ export function fitContextWindow(
   // Detect whether this turn is an artifact-creation request
   let lastUserContent = "";
   for (let j = working.length - 1; j >= 0; j--) {
-    if (working[j]?.role === "user" && typeof working[j]?.content === "string") {
+    if (
+      working[j]?.role === "user" &&
+      !working[j]?.isDirective &&
+      typeof working[j]?.content === "string"
+    ) {
       lastUserContent = working[j].content;
       break;
     }
@@ -588,7 +616,10 @@ export function fitContextWindow(
     options?.reserveOutputTokens ?? ROUND_MAX_TOKENS
   );
   let maxTokens = Math.min(options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS, windowCeiling);
-  const rawToolTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
+  const rawToolTokens =
+    options?.precomputedToolSchemaTokens ??
+    options?.toolSchemaTokens ??
+    estimateToolSchemaTokens(options?.tools);
   const toolSchemaTokens = rawToolTokens;
 
   if (toolSchemaTokens > 0) {
@@ -628,14 +659,14 @@ export function fitContextWindow(
     if (idx === 0 && arr[0]?.role === "system") {
       return true;
     }
-    // Protect the original user query (first user message) so intent & prompt are never lost
-    const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+    // Protect the original user query (first real user message) so intent & prompt are never lost
+    const firstUserIdx = arr.findIndex((m) => m?.role === "user" && !m?.isDirective);
     if (idx === firstUserIdx && firstUserIdx !== -1) {
       return true;
     }
     let lastUserIdx = -1;
     for (let j = arr.length - 1; j >= 0; j--) {
-      if (arr[j]?.role === "user") {
+      if (arr[j]?.role === "user" && !arr[j]?.isDirective) {
         lastUserIdx = j;
         break;
       }
@@ -674,8 +705,9 @@ export function fitContextWindow(
       };
       evictedCount++;
     } else {
-      working.splice(candidateIdx, 1);
-      evictedCount++;
+      const groupCount = countAtomicToolGroupSize(working, candidateIdx);
+      working.splice(candidateIdx, groupCount);
+      evictedCount += groupCount;
     }
   }
 
@@ -694,8 +726,9 @@ export function fitContextWindow(
       break;
     }
 
-    working.splice(candidateIdx, 1);
-    evictedCount++;
+    const groupCount = countAtomicToolGroupSize(working, candidateIdx);
+    working.splice(candidateIdx, groupCount);
+    evictedCount += groupCount;
   }
 
   // Pass 3 (Pathological): If still over budget with only protected messages left,
@@ -809,31 +842,51 @@ export async function runChatToolLoop(
   const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
   const userPrompt = typeof initialUserMsg?.content === "string" ? initialUserMsg.content : "";
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
+  const roundToolSchemaTokens = estimateToolSchemaTokens(llmTools);
 
   while (true) {
     // Perf P6 (#130): measure the raw full-history estimate ONCE per round and
     // thread it through the fit ladder, continuation check, and provider payload
     // fit so those helpers reuse it instead of re-stringifying the history.
-    const rawRoundTokens = estimateTokens(conversationMessages);
+    // Any mutation (compaction or appendTrailingDirective) invalidates the cache.
+    let rawRoundTokens = estimateTokens(conversationMessages);
+    let rawRoundDirty = false;
+    const markRawRoundDirty = () => {
+      rawRoundDirty = true;
+    };
+    const getRawRoundTokens = () => {
+      if (rawRoundDirty) {
+        rawRoundTokens = estimateTokens(conversationMessages);
+        rawRoundDirty = false;
+      }
+      return rawRoundTokens;
+    };
+    const appendDirectiveAndInvalidate = (directive: string) => {
+      const lenBefore = conversationMessages.length;
+      appendTrailingDirective(conversationMessages, directive);
+      if (conversationMessages.length !== lenBefore) {
+        markRawRoundDirty();
+      }
+    };
 
     // Fit conversation to budget first through the compaction/elision ladder
     const fitResult = fitConversationToBudget(conversationMessages, {
       budgetTokens: maxContentTokens,
-      precomputedRawMessageTokens: rawRoundTokens,
+      precomputedRawMessageTokens: getRawRoundTokens(),
+      precomputedToolSchemaTokens: roundToolSchemaTokens,
     });
     if (fitResult.compacted) {
       conversationMessages.length = 0;
       conversationMessages.push(...fitResult.messages);
+      markRawRoundDirty();
     }
     if (fitResult.highWater) {
-      appendTrailingDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+      appendDirectiveAndInvalidate(HIGH_WATER_BANKING_DIRECTIVE);
     }
 
     // After a no-op fit the raw estimate is still valid; after compaction/elision
-    // the history changed, so re-measure once.
-    const contextTokens = fitResult.compacted
-      ? estimateTokens(conversationMessages)
-      : rawRoundTokens;
+    // or directive append the history changed, so re-measure once via getRawRoundTokens().
+    const contextTokens = getRawRoundTokens();
 
     // CHAT-7: continuation is governed by context headroom, with maxToolRounds acting
     // as an explicit (optional) backstop override rather than a normal work ceiling.
@@ -851,10 +904,10 @@ export async function runChatToolLoop(
 
     const isFinalRound = decision.forceSynthesis === true;
     if (isFinalRound) {
-      appendTrailingDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
+      appendDirectiveAndInvalidate(FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
     if (isArtifactRequest) {
-      appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+      appendDirectiveAndInvalidate(OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 
     const roundTools = llmTools;
@@ -863,8 +916,9 @@ export async function runChatToolLoop(
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
         tools: roundTools,
+        precomputedToolSchemaTokens: roundToolSchemaTokens,
         isArtifactTurn: isArtifactRequest,
-        precomputedRawMessageTokens: contextTokens,
+        precomputedRawMessageTokens: getRawRoundTokens(),
       }),
       keep_alive: -1,
       options: resolveRoundModelOptions({
@@ -1073,6 +1127,8 @@ export function fitConversationToBudget(
     tools?: unknown[];
     /** Pre-computed tool-schema token count (Fix D1). */
     toolSchemaTokens?: number;
+    /** Pre-computed tool-schema token count (alias for toolSchemaTokens). */
+    precomputedToolSchemaTokens?: number;
     /** Physical context window size (Fix D2). */
     contextWindowTokens?: number;
     /** Per-round output reserve (defaults to ROUND_MAX_TOKENS, Fix D2). */
@@ -1106,7 +1162,10 @@ export function fitConversationToBudget(
   );
   const thresholdRatio = options?.compactionThreshold ?? COMPACTION_THRESHOLD_RATIO;
   const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
-  const schemaTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
+  const schemaTokens =
+    options?.precomputedToolSchemaTokens ??
+    options?.toolSchemaTokens ??
+    estimateToolSchemaTokens(options?.tools);
   const rawInitialMessageTokens =
     typeof options?.precomputedRawMessageTokens === "number"
       ? options.precomputedRawMessageTokens
@@ -1193,14 +1252,14 @@ export function fitConversationToBudget(
   }
 
   // Rung (c): Drop oldest non-system turns if still > budgetTokens
-  // Fix D5 (F8e): protect BOTH the leading user brief AND the latest user message.
+  // Fix D5 (F8e): protect BOTH the leading user brief AND the latest real user message.
   if (measureWorking(workingMessages) > budgetTokens) {
     let anyDropped = false;
     const findProtectedUserIndices = (arr: ContextMessage[]) => {
-      const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+      const firstUserIdx = arr.findIndex((m) => m?.role === "user" && !m?.isDirective);
       let latestUserIdx = -1;
       for (let j = arr.length - 1; j >= 0; j--) {
-        if (arr[j]?.role === "user") {
+        if (arr[j]?.role === "user" && !arr[j]?.isDirective) {
           latestUserIdx = j;
           break;
         }
@@ -1219,7 +1278,8 @@ export function fitConversationToBudget(
         break;
       }
       if (candidateIdx === -1) break;
-      workingMessages.splice(candidateIdx, 1);
+      const dropCount = countAtomicToolGroupSize(workingMessages, candidateIdx);
+      workingMessages.splice(candidateIdx, dropCount);
       anyDropped = true;
       markDirty();
 
@@ -1235,7 +1295,7 @@ export function fitConversationToBudget(
   // other truncatable message exists.
   let safetyD = 20;
   while (measureWorking(workingMessages) > budgetTokens && safetyD-- > 0) {
-    const firstUserIdx = workingMessages.findIndex((m) => m?.role === "user");
+    const firstUserIdx = workingMessages.findIndex((m) => m?.role === "user" && !m?.isDirective);
     let longestIdx = -1;
     let maxLen = 0;
     for (let i = 0; i < workingMessages.length; i++) {

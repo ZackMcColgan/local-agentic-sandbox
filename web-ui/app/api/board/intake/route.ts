@@ -7,6 +7,7 @@ import {
   type IntakeStackItem,
 } from "@/lib/board/monsterIntake";
 import { ModelUnavailableError } from "@/lib/subagents/llmClient";
+import { parseJsonBody } from "@/lib/apiJson";
 
 interface IntakeRouteBody {
   action?: "preview" | "confirm";
@@ -30,7 +31,9 @@ interface IntakeRouteBody {
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as IntakeRouteBody;
+    const parsed = await parseJsonBody<IntakeRouteBody>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     if (body.action === "preview") {
       const result = await previewMonsterIntake({

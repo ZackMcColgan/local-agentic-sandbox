@@ -5,7 +5,11 @@ import type { ChatMessage } from "@/components/ChatStream";
 import { useLiveTraces } from "@/lib/hooks/useLiveTraces";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
+import {
+  Thread,
+  type ActiveTurnInfo,
+  type ThreadCompactionBoundary,
+} from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { isSseStreamDelivering, shouldPollLiveThread } from "@/lib/streamPollGate";
@@ -180,6 +184,10 @@ export default function Home() {
   ]);
   const [observedActiveTurn, setObservedActiveTurn] = useState<ActiveTurnInfo | null>(null);
   const [observedThreadUpdatedAt, setObservedThreadUpdatedAt] = useState<string | null>(null);
+  const [observedThreadCompaction, setObservedThreadCompaction] =
+    useState<ThreadCompactionBoundary | null>(null);
+  const [isLocalSseOpen, setIsLocalSseOpen] = useState<boolean>(false);
+  const pollEtagRef = useRef<{ threadId: string; etag: string } | null>(null);
 
   // Synchronous-like hydration for theme support
   useEffect(() => {
@@ -235,6 +243,7 @@ export default function Home() {
   }, []);
 
   // Fetch sandbox & service status
+  const BACKGROUND_STATUS_POLL_INTERVAL_MS = 45_000;
   const fetchStatus = async () => {
     try {
       const res = await fetch("/api/sandbox-status");
@@ -261,20 +270,6 @@ export default function Home() {
       // Best-effort status refresh
     }
   };
-
-  useEffect(() => {
-    fetchStatus();
-    fetchSkills();
-    fetchDeployStatus();
-    fetchProjects();
-    const interval = setInterval(() => {
-      fetchStatus();
-      fetchSkills();
-      fetchDeployStatus();
-      fetchProjects();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchProjects = async () => {
     try {
@@ -308,6 +303,74 @@ export default function Home() {
       }
     } catch {}
   };
+
+  // Visibility-gated engine/sandbox status poll (45s) + initial badge hydration
+  useEffect(() => {
+    let didInitialAuxHydration = false;
+    const refreshStatus = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchStatus();
+      if (!didInitialAuxHydration) {
+        didInitialAuxHydration = true;
+        fetchSkills();
+        fetchDeployStatus();
+      }
+    };
+    refreshStatus();
+    const interval = setInterval(refreshStatus, BACKGROUND_STATUS_POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        refreshStatus();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+    };
+  }, []);
+
+  // View-gated background polling for skills / builds(deploy) / projects
+  useEffect(() => {
+    if (
+      activeNavView !== "skills" &&
+      activeNavView !== "builds" &&
+      activeNavView !== "settings" &&
+      activeNavView !== "projects"
+    ) {
+      return;
+    }
+    const refreshActiveView = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (activeNavView === "skills") {
+        fetchSkills();
+      } else if (activeNavView === "builds" || activeNavView === "settings") {
+        fetchDeployStatus();
+      } else if (activeNavView === "projects") {
+        fetchProjects();
+      }
+    };
+    refreshActiveView();
+    const interval = setInterval(refreshActiveView, BACKGROUND_STATUS_POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        refreshActiveView();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+    };
+  }, [activeNavView]);
 
   const handleToggleSelfDeploy = async () => {
     try {
@@ -472,13 +535,20 @@ export default function Home() {
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
     if (!selectedThreadId) {
+      setObservedThreadCompaction(null);
+      pollEtagRef.current = null;
       return;
     }
 
     if (skipThreadLoadRef.current === selectedThreadId) {
       skipThreadLoadRef.current = null;
+      setObservedThreadCompaction(null);
+      pollEtagRef.current = null;
       return;
     }
+
+    setObservedThreadCompaction(null);
+    pollEtagRef.current = null;
 
     const loadSelectedThread = async () => {
       try {
@@ -487,10 +557,15 @@ export default function Home() {
           headers: { "Cache-Control": "no-cache" },
         });
         if (res.ok) {
+          const etag = res.headers?.get?.("etag");
+          if (etag) {
+            pollEtagRef.current = { threadId: selectedThreadId, etag };
+          }
           const data = await res.json();
           setObservedActiveTurn(data.activeTurn || null);
           if (data.thread) {
             setObservedThreadUpdatedAt(data.thread.updatedAt || null);
+            setObservedThreadCompaction(data.thread.compaction || null);
             setSelectedModel((prev) => data.thread.model || prev);
             setReasoningEffort((prev) => data.thread.reasoningEffort || prev);
             if (Array.isArray(data.thread.messages)) {
@@ -498,6 +573,7 @@ export default function Home() {
             }
           } else {
             setObservedThreadUpdatedAt(null);
+            setObservedThreadCompaction(null);
           }
           if (data.task) {
             setActiveTask(data.task);
@@ -547,23 +623,37 @@ export default function Home() {
       if (typeof document !== "undefined" && document.hidden) {
         return;
       }
-      // PERF-P4 (#128): while the SSE stream is actively delivering chunks the
-      // stream itself is the transport, so the full-thread poll is redundant
-      // churn on the 1-vCPU event loop. Suppress it and re-arm once the stream
-      // goes quiet; the effect tears down when the stream ends.
+      // PERF-P4 (#128) + P-F3: while a local SSE response is open (including
+      // long prefills and tool waits) OR actively delivering chunks, suppress
+      // redundant full-thread polling; resume when local SSE closes or goes quiet.
       const sseStreamDelivering = isSseStreamDelivering(lastStreamChunkAtRef.current, Date.now());
-      if (!shouldPollLiveThread({ threadLiveStreaming: true, sseStreamDelivering })) {
+      if (
+        !shouldPollLiveThread({
+          threadLiveStreaming: true,
+          sseStreamDelivering,
+          isLocalSseOpen,
+        })
+      ) {
         scheduleNext(STREAM_POLL_INTERVAL_MS);
         return;
       }
       let shouldContinue = true;
       let nextDelay = STREAM_POLL_INTERVAL_MS;
       try {
-        const res = await fetch(`/api/threads/${selectedThreadId}`, {
+        const headers: Record<string, string> = { "Cache-Control": "no-cache" };
+        if (pollEtagRef.current?.threadId === selectedThreadId) {
+          headers["If-None-Match"] = pollEtagRef.current.etag;
+        }
+        const res = await fetch(`/api/threads/${selectedThreadId}?omitHeavyTraceResults=1`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" },
+          headers,
         });
         if (!active) return;
+        if (res.status === 304) {
+          consecutiveErrors = 0;
+          shouldContinue = true;
+          return;
+        }
         if (!res.ok) {
           consecutiveErrors += 1;
           nextDelay = Math.min(
@@ -573,6 +663,10 @@ export default function Home() {
           return;
         }
         consecutiveErrors = 0;
+        const nextEtag = res.headers?.get?.("etag");
+        if (nextEtag) {
+          pollEtagRef.current = { threadId: selectedThreadId, etag: nextEtag };
+        }
         const data = await res.json();
         if (!active) return;
         const nextActiveTurn: ActiveTurnInfo | null = data?.activeTurn || null;
@@ -580,6 +674,9 @@ export default function Home() {
         if (data?.thread) {
           if (typeof data.thread.updatedAt === "string") {
             setObservedThreadUpdatedAt(data.thread.updatedAt);
+          }
+          if (data.thread.compaction !== undefined) {
+            setObservedThreadCompaction(data.thread.compaction || null);
           }
           setThreads((prev) =>
             prev.map((t) =>
@@ -607,6 +704,27 @@ export default function Home() {
           shouldContinue = isLiveStreamingMessage(lastAssistant) || Boolean(nextActiveTurn);
         } else {
           shouldContinue = Boolean(nextActiveTurn);
+        }
+        if (!shouldContinue) {
+          const hasTraces =
+            Array.isArray(data?.thread?.messages) &&
+            data.thread.messages.some(
+              (m: ChatMessage) => Array.isArray(m.traces) && m.traces.length > 0
+            );
+          if (hasTraces) {
+            try {
+              const fullRes = await fetch(`/api/threads/${selectedThreadId}`, {
+                cache: "no-store",
+                headers: { "Cache-Control": "no-cache" },
+              });
+              if (active && fullRes.ok) {
+                const fullData = await fullRes.json();
+                if (active && Array.isArray(fullData?.thread?.messages)) {
+                  setMessages(fullData.thread.messages);
+                }
+              }
+            } catch {}
+          }
         }
       } catch (err) {
         consecutiveErrors += 1;
@@ -639,7 +757,7 @@ export default function Home() {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
     };
-  }, [selectedThreadId, isThreadLiveStreaming, activeNavView]);
+  }, [selectedThreadId, isThreadLiveStreaming, activeNavView, isLocalSseOpen]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
   const activeTaskId = activeTask?.taskId;
@@ -922,6 +1040,30 @@ export default function Home() {
   const currentThread = threads.find((t) => t.id === selectedThreadId) || null;
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
+  const persistThreadModel = (model: string, effort: "low" | "medium" | "xhigh") => {
+    if (!selectedThreadId) return;
+    setThreads((prev) =>
+      prev.map((t) => (t.id === selectedThreadId ? { ...t, model, reasoningEffort: effort } : t))
+    );
+    fetch(`/api/threads/${encodeURIComponent(selectedThreadId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "setModel",
+        model,
+        reasoningEffort: effort,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data?.thread) {
+          handleThreadUpdated(data.thread);
+        }
+      })
+      .catch(() => {});
+  };
+
   const handleModelChange = (m: string) => {
     setSelectedModel(m);
     try {
@@ -929,13 +1071,7 @@ export default function Home() {
         localStorage.setItem("preferred_model", m);
       }
     } catch {}
-    if (selectedThreadId) {
-      fetch(`/api/threads/${selectedThreadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setModel", model: m, reasoningEffort }),
-      }).catch(() => {});
-    }
+    persistThreadModel(m, reasoningEffort);
   };
 
   const handleReasoningChange = (e: "low" | "medium" | "xhigh") => {
@@ -945,17 +1081,7 @@ export default function Home() {
         localStorage.setItem("las.reasoningEffort", e);
       }
     } catch {}
-    if (selectedThreadId) {
-      fetch(`/api/threads/${selectedThreadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "setModel",
-          model: selectedModel,
-          reasoningEffort: e,
-        }),
-      }).catch(() => {});
-    }
+    persistThreadModel(selectedModel, e);
   };
 
   const handleThreadUpdated = (updatedThread: Partial<Thread> & { id: string }) => {
@@ -989,11 +1115,15 @@ export default function Home() {
   const handleToggleAllowlist: React.ComponentProps<
     typeof ProjectsView
   >["onToggleAllowlist"] = async (id, allowlisted) => {
-    await fetch("/api/projects", {
+    const res = await fetch("/api/projects", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, allowlisted }),
     });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
     await fetchProjects();
   };
 
@@ -1003,12 +1133,14 @@ export default function Home() {
     const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
-    if (res.ok) {
-      if (selectedProjectId === id) {
-        setSelectedProjectId(null);
-      }
-      await fetchProjects();
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
     }
+    if (selectedProjectId === id) {
+      setSelectedProjectId(null);
+    }
+    await fetchProjects();
   };
 
   return (
@@ -1039,6 +1171,8 @@ export default function Home() {
       currentThread={currentThread}
       activeTurn={observedActiveTurn}
       threadUpdatedAt={observedThreadUpdatedAt || currentThread?.updatedAt || null}
+      threadCompaction={currentThread?.compaction ?? observedThreadCompaction}
+      onLocalSseOpenChange={setIsLocalSseOpen}
       messages={messages}
       setMessages={setMessages}
       draftComposerPrompt={draftComposerPrompt}

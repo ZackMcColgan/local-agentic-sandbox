@@ -22,8 +22,10 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
   afterEach(() => {
     if (originalContent !== null) {
       fs.writeFileSync(settingsFile, originalContent, "utf8");
-    } else if (fs.existsSync(settingsFile)) {
-      fs.unlinkSync(settingsFile);
+    } else {
+      // force: tolerates a parallel test file deleting the shared
+      // settings path between the check and the unlink (ENOENT race).
+      fs.rmSync(settingsFile, { force: true });
     }
   });
 
@@ -36,7 +38,7 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
         res.end("no runner");
         return;
       }
-      if (url.includes("/sse")) {
+      if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
         res.writeHead(404);
         res.end("no mcp");
         return;

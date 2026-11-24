@@ -136,6 +136,7 @@ export interface CompactionMessage {
   content: string;
   name?: string;
   tool_call_id?: string;
+  isDirective?: boolean;
   tool_calls?: Array<{
     id?: string;
     type?: string;
@@ -529,7 +530,7 @@ export function summarizeTurnHistory(olderMessages: CompactionMessage[]): string
   for (const msg of olderMessages) {
     if (!msg) continue;
 
-    if (msg.role === "user" && typeof msg.content === "string") {
+    if (msg.role === "user" && !msg.isDirective && typeof msg.content === "string") {
       const trimmed = msg.content.trim().slice(0, 2000);
       if (trimmed) userQueries.push(trimmed);
     } else if (msg.role === "tool") {
@@ -688,7 +689,24 @@ export function compactConversationHistory(
   const preserveRecent = options?.preserveRecentMessages ?? DEFAULT_PRESERVE_RECENT_MESSAGES;
   const hasSystem = messages[0]?.role === "system";
   const startIdx = hasSystem ? 1 : 0;
-  const endIdx = Math.max(startIdx, messages.length - preserveRecent);
+  let endIdx = Math.max(startIdx, messages.length - preserveRecent);
+
+  // Never split an assistant(tool_calls) message from its paired role: "tool" results.
+  if (endIdx < messages.length && messages[endIdx]?.role === "tool") {
+    let fwd = endIdx;
+    while (fwd < messages.length && messages[fwd]?.role === "tool") {
+      fwd++;
+    }
+    if (fwd < messages.length) {
+      endIdx = fwd;
+    } else {
+      let bwd = endIdx;
+      while (bwd > startIdx && messages[bwd]?.role === "tool") {
+        bwd--;
+      }
+      endIdx = bwd;
+    }
+  }
 
   if (endIdx <= startIdx) {
     // Not enough intermediate messages to compact

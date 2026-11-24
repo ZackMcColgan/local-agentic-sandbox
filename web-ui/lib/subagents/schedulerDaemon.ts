@@ -2,14 +2,15 @@ import fs from "fs";
 import path from "path";
 import { UnattendedScheduler, Schedule } from "./scheduler";
 import { isDrainAllowed, readBoardControlState } from "../board/boardControl";
+import { isBoardDrainInFlight, runBoardDrainWithMutex } from "../board/boardOrchestrator";
+import { BoardStore } from "../board/boardStore";
 import { createProductionBoardOrchestrator } from "../board/productionDrain";
 import { ThreadStore } from "../threads/threadStore";
-
-let boardDrainInFlight = false;
 
 export interface BoardDrainDuty {
   isRunning: () => boolean;
   drain: () => Promise<unknown>;
+  reconcile?: () => Promise<unknown>;
 }
 
 export interface DaemonHeartbeat {
@@ -179,30 +180,35 @@ export class SchedulerDaemon {
 
   async checkStartupRecovery(): Promise<void> {
     const hb = this.readHeartbeat();
-    if (hb && hb.active) {
-      const lastTickTime = new Date(hb.lastTick).getTime();
-      const staleThresholdMs = 5 * 60 * 1000; // 5 minutes
-      if (Date.now() - lastTickTime > staleThresholdMs) {
+    const schedHb =
+      typeof this.scheduler.readHeartbeat === "function" ? this.scheduler.readHeartbeat() : null;
+    if ((hb && hb.active) || (schedHb && schedHb.active)) {
+      if (hb && hb.active) {
         this.log(
           "WARN",
           `Stale heartbeat detected (PID: ${hb.pid}, lastTick: ${hb.lastTick}). Invoking crash recovery.`
         );
-        try {
-          const recoveryRes = await this.scheduler.checkCrashAndRecover();
-          if (recoveryRes.recovered) {
-            this.log(
-              "INFO",
-              `Crash recovery triggered for schedule: ${recoveryRes.scheduleId} (attempt: ${recoveryRes.attempt})`
-            );
-          } else {
-            this.log("INFO", `Crash recovery completed with no active schedule recovered.`);
-          }
-        } catch (err: unknown) {
+      } else if (schedHb && schedHb.active) {
+        this.log(
+          "WARN",
+          `Active scheduler heartbeat detected on startup (runId: ${schedHb.runId}, scheduleId: ${schedHb.scheduleId}). Invoking crash recovery.`
+        );
+      }
+      try {
+        const recoveryRes = await this.scheduler.checkCrashAndRecover();
+        if (recoveryRes.recovered) {
           this.log(
-            "ERROR",
-            `Crash recovery failed: ${err instanceof Error ? err.message : String(err)}`
+            "INFO",
+            `Crash recovery triggered for schedule: ${recoveryRes.scheduleId} (attempt: ${recoveryRes.attempt})`
           );
+        } else {
+          this.log("INFO", `Crash recovery completed with no active schedule recovered.`);
         }
+      } catch (err: unknown) {
+        this.log(
+          "ERROR",
+          `Crash recovery failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
   }
@@ -246,21 +252,33 @@ export class SchedulerDaemon {
       }
     }
 
-    if (!this.shutdownRequested && this.boardDrain && this.boardDrain.isRunning()) {
-      if (boardDrainInFlight) {
-        this.log("INFO", "Board drain already in flight; skipping this tick.");
-      } else {
-        boardDrainInFlight = true;
-        try {
-          this.log("INFO", "Board control is running; starting board drain.");
-          await this.boardDrain.drain();
-        } catch (err: unknown) {
-          this.log(
-            "ERROR",
-            `Board drain failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-        } finally {
-          boardDrainInFlight = false;
+    if (!this.shutdownRequested && this.boardDrain) {
+      if (this.boardDrain.isRunning()) {
+        if (isBoardDrainInFlight()) {
+          this.log("INFO", "Board drain already in flight; skipping this tick.");
+        } else {
+          try {
+            this.log("INFO", "Board control is running; starting board drain.");
+            await runBoardDrainWithMutex(() => this.boardDrain!.drain());
+          } catch (err: unknown) {
+            this.log(
+              "ERROR",
+              `Board drain failed: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+      } else if (this.boardDrain.reconcile) {
+        if (isBoardDrainInFlight()) {
+          this.log("INFO", "Board drain already in flight; skipping reconciliation this tick.");
+        } else {
+          try {
+            await runBoardDrainWithMutex(() => this.boardDrain!.reconcile!());
+          } catch (err: unknown) {
+            this.log(
+              "ERROR",
+              `Board working-item reconciliation failed: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
       }
     }
@@ -342,13 +360,20 @@ export class SchedulerDaemon {
 }
 
 export function createDefaultBoardDrainDuty(): BoardDrainDuty {
+  const runOrchestratorDrain = async () => {
+    const orchestrator = createProductionBoardOrchestrator({
+      threadStore: new ThreadStore(),
+    });
+    return orchestrator.drain();
+  };
   return {
     isRunning: () => isDrainAllowed(readBoardControlState()),
-    drain: async () => {
-      const orchestrator = createProductionBoardOrchestrator({
-        threadStore: new ThreadStore(),
-      });
-      return orchestrator.drain();
+    drain: runOrchestratorDrain,
+    reconcile: async () => {
+      if (!new BoardStore().list().some((item) => item.status === "working")) {
+        return null;
+      }
+      return runOrchestratorDrain();
     },
   };
 }

@@ -179,7 +179,10 @@ export async function GET(request: NextRequest) {
         const confined = resolveRealConfinedPath(root, candidate);
         if (!confined.ok) {
           if (confined.reason === "symlink_escape" || confined.reason === "outside_root") {
-            return NextResponse.json({ error: "Access denied: path escapes root" }, { status: 403 });
+            return NextResponse.json(
+              { error: "Access denied: path escapes root" },
+              { status: 403 }
+            );
           }
           continue;
         }
@@ -220,7 +223,7 @@ export async function GET(request: NextRequest) {
     if (!resolvedPath) {
       if (!isAbsoluteHostPath) {
         const mcpEnv = process.env.MCP_SERVER_URL || process.env.MCP_URL;
-        const mcpBase = mcpEnv ? mcpEnv.replace(/\/sse\/?$/, "") : "http://localhost:8080";
+        const mcpBase = mcpEnv ? mcpEnv.replace(/\/(mcp|sse)\/?$/, "") : "http://localhost:8080";
 
         try {
           const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {

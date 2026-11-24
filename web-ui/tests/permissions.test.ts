@@ -223,4 +223,31 @@ describe("Shared-Volume Permission Hardening Suite (0770/0660)", () => {
       "web-ui requests must stay cpu 100m / memory 128Mi"
     );
   });
+
+  it("Test 6: LLM_SUPERVISOR_TOKEN in deploy/k8s/web-ui.yaml is sourced from secretKeyRef, never plaintext", () => {
+    const webUiPath = path.resolve(__dirname, "../../deploy/k8s/web-ui.yaml");
+    const webUiYaml = fs.readFileSync(webUiPath, "utf8");
+
+    const envEntryMatch = webUiYaml.match(
+      /-\s+name:\s+LLM_SUPERVISOR_TOKEN\r?\n([\s\S]*?)(?=\r?\n\s*-\s+name:|\r?\n\s*securityContext:)/
+    );
+    assert.ok(envEntryMatch, "deploy/k8s/web-ui.yaml must declare LLM_SUPERVISOR_TOKEN");
+    const envBlock = envEntryMatch[1];
+
+    assert.doesNotMatch(
+      envBlock,
+      /^\s*value:/m,
+      "LLM_SUPERVISOR_TOKEN must not use a plaintext value field"
+    );
+    assert.match(
+      envBlock,
+      /valueFrom:\s*\r?\n\s*secretKeyRef:\s*\r?\n\s*name:\s*[a-z0-9-]+/,
+      "LLM_SUPERVISOR_TOKEN must reference a Kubernetes Secret via valueFrom.secretKeyRef.name"
+    );
+    assert.match(
+      envBlock,
+      /key:\s*[a-z0-9-]+/,
+      "LLM_SUPERVISOR_TOKEN secretKeyRef must specify a key"
+    );
+  });
 });

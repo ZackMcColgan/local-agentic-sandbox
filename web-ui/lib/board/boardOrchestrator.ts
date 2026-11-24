@@ -1,5 +1,10 @@
 import crypto from "node:crypto";
-import { BoardStore, extractThreadIdFromLink, type BoardStatus } from "./boardStore";
+import {
+  BoardStore,
+  extractThreadIdFromLink,
+  type BoardEvidence,
+  type BoardStatus,
+} from "./boardStore";
 import {
   composeDispatcherBrief,
   selectHeadEligibleItem,
@@ -40,6 +45,7 @@ export const MAX_DRAIN_ITEMS = 5;
 export const MAX_DRAIN_DURATION_MS = 10 * 60 * 1000;
 export const MAX_TRIAGE_ATTEMPTS = 2;
 export const MAX_ORPHAN_AUTO_RESUMES = 2;
+export const MAX_CHUNK_REQUEUES = 10;
 export const ORPHANED_WORKING_ITEM_REASON =
   "Job thread ended without an outcome (possible restart)";
 
@@ -166,6 +172,7 @@ export interface BoardOrchestratorDeps {
   now?: () => number;
   maxItems?: number;
   maxDurationMs?: number;
+  maxChunkRequeues?: number;
   dryRun?: boolean;
   issueAndWait: (params: {
     item: DispatcherBoardItem;
@@ -192,6 +199,12 @@ export interface BoardOrchestratorDeps {
     ) => Promise<MechanicalCheckInput> | MechanicalCheckInput;
     issueReviewerThread: EvaluateReviewerGateOptions["issueReviewerThread"];
   };
+  /**
+   * Resolve the real head SHA for a PR (gh pr view --json headRefOid). Used
+   * when recording a shadow verdict so the verdict is tied to the exact head
+   * that was reviewed, even when check polling fell back to a placeholder.
+   */
+  resolveHeadSha?: (prNumber: number) => Promise<string | null> | string | null;
   selfDeploy?: {
     deps?: SelfDeployVerifiedDeps;
     getDeployInput?: (
@@ -212,6 +225,39 @@ export function getLastDrainReport(): DrainReport | null {
 export function setLastDrainReport(report: DrainReport): void {
   const g = globalThis as Record<symbol, DrainReport | undefined>;
   g[LAST_DRAIN_REPORT_KEY] = report;
+}
+
+const getGlobalDrainMutexHost = (): {
+  __boardDrainInFlight?: Promise<unknown> | null;
+} => globalThis as typeof globalThis & { __boardDrainInFlight?: Promise<unknown> | null };
+
+export function isBoardDrainInFlight(): boolean {
+  return Boolean(getGlobalDrainMutexHost().__boardDrainInFlight);
+}
+
+/**
+ * Deduplicates concurrent board drains (daemon ticks and manual POST /api/board/drain)
+ * via a process-wide single-flight promise on `globalThis.__boardDrainInFlight`.
+ */
+export async function runBoardDrainWithMutex<T>(
+  fn: () => Promise<T>
+): Promise<{ result: T; deduplicated: boolean }> {
+  const g = getGlobalDrainMutexHost();
+  const existing = g.__boardDrainInFlight as Promise<T> | null | undefined;
+  if (existing) {
+    const result = await existing;
+    return { result, deduplicated: true };
+  }
+  const runPromise = (async () => fn())();
+  g.__boardDrainInFlight = runPromise;
+  try {
+    const result = await runPromise;
+    return { result, deduplicated: false };
+  } finally {
+    if (g.__boardDrainInFlight === runPromise) {
+      g.__boardDrainInFlight = null;
+    }
+  }
 }
 
 /**
@@ -270,6 +316,7 @@ export class BoardOrchestrator {
   private readonly deps: BoardOrchestratorDeps;
   private readonly maxItems: number;
   private readonly maxDurationMs: number;
+  private readonly maxChunkRequeues: number;
   private readonly dryRun: boolean;
   private readonly now: () => number;
   private readonly log: (message: string) => void;
@@ -281,6 +328,7 @@ export class BoardOrchestrator {
     this.maxItems = Math.min(Math.max(1, Math.floor(requestedItems)), MAX_DRAIN_ITEMS);
     const requestedDuration = deps.maxDurationMs ?? MAX_DRAIN_DURATION_MS;
     this.maxDurationMs = Math.min(Math.max(1, requestedDuration), MAX_DRAIN_DURATION_MS);
+    this.maxChunkRequeues = Math.max(1, Math.floor(deps.maxChunkRequeues ?? MAX_CHUNK_REQUEUES));
     this.dryRun = deps.dryRun === true;
     this.now = deps.now ?? (() => Date.now());
     this.log = deps.log ?? ((msg: string) => console.info(msg));
@@ -305,26 +353,73 @@ export class BoardOrchestrator {
     return store.list() as DispatcherBoardItem[];
   }
 
+  private reloadItem(fallback: DispatcherBoardItem): DispatcherBoardItem {
+    if (this.dryRun || this.deps.items) {
+      return this.getItems().find((i) => i.id === fallback.id) ?? fallback;
+    }
+    const store = this.deps.boardStore ?? new BoardStore(this.deps.boardDir);
+    return (store.get(fallback.id) as DispatcherBoardItem | undefined) ?? fallback;
+  }
+
   private updateItem(
     item: DispatcherBoardItem,
     patch: {
       status?: BoardStatus;
       handoff?: DispatcherHandoff | null;
-      autoResumeCount?: number;
-      needsAttention?: boolean;
-      parkedReason?: string;
+      autoResumeCount?: number | null;
+      chunkRequeueCount?: number | null;
+      needsAttention?: boolean | null;
+      parkedReason?: string | null;
+      evidence?: BoardEvidence | null;
       threadLink?: string;
     }
   ): void {
+    const isTransitionToClear =
+      patch.status === "working" || patch.status === "done" || patch.status === "queued";
+
     if (patch.status !== undefined) item.status = patch.status;
     if (patch.handoff === null) {
       delete item.handoff;
     } else if (patch.handoff !== undefined) {
       item.handoff = patch.handoff;
     }
-    if (patch.autoResumeCount !== undefined) item.autoResumeCount = patch.autoResumeCount;
-    if (patch.needsAttention !== undefined) item.needsAttention = patch.needsAttention;
-    if (patch.parkedReason !== undefined) item.parkedReason = patch.parkedReason;
+    if (patch.autoResumeCount === null) {
+      delete item.autoResumeCount;
+    } else if (patch.autoResumeCount !== undefined) {
+      item.autoResumeCount = patch.autoResumeCount;
+    }
+    if (patch.chunkRequeueCount === null) {
+      delete item.chunkRequeueCount;
+    } else if (patch.chunkRequeueCount !== undefined) {
+      item.chunkRequeueCount = patch.chunkRequeueCount;
+    }
+    if (
+      patch.needsAttention === null ||
+      (isTransitionToClear && patch.needsAttention === undefined)
+    ) {
+      delete item.needsAttention;
+    } else if (patch.needsAttention !== undefined) {
+      item.needsAttention = patch.needsAttention;
+    }
+    if (patch.parkedReason === null || (isTransitionToClear && patch.parkedReason === undefined)) {
+      delete item.parkedReason;
+    } else if (patch.parkedReason !== undefined) {
+      item.parkedReason = patch.parkedReason;
+    }
+    if (patch.evidence === null) {
+      delete item.evidence;
+    } else if (patch.evidence !== undefined) {
+      const mergedEvidence = Object.fromEntries(
+        Object.entries({ ...(item.evidence ?? {}), ...patch.evidence }).filter(
+          ([, v]) => v !== undefined
+        )
+      ) as BoardEvidence;
+      if (Object.keys(mergedEvidence).length > 0) {
+        item.evidence = mergedEvidence;
+      } else {
+        delete item.evidence;
+      }
+    }
     if (patch.threadLink !== undefined) item.threadLink = patch.threadLink;
     item.updatedAt = new Date(this.now()).toISOString();
 
@@ -338,8 +433,12 @@ export class BoardOrchestrator {
         ...(patch.status !== undefined ? { status: patch.status } : {}),
         ...(patch.handoff !== undefined ? { handoff: patch.handoff } : {}),
         ...(patch.autoResumeCount !== undefined ? { autoResumeCount: patch.autoResumeCount } : {}),
+        ...(patch.chunkRequeueCount !== undefined
+          ? { chunkRequeueCount: patch.chunkRequeueCount }
+          : {}),
         ...(patch.needsAttention !== undefined ? { needsAttention: patch.needsAttention } : {}),
         ...(patch.parkedReason !== undefined ? { parkedReason: patch.parkedReason } : {}),
+        ...(patch.evidence !== undefined ? { evidence: patch.evidence } : {}),
         ...(patch.threadLink !== undefined ? { threadLink: patch.threadLink } : {}),
       });
     }
@@ -364,6 +463,40 @@ export class BoardOrchestrator {
     return this.deps.agreementLedger ?? new AgreementLedgerStore(this.deps.boardDir);
   }
 
+  /**
+   * Resolve the head SHA to persist with a shadow verdict. A real 40-char SHA
+   * is used as-is; otherwise the resolver (gh pr view --json headRefOid) is
+   * consulted. If resolution fails, the placeholder is kept and the failure is
+   * logged - never recorded silently.
+   */
+  private async resolveRecordedHeadSha(
+    pr: { prNumber: number; headSha: string },
+    itemKey: string
+  ): Promise<string> {
+    if (/^[0-9a-f]{40}$/i.test(pr.headSha)) {
+      return pr.headSha;
+    }
+    const resolver = this.deps.resolveHeadSha;
+    if (resolver) {
+      try {
+        const resolved = await resolver(pr.prNumber);
+        if (resolved && /^[0-9a-f]{40}$/i.test(resolved)) {
+          return resolved;
+        }
+      } catch (err) {
+        this.log(
+          `[orchestrator] head sha resolution threw for PR ${pr.prNumber} (${itemKey}): ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    }
+    this.log(
+      `[orchestrator] head sha unresolved for PR ${pr.prNumber} (${itemKey}); recording placeholder '${pr.headSha}'`
+    );
+    return pr.headSha;
+  }
+
   async runPrOpenShadowStages(
     item: DispatcherBoardItem,
     pr: { prNumber: number; headSha: string }
@@ -371,42 +504,59 @@ export class BoardOrchestrator {
     const result: PrOpenShadowResult = {};
 
     if (this.deps.flowMonitor) {
-      const flowItem: FlowMonitorBoardItem = {
-        ...item,
-        prNumber: pr.prNumber,
-      };
-      const stage2Enabled = this.resolveFlowMonitorEnabled();
-      result.flowMonitor = await monitorPrToConclusion({
-        item: flowItem,
-        stage2Enabled,
-        pollChecks: this.deps.flowMonitor.pollChecks,
-        issueThread:
-          this.deps.flowMonitor.issueThread ?? (async () => ({ threadId: "shadow-noop" })),
-        log: this.log,
-      });
+      try {
+        const flowItem: FlowMonitorBoardItem = {
+          ...item,
+          prNumber: pr.prNumber,
+        };
+        const stage2Enabled = this.resolveFlowMonitorEnabled();
+        result.flowMonitor = await monitorPrToConclusion({
+          item: flowItem,
+          stage2Enabled,
+          pollChecks: this.deps.flowMonitor.pollChecks,
+          issueThread:
+            this.deps.flowMonitor.issueThread ?? (async () => ({ threadId: "shadow-noop" })),
+          log: this.log,
+        });
+      } catch (err) {
+        this.log(
+          `[orchestrator] shadow flowMonitor failed for ${item.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
     }
 
     if (this.deps.reviewerGate) {
-      const stage3Enabled = this.resolveReviewerGateEnabled();
-      const mechanicalInput = await this.deps.reviewerGate.getMechanicalInput(item, pr);
-      const gateResult = await evaluateReviewerGate({
-        itemId: item.id,
-        brief: item.brief,
-        mechanicalInput,
-        stage3Enabled,
-        ciAllGreen: result.flowMonitor?.verdict.status === "green",
-        issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
-        log: this.log,
-      });
-      result.reviewerGate = {
-        ...gateResult,
-        mergeAuthorized: stage3Enabled ? gateResult.mergeAuthorized : false,
-      };
-      result.ledger = this.getAgreementLedger().recordShadowVerdict({
-        prNumber: pr.prNumber,
-        headSha: pr.headSha,
-        reviewerVerdict: gateResult.verdict,
-      });
+      try {
+        const stage3Enabled = this.resolveReviewerGateEnabled();
+        const mechanicalInput = await this.deps.reviewerGate.getMechanicalInput(item, pr);
+        const gateResult = await evaluateReviewerGate({
+          itemId: item.id,
+          brief: item.brief,
+          mechanicalInput,
+          stage3Enabled,
+          ciAllGreen: result.flowMonitor?.verdict.status === "green",
+          issueReviewerThread: this.deps.reviewerGate.issueReviewerThread,
+          log: this.log,
+        });
+        result.reviewerGate = {
+          ...gateResult,
+          mergeAuthorized: stage3Enabled ? gateResult.mergeAuthorized : false,
+        };
+        const recordedHeadSha = await this.resolveRecordedHeadSha(pr, item.key);
+        result.ledger = this.getAgreementLedger().recordShadowVerdict({
+          prNumber: pr.prNumber,
+          headSha: recordedHeadSha,
+          reviewerVerdict: gateResult.verdict,
+        });
+      } catch (err) {
+        this.log(
+          `[orchestrator] shadow reviewerGate failed for ${item.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
     }
 
     return result;
@@ -451,7 +601,185 @@ export class BoardOrchestrator {
       }),
     };
 
-    return runSelfDeployVerified(deployInput, deployDeps, { stageEnabled });
+    try {
+      return await runSelfDeployVerified(deployInput, deployDeps, { stageEnabled });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.log(`[orchestrator] shadow selfDeploy failed for ${item.id}: ${reason}`);
+      return {
+        mode: stageEnabled ? "execute" : "shadow",
+        status: "failed",
+        deployTag: deployInput.targetTag,
+        needsAttention: stageEnabled,
+        reason,
+      };
+    }
+  }
+
+  private async settleCompletedOutcome(
+    item: DispatcherBoardItem,
+    outcome: Extract<JobExecutionOutcome, { status: "completed" }>,
+    startedMs: number
+  ): Promise<{
+    completedDelta: number;
+    failedDelta: number;
+    outcomeRecord: DrainItemOutcome;
+  }> {
+    let shadowStages: ShadowStageOutcomes | undefined;
+    if (outcome.prNumber !== undefined && (this.deps.flowMonitor || this.deps.reviewerGate)) {
+      try {
+        const prShadow = await this.runPrOpenShadowStages(item, {
+          prNumber: outcome.prNumber,
+          headSha: outcome.headSha ?? "unknown-head",
+        });
+        shadowStages = {
+          ...(prShadow.flowMonitor ? { flowMonitor: prShadow.flowMonitor } : {}),
+          ...(prShadow.reviewerGate ? { reviewerGate: prShadow.reviewerGate } : {}),
+        };
+      } catch (err) {
+        this.log(
+          `[orchestrator] pr-open shadow stages failed for ${item.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    }
+    if (outcome.merged && outcome.mergeSha && this.deps.selfDeploy) {
+      try {
+        const selfDeploy = await this.runMergedShadowStage(item, {
+          mergeSha: outcome.mergeSha,
+          targetTag: outcome.deployTag,
+        });
+        shadowStages = {
+          ...(shadowStages ?? {}),
+          selfDeploy,
+        };
+      } catch (err) {
+        this.log(
+          `[orchestrator] merged shadow stage failed for ${item.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    }
+
+    const deployTag = outcome.deployTag ?? shadowStages?.selfDeploy?.deployTag;
+    const evidence: BoardEvidence = {
+      ...(outcome.prNumber !== undefined ? { prNumber: outcome.prNumber } : {}),
+      ...(outcome.mergeSha ? { mergeSha: outcome.mergeSha } : {}),
+      ...(deployTag ? { deployTag } : {}),
+    };
+    const hasEvidence = Object.keys(evidence).length > 0;
+
+    if (shadowStages?.selfDeploy?.needsAttention) {
+      const reason = shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence;
+      this.updateItem(item, {
+        status: "needs-attention",
+        needsAttention: true,
+        parkedReason: reason,
+        ...(hasEvidence ? { evidence } : {}),
+        threadLink: `/?thread=${outcome.threadId}`,
+      });
+      return {
+        completedDelta: 0,
+        failedDelta: 1,
+        outcomeRecord: {
+          itemId: item.id,
+          key: item.key,
+          title: item.title,
+          outcome: "failed",
+          threadId: outcome.threadId,
+          reason,
+          shadowStages,
+          durationMs: Math.max(0, this.now() - startedMs),
+        },
+      };
+    }
+
+    this.updateItem(item, {
+      status: "done",
+      ...(hasEvidence ? { evidence } : {}),
+      threadLink: `/?thread=${outcome.threadId}`,
+      ...(item.handoff ? { handoff: null } : {}),
+    });
+    return {
+      completedDelta: 1,
+      failedDelta: 0,
+      outcomeRecord: {
+        itemId: item.id,
+        key: item.key,
+        title: item.title,
+        outcome: "completed",
+        threadId: outcome.threadId,
+        reason: outcome.summary,
+        ...(shadowStages ? { shadowStages } : {}),
+        durationMs: Math.max(0, this.now() - startedMs),
+      },
+    };
+  }
+
+  private recordChunkCompleteOutcome(
+    item: DispatcherBoardItem,
+    outcome: Extract<JobExecutionOutcome, { status: "chunk-complete" }>,
+    startedMs: number
+  ): {
+    requeuedDelta: number;
+    failedDelta: number;
+    surfacedIssue?: SurfacedDrainIssue;
+    outcomeRecord: DrainItemOutcome;
+  } {
+    const currentChunkCount = item.chunkRequeueCount ?? 0;
+    if (currentChunkCount >= this.maxChunkRequeues) {
+      const reason = `Chunk requeue budget exhausted (${currentChunkCount}/${this.maxChunkRequeues}) without completion.`;
+      this.log(`[orchestrator] parking item ${item.id} (${item.key}): ${reason}`);
+      this.updateItem(item, {
+        status: "needs-attention",
+        needsAttention: true,
+        parkedReason: reason,
+        handoff: outcome.handoff,
+        threadLink: `/?thread=${outcome.threadId}`,
+      });
+      return {
+        requeuedDelta: 0,
+        failedDelta: 1,
+        surfacedIssue: {
+          itemId: item.id,
+          key: item.key,
+          code: "chunk-requeue-limit",
+          message: reason,
+        },
+        outcomeRecord: {
+          itemId: item.id,
+          key: item.key,
+          title: item.title,
+          outcome: "failed",
+          threadId: outcome.threadId,
+          reason,
+          durationMs: Math.max(0, this.now() - startedMs),
+        },
+      };
+    }
+
+    const nextChunkCount = currentChunkCount + 1;
+    this.updateItem(item, {
+      status: "queued",
+      handoff: outcome.handoff,
+      chunkRequeueCount: nextChunkCount,
+      threadLink: `/?thread=${outcome.threadId}`,
+    });
+    return {
+      requeuedDelta: 1,
+      failedDelta: 0,
+      outcomeRecord: {
+        itemId: item.id,
+        key: item.key,
+        title: item.title,
+        outcome: "chunk-requeued",
+        threadId: outcome.threadId,
+        reason: outcome.handoff.nextStep,
+        durationMs: Math.max(0, this.now() - startedMs),
+      },
+    };
   }
 
   async drain(): Promise<DrainReport> {
@@ -476,13 +804,6 @@ export class BoardOrchestrator {
       this.deps.getSlotMetrics ?? (() => getSharedSlotScheduler().getMetrics());
 
     while (true) {
-      const control = getControl();
-      const controlStop = getControlStopReason(control.state);
-      if (controlStop) {
-        stopReason = controlStop;
-        break;
-      }
-
       if (itemsProcessed >= this.maxItems) {
         stopReason = "max-items-reached";
         break;
@@ -493,25 +814,15 @@ export class BoardOrchestrator {
         break;
       }
 
-      const liveJob = getLiveJob();
-      if (liveJob.isRunning) {
-        stopReason = "job-already-running";
-        break;
-      }
+      const control = getControl();
+      const controlStop = getControlStopReason(control.state);
 
-      const ownerState = getOwner();
-      if (ownerState.isMidTurn) {
-        stopReason = "owner-preempted";
-        break;
-      }
-
+      // Reconcile dead "working" items even when boardControl is "paused" or "stopped"
+      // so stale/settled cards never remain stuck in "working". Never issue new queued jobs
+      // when controlStop is active.
       const items = this.getItems();
       const workingItems = items.filter((item) => item.status === "working");
-      if (workingItems.length > 0) {
-        if (!this.deps.checkWorkingItemLiveness) {
-          stopReason = "job-already-running";
-          break;
-        }
+      if (workingItems.length > 0 && this.deps.checkWorkingItemLiveness) {
         let hasLiveWorkingItem = false;
         let restartLoopAfterRecovery = false;
         for (const workingItem of workingItems) {
@@ -536,85 +847,26 @@ export class BoardOrchestrator {
             );
             const outcomeResult = liveness.outcome;
             if (outcomeResult.status === "completed") {
-              let shadowStages: ShadowStageOutcomes | undefined;
-              if (
-                outcomeResult.prNumber !== undefined &&
-                (this.deps.flowMonitor || this.deps.reviewerGate)
-              ) {
-                const prShadow = await this.runPrOpenShadowStages(workingItem, {
-                  prNumber: outcomeResult.prNumber,
-                  headSha: outcomeResult.headSha ?? "unknown-head",
-                });
-                shadowStages = {
-                  ...(prShadow.flowMonitor ? { flowMonitor: prShadow.flowMonitor } : {}),
-                  ...(prShadow.reviewerGate ? { reviewerGate: prShadow.reviewerGate } : {}),
-                };
-              }
-              if (outcomeResult.merged && outcomeResult.mergeSha && this.deps.selfDeploy) {
-                const selfDeploy = await this.runMergedShadowStage(workingItem, {
-                  mergeSha: outcomeResult.mergeSha,
-                  targetTag: outcomeResult.deployTag,
-                });
-                shadowStages = {
-                  ...(shadowStages ?? {}),
-                  selfDeploy,
-                };
-              }
-              if (shadowStages?.selfDeploy?.needsAttention) {
-                this.updateItem(workingItem, {
-                  status: "needs-attention",
-                  needsAttention: true,
-                  parkedReason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
-                  threadLink: `/?thread=${outcomeResult.threadId}`,
-                });
-                failedCount += 1;
-                itemsProcessed += 1;
-                outcomes.push({
-                  itemId: workingItem.id,
-                  key: workingItem.key,
-                  title: workingItem.title,
-                  outcome: "failed",
-                  threadId: outcomeResult.threadId,
-                  reason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
-                  shadowStages,
-                  durationMs: Math.max(0, this.now() - recoveryStartMs),
-                });
-              } else {
-                this.updateItem(workingItem, {
-                  status: "done",
-                  threadLink: `/?thread=${outcomeResult.threadId}`,
-                  ...(workingItem.handoff ? { handoff: null } : {}),
-                });
-                completedCount += 1;
-                itemsProcessed += 1;
-                outcomes.push({
-                  itemId: workingItem.id,
-                  key: workingItem.key,
-                  title: workingItem.title,
-                  outcome: "completed",
-                  threadId: outcomeResult.threadId,
-                  reason: outcomeResult.summary,
-                  ...(shadowStages ? { shadowStages } : {}),
-                  durationMs: Math.max(0, this.now() - recoveryStartMs),
-                });
-              }
-            } else if (outcomeResult.status === "chunk-complete") {
-              this.updateItem(workingItem, {
-                status: "queued",
-                handoff: outcomeResult.handoff,
-                threadLink: `/?thread=${outcomeResult.threadId}`,
-              });
-              requeuedCount += 1;
+              const settled = await this.settleCompletedOutcome(
+                workingItem,
+                outcomeResult,
+                recoveryStartMs
+              );
+              completedCount += settled.completedDelta;
+              failedCount += settled.failedDelta;
               itemsProcessed += 1;
-              outcomes.push({
-                itemId: workingItem.id,
-                key: workingItem.key,
-                title: workingItem.title,
-                outcome: "chunk-requeued",
-                threadId: outcomeResult.threadId,
-                reason: outcomeResult.handoff.nextStep,
-                durationMs: Math.max(0, this.now() - recoveryStartMs),
-              });
+              outcomes.push(settled.outcomeRecord);
+            } else if (outcomeResult.status === "chunk-complete") {
+              const chunked = this.recordChunkCompleteOutcome(
+                workingItem,
+                outcomeResult,
+                recoveryStartMs
+              );
+              requeuedCount += chunked.requeuedDelta;
+              failedCount += chunked.failedDelta;
+              itemsProcessed += 1;
+              if (chunked.surfacedIssue) surfacedIssues.push(chunked.surfacedIssue);
+              outcomes.push(chunked.outcomeRecord);
             } else if (outcomeResult.status === "failed") {
               const issue = outcomeResult.issue ?? {
                 code: "execution-failed",
@@ -739,7 +991,7 @@ export class BoardOrchestrator {
           }
         }
         if (hasLiveWorkingItem) {
-          stopReason = "job-already-running";
+          stopReason = controlStop ?? "job-already-running";
           break;
         }
         if (restartLoopAfterRecovery) {
@@ -747,7 +999,29 @@ export class BoardOrchestrator {
         }
       }
 
-      const head = selectHeadEligibleItem(items);
+      if (controlStop) {
+        stopReason = controlStop;
+        break;
+      }
+
+      const liveJob = getLiveJob();
+      if (liveJob.isRunning) {
+        stopReason = "job-already-running";
+        break;
+      }
+
+      const ownerState = getOwner();
+      if (ownerState.isMidTurn) {
+        stopReason = "owner-preempted";
+        break;
+      }
+
+      if (workingItems.length > 0 && !this.deps.checkWorkingItemLiveness) {
+        stopReason = "job-already-running";
+        break;
+      }
+
+      let head = selectHeadEligibleItem(items);
       if (!head) {
         stopReason = "idle";
         break;
@@ -761,6 +1035,7 @@ export class BoardOrchestrator {
       });
 
       const onThreadCreated = (threadId: string) => {
+        if (!head) return;
         this.updateItem(head, {
           status: "working",
           threadLink: `/?thread=${threadId}`,
@@ -779,6 +1054,7 @@ export class BoardOrchestrator {
         const triage = await boundedTriage(issue, head, this.deps.triageAutoFix);
 
         if (triage.action === "fixed") {
+          head = this.reloadItem(head);
           const retryBrief = composeDispatcherBrief(head, {
             operatorMemory: this.deps.operatorMemory,
             hostCheckoutPath: this.deps.hostCheckoutPath,
@@ -821,80 +1097,18 @@ export class BoardOrchestrator {
       }
 
       if (result.status === "completed") {
-        let shadowStages: ShadowStageOutcomes | undefined;
-        if (result.prNumber !== undefined && (this.deps.flowMonitor || this.deps.reviewerGate)) {
-          const prShadow = await this.runPrOpenShadowStages(head, {
-            prNumber: result.prNumber,
-            headSha: result.headSha ?? "unknown-head",
-          });
-          shadowStages = {
-            ...(prShadow.flowMonitor ? { flowMonitor: prShadow.flowMonitor } : {}),
-            ...(prShadow.reviewerGate ? { reviewerGate: prShadow.reviewerGate } : {}),
-          };
-        }
-        if (result.merged && result.mergeSha && this.deps.selfDeploy) {
-          const selfDeploy = await this.runMergedShadowStage(head, {
-            mergeSha: result.mergeSha,
-            targetTag: result.deployTag,
-          });
-          shadowStages = {
-            ...(shadowStages ?? {}),
-            selfDeploy,
-          };
-        }
-
-        if (shadowStages?.selfDeploy?.needsAttention) {
-          this.updateItem(head, {
-            status: "needs-attention",
-            threadLink: `/?thread=${result.threadId}`,
-          });
-          itemsProcessed += 1;
-          outcomes.push({
-            itemId: head.id,
-            key: head.key,
-            title: head.title,
-            outcome: "failed",
-            threadId: result.threadId,
-            reason: shadowStages.selfDeploy.reason ?? shadowStages.selfDeploy.evidence,
-            shadowStages,
-            durationMs: Math.max(0, this.now() - itemStartMs),
-          });
-        } else {
-          this.updateItem(head, {
-            status: "done",
-            threadLink: `/?thread=${result.threadId}`,
-            ...(head.handoff ? { handoff: null } : {}),
-          });
-          completedCount += 1;
-          itemsProcessed += 1;
-          outcomes.push({
-            itemId: head.id,
-            key: head.key,
-            title: head.title,
-            outcome: "completed",
-            threadId: result.threadId,
-            reason: result.summary,
-            ...(shadowStages ? { shadowStages } : {}),
-            durationMs: Math.max(0, this.now() - itemStartMs),
-          });
-        }
-      } else if (result.status === "chunk-complete") {
-        this.updateItem(head, {
-          status: "queued",
-          handoff: result.handoff,
-          threadLink: `/?thread=${result.threadId}`,
-        });
-        requeuedCount += 1;
+        const settled = await this.settleCompletedOutcome(head, result, itemStartMs);
+        completedCount += settled.completedDelta;
+        failedCount += settled.failedDelta;
         itemsProcessed += 1;
-        outcomes.push({
-          itemId: head.id,
-          key: head.key,
-          title: head.title,
-          outcome: "chunk-requeued",
-          threadId: result.threadId,
-          reason: result.handoff.nextStep,
-          durationMs: Math.max(0, this.now() - itemStartMs),
-        });
+        outcomes.push(settled.outcomeRecord);
+      } else if (result.status === "chunk-complete") {
+        const chunked = this.recordChunkCompleteOutcome(head, result, itemStartMs);
+        requeuedCount += chunked.requeuedDelta;
+        failedCount += chunked.failedDelta;
+        itemsProcessed += 1;
+        if (chunked.surfacedIssue) surfacedIssues.push(chunked.surfacedIssue);
+        outcomes.push(chunked.outcomeRecord);
       } else if (result.status === "in-progress") {
         this.updateItem(head, {
           status: "working",

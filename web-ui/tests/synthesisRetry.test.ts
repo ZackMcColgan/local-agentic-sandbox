@@ -36,7 +36,7 @@ function makeScriptedOllamaServer(
       res.end(JSON.stringify({ models: [] }));
       return;
     }
-    if (url.includes("/sse")) {
+    if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
       // MCP endpoints unreachable: route falls back to graceful advertised-tool traces.
       res.writeHead(404);
       res.end("no mcp");
@@ -240,7 +240,7 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
       res.end(JSON.stringify({ models: [] }));
       return;
     }
-    if (url.includes("/sse")) {
+    if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
       res.writeHead(404);
       res.end("no mcp");
       return;
@@ -400,7 +400,7 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
       res.end(JSON.stringify({ models: [] }));
       return;
     }
-    if (url.includes("/sse")) {
+    if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
       res.writeHead(404);
       res.end("no mcp");
       return;
@@ -552,4 +552,337 @@ test("Synthesis markup guard: tool-call markup in synthesis triggers one retry; 
     asst!.content.includes("tool calls were not executable"),
     `second markup failure must end with honest marker, got: ${asst!.content}`
   );
+});
+
+test("R9: runSynthesisPass re-arms passDeadline on toolCallProgress chunks", async () => {
+  const { runSynthesisPass } = await import("../lib/chat/turnEngine");
+  const turnAc = new AbortController();
+  const result = await runSynthesisPass({
+    llmBaseUrl: "http://127.0.0.1:11434",
+    activeModel: "test-model",
+    conversationMessages: [{ role: "user", content: "summarize" }],
+    isArtifactRequest: false,
+    turnAbortSignal: turnAc.signal,
+    synthOptions: {},
+    accumulatedThoughts: [],
+    getAccumulatedStreamedTokens: () => "",
+    setAccumulatedStreamedTokens: () => {},
+    onFinishReason: () => {},
+    onPromptTokens: () => {},
+    onOutputTokens: () => {},
+    maybeWriteSnapshot: () => {},
+    sendEvent: async () => {},
+    streamChat: async function* (_url, payload) {
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 45));
+        if (payload.signal?.aborted) {
+          throw new DOMException("The operation was aborted", "AbortError");
+        }
+        yield { toolCallProgress: { name: "workspace_read_file", argumentChars: (i + 1) * 12 } };
+      }
+      if (payload.signal?.aborted) {
+        throw new DOMException("The operation was aborted", "AbortError");
+      }
+      yield { message: { content: "Recovered prose after progress." }, finish_reason: "stop" };
+    },
+    deadlines: { inactivityMs: 90, totalMs: 1000 },
+    log: () => {},
+  });
+  assert.equal(
+    result.content,
+    "Recovered prose after progress.",
+    "toolCallProgress must re-arm passDeadline so synthesis does not abort at inactivityMs"
+  );
+});
+
+test("R9: synthesis pass 2 appends a plain-prose correction directive instead of retrying identical messages", async () => {
+  const toolCall = {
+    id: "call-1",
+    type: "function",
+    function: { name: "workspace_get_tree", arguments: "{}" },
+  };
+  const capturedBodies: Array<{ messages?: Array<{ role?: string; content?: string }> }> = [];
+  let completionCount = 0;
+  const server = http.createServer((req, res) => {
+    const url = req.url || "";
+    if (url.includes("/api/ps")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ models: [] }));
+      return;
+    }
+    if (url.includes("/sse")) {
+      res.writeHead(404);
+      res.end("no mcp");
+      return;
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      if (url.includes("/api/chat")) {
+        completionCount++;
+        capturedBodies.push(JSON.parse(body));
+        res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+        if (completionCount === 1) {
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "Checking. ", tool_calls: [toolCall] },
+            }) + "\n"
+          );
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n"
+          );
+        } else if (completionCount === 2) {
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n"
+          );
+        } else if (completionCount === 3) {
+          // Synthesis pass 1: empty
+          res.write(
+            JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n"
+          );
+        } else {
+          // Synthesis pass 2: plain prose
+          res.write(
+            JSON.stringify({
+              message: { role: "assistant", content: "Plain prose final summary." },
+              done: true,
+            }) + "\n"
+          );
+        }
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end("not found");
+    });
+  });
+
+  const tmpThreadsDir = path.resolve(process.cwd(), "tmp-test-synth-directive-" + Date.now());
+  fs.mkdirSync(tmpThreadsDir, { recursive: true });
+  const prevEnv = {
+    THREADS_DIR: process.env.THREADS_DIR,
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+    LLAMACPP_BASE_URL: process.env.LLAMACPP_BASE_URL,
+    MCP_SERVER_URL: process.env.MCP_SERVER_URL,
+    BROWSER_MCP_URL: process.env.BROWSER_MCP_URL,
+    LLM_ENGINE: process.env.LLM_ENGINE,
+  };
+  try {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const port = (server.address() as { port: number }).port;
+    process.env.THREADS_DIR = tmpThreadsDir;
+    process.env.LLM_ENGINE = "ollama";
+    process.env.LLM_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.LLAMACPP_BASE_URL = `http://127.0.0.1:${port}`;
+    process.env.MCP_SERVER_URL = `http://127.0.0.1:${port}/mcp`;
+    process.env.BROWSER_MCP_URL = `http://127.0.0.1:${port}/browser`;
+
+    const { NextRequest } = await import("next/server");
+    const chatRouteModule = await import("../app/api/chat/route");
+    const { ThreadStore } = await import("../lib/threads/threadStore");
+    const store = new ThreadStore(tmpThreadsDir);
+    const threadId = `thread-synth-dir-${Date.now()}`;
+    store.createThread({ id: threadId, title: "Synthesis Directive Test", hostAccess: false });
+
+    const req = new NextRequest("http://localhost:3000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId,
+        userMessageId: "u-1",
+        assistantMessageId: "a-1",
+        messages: [{ role: "user", content: "Inspect.", id: "u-1" }],
+        model: "auto",
+        enableTools: true,
+      }),
+    });
+    const res = await chatRouteModule.POST(req);
+    await res.text();
+
+    assert.equal(capturedBodies.length, 4);
+    const pass1Msgs = capturedBodies[2].messages || [];
+    const pass2Msgs = capturedBodies[3].messages || [];
+    assert.ok(
+      pass2Msgs.length > pass1Msgs.length,
+      `Pass 2 must append a correction directive instead of retrying identical messages (pass1=${pass1Msgs.length}, pass2=${pass2Msgs.length})`
+    );
+    const lastPass2 = pass2Msgs[pass2Msgs.length - 1];
+    assert.equal(lastPass2.role, "user");
+    assert.match(String(lastPass2.content), /plain.?prose|do not call any tools/i);
+  } finally {
+    server.close();
+    Object.entries(prevEnv).forEach(([k, v]) => {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    });
+    fs.rmSync(tmpThreadsDir, { recursive: true, force: true });
+  }
+});
+
+test("R9: isFinalRound blocks tool execution even when engine ignores tool_choice none", async () => {
+  const { runChatTurn } = await import("../lib/chat/roundLoop");
+  const { createSseEventWriter } = await import("../lib/chat/turnEngine");
+  const { ThreadStore } = await import("../lib/threads/threadStore");
+  const { ThrottledStreamSnapshot } = await import("../lib/streamSnapshot");
+  const { TelemetryTracer } = await import("../lib/telemetry");
+  const os = await import("node:os");
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "r9-final-round-"));
+  try {
+    const threadStore = new ThreadStore(tmpDir);
+    const thread = threadStore.createThread({ id: "t-final-round", title: "final round guard" });
+    const stream = new TransformStream<Uint8Array, Uint8Array>();
+    const reqAbort = new AbortController();
+    const sseWriter = createSseEventWriter({
+      stream,
+      signal: reqAbort.signal,
+      activeThreadId: thread.id,
+    });
+    sseWriter.startReadableDrain();
+
+    let executedToolCalls = 0;
+    const mockClient = {
+      callTool: async () => {
+        executedToolCalls++;
+        return { content: [{ type: "text", text: "ok" }] };
+      },
+    };
+    const toolClientMap = new Map([
+      [
+        "workspace_read_file",
+        {
+          client: mockClient as unknown as NonNullable<
+            import("../lib/chat/roundLoop").RunChatTurnDeps["toolClientMap"] extends Map<
+              string,
+              { client: infer C }
+            >
+              ? C
+              : never
+          >,
+          tier: "workspace" as const,
+        },
+      ],
+    ]);
+
+    let llmCall = 0;
+    let secondCallToolChoice: unknown = undefined;
+    const turnState = {
+      activeModel: "test-model",
+      accumulatedStreamedTokens: "",
+      assistantPersisted: false,
+      lastFinishReason: undefined,
+      turnOutputTokens: undefined,
+      turnCreatedFiles: [],
+      turnPreImages: new Map<string, string>(),
+      turnHostDiffs: [],
+      traces: [],
+      turnMicroElisions: [],
+      turnReadDedups: [],
+      accumulatedThoughts: [],
+    };
+
+    const deps = {
+      reqSignal: reqAbort.signal,
+      messages: [{ role: "user", content: "Read a file and answer." }],
+      userPrompt: "Read a file and answer.",
+      priorUserPrompt: "",
+      assistantMessageId: "a-final",
+      clientSessionId: "s-final",
+      systemPrompt: "System.",
+      effortDirective: "",
+      imagePayloads: [],
+      docContexts: [],
+      mode: "auto" as const,
+      requestedModel: "test-model",
+      initialEffectiveReasoningEffort: "low" as const,
+      invalidRequestedModel: null,
+      triageComplexityResult: null,
+      getLlmBaseUrl: () => "http://127.0.0.1:59999",
+      resolveJobRepoRoot: () => tmpDir,
+      streamLlmChat: async function* (_url: string, payload: { tool_choice?: unknown }) {
+        llmCall++;
+        if (llmCall === 1) {
+          yield {
+            message: {
+              role: "assistant",
+              content: "Reading first.",
+              tool_calls: [
+                {
+                  id: "tc-0",
+                  type: "function",
+                  function: { name: "workspace_read_file", arguments: '{"path":"a.txt"}' },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          };
+        } else if (llmCall === 2) {
+          secondCallToolChoice = payload.tool_choice;
+          // Engine ignores tool_choice: "none" and emits another tool call!
+          yield {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                {
+                  id: "tc-1",
+                  type: "function",
+                  function: { name: "workspace_read_file", arguments: '{"path":"evil.txt"}' },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          };
+        } else {
+          yield {
+            message: { role: "assistant", content: "Synthesized without running final tool." },
+            finish_reason: "stop",
+          };
+        }
+      },
+      advertisedTools: new Set(["workspace_read_file"]),
+      activeThreadId: thread.id,
+      threadsDir: tmpDir,
+      threadStore,
+      initialThreadData: thread,
+      initialThreadHostAccess: false,
+      streamSnapshot: new ThrottledStreamSnapshot(threadStore, thread.id, "a-final"),
+      sseWriter,
+      turnAbortController: new AbortController(),
+      persistAssistantOnAbort: () => {},
+      onRunTurnStarted: () => {},
+      onRunTurnFinally: () => {},
+      isExplicitStopped: () => false,
+      turnState,
+      activeSessions: [],
+      toolClientMap,
+      tracer: new TelemetryTracer(),
+      rootSpan: null,
+      roundBackstop: 2,
+    };
+
+    await runChatTurn(
+      deps as unknown as Parameters<typeof runChatTurn>[0],
+      {
+        id: "job-final",
+        threadId: thread.id,
+        prompt: "Read a file and answer.",
+        position: 0,
+        status: "running",
+      },
+      null
+    );
+
+    assert.equal(secondCallToolChoice, "none", "Final round must send tool_choice: none");
+    assert.equal(
+      executedToolCalls,
+      1,
+      `Final round must block tool execution (expected 1 execution from round 0, got ${executedToolCalls})`
+    );
+    assert.equal(turnState.traces.length, 1);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

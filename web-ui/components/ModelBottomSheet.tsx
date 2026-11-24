@@ -174,7 +174,7 @@ export function ModelBottomSheet({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
+            className="p-1.5 rounded-full text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200 hover:bg-stone-200/70 dark:hover:bg-white/[0.08] transition-colors"
           >
             <X className="h-5 w-5" />
           </button>

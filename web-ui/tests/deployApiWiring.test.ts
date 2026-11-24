@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
+import http from "http";
 import path from "path";
 import os from "os";
 import { OvernightSupervisor } from "../lib/subagents/supervisor.js";
@@ -131,6 +132,15 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
     const originalCheckDir = process.env.CHECKPOINT_DIR;
     process.env.CHECKPOINT_DIR = tmpDir;
 
+    const healthyServer = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("ok");
+    });
+    await new Promise<void>((resolve) => healthyServer.listen(0, "127.0.0.1", resolve));
+    const healthyAddr = healthyServer.address();
+    assert.ok(healthyAddr && typeof healthyAddr === "object");
+    const healthyUrl = `http://127.0.0.1:${healthyAddr.port}`;
+
     try {
       const req = new NextRequest("http://localhost:3000/api/deploy", {
         method: "POST",
@@ -142,7 +152,7 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
           action: "deployBuild",
           taskId: task.taskId,
           threadId: "t-1",
-          dryRunUrl: "http://localhost:30123",
+          dryRunUrl: healthyUrl,
           dryRunNamespace: "build-test0001",
         }),
       });
@@ -150,14 +160,119 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       const res = await POST(req);
       assert.equal(res.status, 200);
       const data = await res.json();
-      assert.equal(data.deploymentUrl, "http://localhost:30123");
+      assert.equal(data.success, true);
+      assert.equal(data.deployStatus, "deployed");
+      assert.equal(data.healthStatus, 200);
+      assert.equal(data.deploymentUrl, healthyUrl);
       assert.equal(data.deploymentNamespace, "build-test0001");
 
       const checkpointFile = supervisor.getCheckpointFilePath(task.taskId);
       const updated = JSON.parse(fs.readFileSync(checkpointFile, "utf8"));
-      assert.equal(updated.deploymentUrl, "http://localhost:30123");
+      assert.equal(updated.deploymentUrl, healthyUrl);
       assert.equal(updated.deploymentNamespace, "build-test0001");
     } finally {
+      await new Promise<void>((resolve) => healthyServer.close(() => resolve()));
+      process.env.CHECKPOINT_DIR = originalCheckDir;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("POST /api/deploy deployBuild honestly reports failure when preview endpoint is unhealthy or unreachable", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "deploy-honest-fail-"));
+    const supervisor = new OvernightSupervisor({ checkpointDirectory: tmpDir });
+
+    const task: TaskManifest = {
+      taskId: "task-deploy-fail-1",
+      goal: "Test honest deploy failure reporting",
+      toolchain: "node:22",
+      branchName: "feat/deploy-fail",
+      status: "completed",
+      currentMilestoneIndex: 1,
+      milestones: [],
+      checkpoints: [],
+      ambiguityFlags: [],
+      journal: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    supervisor.saveCheckpoint(task);
+
+    const originalCheckDir = process.env.CHECKPOINT_DIR;
+    process.env.CHECKPOINT_DIR = tmpDir;
+
+    // 1. Unhealthy preview server returning HTTP 503
+    const unhealthyServer = http.createServer((_req, res) => {
+      res.writeHead(503, { "content-type": "text/plain" });
+      res.end("Service Unavailable");
+    });
+    await new Promise<void>((resolve) => unhealthyServer.listen(0, "127.0.0.1", resolve));
+    const unhealthyAddr = unhealthyServer.address();
+    assert.ok(unhealthyAddr && typeof unhealthyAddr === "object");
+    const unhealthyUrl = `http://127.0.0.1:${unhealthyAddr.port}`;
+
+    // 2. Closed port (unreachable preview endpoint)
+    const tempServer = http.createServer();
+    await new Promise<void>((resolve) => tempServer.listen(0, "127.0.0.1", resolve));
+    const closedAddr = tempServer.address();
+    assert.ok(closedAddr && typeof closedAddr === "object");
+    const closedPort = closedAddr.port;
+    await new Promise<void>((resolve) => tempServer.close(() => resolve()));
+    const unreachableUrl = `http://127.0.0.1:${closedPort}`;
+
+    try {
+      const res503 = await POST(
+        new NextRequest("http://localhost:3000/api/deploy", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "deployBuild",
+            taskId: task.taskId,
+            dryRunUrl: unhealthyUrl,
+            dryRunNamespace: "build-fail503",
+          }),
+        })
+      );
+      assert.equal(res503.status, 502, "Unhealthy deploy preview must return HTTP 502");
+      const data503 = await res503.json();
+      assert.equal(data503.success, false, "Unhealthy deploy preview must report success: false");
+      assert.equal(
+        data503.deployStatus,
+        "failed",
+        "Unhealthy deploy preview must report deployStatus: 'failed'"
+      );
+      assert.equal(data503.healthStatus, 503);
+      assert.ok(data503.error, "Failure response must include an error message");
+
+      const checkpointAfter503 = JSON.parse(
+        fs.readFileSync(supervisor.getCheckpointFilePath(task.taskId), "utf8")
+      );
+      assert.equal(
+        checkpointAfter503.deploymentUrl,
+        undefined,
+        "Failed deploy must not record a fake deploymentUrl in task checkpoint"
+      );
+
+      const resUnreachable = await POST(
+        new NextRequest("http://localhost:3000/api/deploy", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "deployBuild",
+            taskId: task.taskId,
+            dryRunUrl: unreachableUrl,
+            dryRunNamespace: "build-unreachable",
+          }),
+        })
+      );
+      assert.equal(resUnreachable.status, 502, "Unreachable deploy preview must return HTTP 502");
+      const dataUnreachable = await resUnreachable.json();
+      assert.equal(
+        dataUnreachable.success,
+        false,
+        "Unreachable deploy preview must report success: false"
+      );
+      assert.equal(dataUnreachable.deployStatus, "failed");
+      assert.ok(dataUnreachable.error);
+    } finally {
+      await new Promise<void>((resolve) => unhealthyServer.close(() => resolve()));
       process.env.CHECKPOINT_DIR = originalCheckDir;
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -201,8 +316,15 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
         });
 
         const res = await POST(req);
-        assert.equal(res.status, 200);
+        assert.ok(
+          res.status === 200 || res.status === 502,
+          `Expected 200 (if preview live) or 502 (if preview unreachable), got ${res.status}`
+        );
         const data = await res.json();
+        if (res.status === 502) {
+          assert.equal(data.success, false);
+          assert.equal(data.deployStatus, "failed");
+        }
         // Must NOT match fake 30100+ port pattern or 192.168.50.254 fake IP
         assert.ok(
           !data.deploymentUrl.includes("192.168.50.254"),
@@ -244,6 +366,16 @@ describe("Sprint 7 — Ledger Deploy Flow (/api/deploy)", () => {
       );
       assert.ok(html.includes("Isolated Branch"), "Must render Isolated Branch pipeline step");
       assert.ok(html.includes("Pre-Deploy Gate"), "Must render Pre-Deploy Gate pipeline step");
+    });
+
+    it("deploy route does not expose __mockSelfDeployPipeline global test hook in production code path", () => {
+      const routePath = path.resolve(__dirname, "../app/api/deploy/route.ts");
+      const src = fs.readFileSync(routePath, "utf8");
+      assert.doesNotMatch(
+        src,
+        /__mockSelfDeployPipeline/,
+        "web-ui/app/api/deploy/route.ts must not contain the __mockSelfDeployPipeline test hook"
+      );
     });
   });
 });

@@ -125,7 +125,7 @@ export function NotificationsZone({
               onClick={onTestNotification}
               className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
                 notifTesting || !notifStatus.configured || !notifStatus.enabled
-                  ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-300"
+                  ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
                   : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95"
               }`}
             >
@@ -158,10 +158,10 @@ export function NotificationsZone({
                   )}
                   {!notifStatus.lastResult.ok && notifStatus.lastResult.errorSummary && (
                     <details className="mt-1">
-                      <summary className="cursor-pointer text-[11px] text-zinc-400 hover:text-zinc-200">
+                      <summary className="cursor-pointer text-[11px] text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200">
                         Details
                       </summary>
-                      <div className="mt-1 font-mono text-[10.5px] text-zinc-400 break-all">
+                      <div className="mt-1 font-mono text-[10.5px] text-zinc-600 dark:text-zinc-400 break-all">
                         {notifStatus.lastResult.event}: {notifStatus.lastResult.errorSummary}
                       </div>
                     </details>

@@ -28,13 +28,16 @@ export function isSseStreamDelivering(lastChunkAtMs: number, nowMs: number): boo
 }
 
 /**
- * The poll gate: poll the full thread only when the turn is live AND the SSE
- * stream is not actively delivering. While chunks are arriving the stream
- * itself is the transport; the poll is redundant churn.
+ * The poll gate: poll the full thread only when the turn is live, no local SSE
+ * stream is currently open, AND the SSE stream is not actively delivering.
+ * While a local SSE response is open (including long prefills and tool waits),
+ * or while chunks are arriving, the poll is redundant churn.
  */
 export function shouldPollLiveThread(state: {
   threadLiveStreaming: boolean;
   sseStreamDelivering: boolean;
+  isLocalSseOpen?: boolean;
 }): boolean {
+  if (state.isLocalSseOpen === true) return false;
   return state.threadLiveStreaming && !state.sseStreamDelivering;
 }

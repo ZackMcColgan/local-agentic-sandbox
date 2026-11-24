@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getProject, listProjectTasks } from "@/lib/projects/projectStore";
-import { startProjectTask } from "@/lib/projects/projectRunner";
+import { startProjectTask, scheduleProjectTask } from "@/lib/projects/projectRunner";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -46,12 +46,29 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Task prompt is required." }, { status: 400 });
     }
 
+    const effectiveMode = mode === undefined ? "now" : mode;
+
+    if (effectiveMode === "schedule") {
+      const scheduled = await scheduleProjectTask({
+        projectId: id,
+        prompt: prompt.trim(),
+        scheduleTime,
+      });
+      return NextResponse.json({ scheduled: true, ...scheduled }, { status: 201 });
+    }
+
+    if (effectiveMode !== "now") {
+      return NextResponse.json(
+        { error: `Unsupported task mode: ${String(mode)}` },
+        { status: 400 }
+      );
+    }
+
     const task = await startProjectTask({
       projectId: id,
       prompt: prompt.trim(),
-      mode: mode || "now",
-      scheduleTime,
-      executeInline: false,
+      mode: "now",
+      executeBackground: true,
     });
 
     return NextResponse.json({ task }, { status: 201 });

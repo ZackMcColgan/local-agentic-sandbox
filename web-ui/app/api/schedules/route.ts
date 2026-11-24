@@ -5,6 +5,7 @@ import {
   listSchedules,
   calculateNextRun,
 } from "../../../lib/subagents/scheduler";
+import { parseJsonBody } from "../../../lib/apiJson";
 
 export async function GET() {
   try {
@@ -21,7 +22,9 @@ export async function GET() {
 
 export async function POST(req: Request | NextRequest) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const { cronExpression, taskDescription } = body || {};
 
     if (!cronExpression || typeof cronExpression !== "string") {
