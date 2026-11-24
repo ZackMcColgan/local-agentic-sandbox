@@ -43,7 +43,6 @@ interface PooledMcpEntry {
 const mcpPool = new Map<string, PooledMcpEntry>();
 const mcpInFlight = new Map<string, Promise<McpSession | null>>();
 
-
 function resolveMcpConnectTimeoutMs(deps: McpClientDeps): number {
   if (typeof deps.connectTimeoutMs === "number" && deps.connectTimeoutMs > 0) {
     return deps.connectTimeoutMs;
@@ -73,7 +72,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
-xport const getMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
+export const getMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
   env.MCP_SERVER_URL || "http://mcp-server:8080/mcp";
 
 export const getBrowserMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
