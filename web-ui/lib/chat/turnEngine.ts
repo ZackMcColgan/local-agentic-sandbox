@@ -443,6 +443,10 @@ export interface RunSynthesisPassParams {
   ) => AsyncIterable<SynthesisPassChunk>;
   deadlines?: { inactivityMs: number; totalMs: number };
   log?: (...args: unknown[]) => void;
+  /** Pre-computed estimateTokens(conversationMessages) to reuse instead of re-scanning (Perf P6). */
+  precomputedRawMessageTokens?: number;
+  /** Pre-computed estimateToolSchemaTokens(tools) to reuse instead of re-stringifying (Perf P6). */
+  precomputedToolSchemaTokens?: number;
 }
 
 /**
@@ -471,6 +475,8 @@ export async function runSynthesisPass(
     streamChat,
     deadlines,
     log = console.log,
+    precomputedRawMessageTokens,
+    precomputedToolSchemaTokens,
   } = params;
 
   let passContent = "";
@@ -485,6 +491,8 @@ export async function runSynthesisPass(
       messages: fitContextWindow(conversationMessages, {
         isArtifactTurn: isArtifactRequest,
         tools: hasTools ? tools : undefined,
+        ...(precomputedRawMessageTokens !== undefined ? { precomputedRawMessageTokens } : {}),
+        ...(precomputedToolSchemaTokens !== undefined ? { precomputedToolSchemaTokens } : {}),
       }),
       ...(hasTools ? { tools, tool_choice: "none" as const } : {}),
       signal: AbortSignal.any([turnAbortSignal, passAbortController.signal]),

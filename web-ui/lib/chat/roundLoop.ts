@@ -497,6 +497,14 @@ export async function runChatTurn(
 
     const toolRegistry = buildToolRegistry(allTools);
     const llmTools = buildLayer1Tools(allTools);
+    // Fix D1 + D2 (F8a/F8b) + Phase 1 (P1): keep roundTools byte-stable across
+    // all rounds of a turn (even after webResearchCalls reaches MAX_WEB_RESEARCH_CALLS;
+    // filterToolsForWebBudget is retained for standalone callers while excess web
+    // calls in the turn loop are rejected at dispatch time), and precompute
+    // roundToolSchemaTokens once per turn.
+    void filterToolsForWebBudget;
+    const roundTools = llmTools;
+    const roundToolSchemaTokens = estimateToolSchemaTokens(roundTools);
 
     // TURN-START WIRING (compaction-hybrid turn-start fix): the turn-start
     // prepare now receives the resolved strategy plus the summarize adapter so
@@ -655,6 +663,25 @@ export async function runChatTurn(
 
     // Send initial metadata
     const initialEstimatedTokens = estimateTokens(conversationMessages);
+    let turnRawTokens = initialEstimatedTokens;
+    let turnRawTokensDirty = false;
+    const markTurnRawTokensDirty = () => {
+      turnRawTokensDirty = true;
+    };
+    const getTurnRawTokens = () => {
+      if (turnRawTokensDirty) {
+        turnRawTokens = estimateTokens(conversationMessages);
+        turnRawTokensDirty = false;
+      }
+      return turnRawTokens;
+    };
+    const appendTurnDirective = (directive: string) => {
+      const lenBefore = conversationMessages.length;
+      appendTrailingDirective(conversationMessages, directive);
+      if (conversationMessages.length !== lenBefore) {
+        markTurnRawTokensDirty();
+      }
+    };
     await sendEvent({
       type: "meta",
       model: turnState.activeModel,
@@ -773,13 +800,6 @@ export async function runChatTurn(
         `[DBG] loop top round=${round} turnAborted=${turnAbortController.signal.aborted}`
       );
 
-      // Fix D1 + D2 (F8a/F8b) + Phase 1 (P1): keep roundTools byte-stable across
-      // all rounds of a turn (even after webResearchCalls reaches MAX_WEB_RESEARCH_CALLS;
-      // filterToolsForWebBudget is retained for standalone callers while excess web
-      // calls in the turn loop are rejected at dispatch time).
-      void filterToolsForWebBudget;
-      const roundTools = llmTools;
-      const roundToolSchemaTokens = estimateToolSchemaTokens(roundTools);
       const roundContextWindowTokens =
         resolveRoundModelOptions({
           model: turnState.activeModel,
@@ -787,6 +807,32 @@ export async function runChatTurn(
           userPrompt,
           hasCompletedToolCalls: traces.length > 0,
         }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS;
+
+      // Round-scoped raw message-token tracker (Perf P6):
+      // Reuses the initial turn-start scan on round 0 when clean, otherwise measures
+      // conversationMessages once per round and re-scans only when markDirty() fires.
+      let rawTokens = turnRawTokensDirty ? 0 : turnRawTokens;
+      let dirty = turnRawTokensDirty;
+      const markDirty = () => {
+        dirty = true;
+        markTurnRawTokensDirty();
+      };
+      const getRawTokens = () => {
+        if (dirty) {
+          rawTokens = estimateTokens(conversationMessages);
+          dirty = false;
+          turnRawTokens = rawTokens;
+          turnRawTokensDirty = false;
+        }
+        return rawTokens;
+      };
+      const appendRoundDirective = (directive: string) => {
+        const lenBefore = conversationMessages.length;
+        appendTrailingDirective(conversationMessages, directive);
+        if (conversationMessages.length !== lenBefore) {
+          markDirty();
+        }
+      };
 
       // TOKEN ECONOMICS (c) + Fix D3 (F8c) + Prefix-Reuse Preservation:
       // Defer in-place micro-elision while prompt tokens stay below the 70%
@@ -797,7 +843,8 @@ export async function runChatTurn(
       const preElisionEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
         lastMeasuredPromptTokens,
         lastMeasuredEstimateTokens,
-        toolSchemaTokens: roundToolSchemaTokens,
+        precomputedToolSchemaTokens: roundToolSchemaTokens,
+        precomputedRawMessageTokens: getRawTokens(),
       });
       const microElisionTriggerTokens = computeMicroElisionTriggerTokens({
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
@@ -809,24 +856,23 @@ export async function runChatTurn(
         currentPromptTokens: preElisionEffectiveTokens,
         minPromptTokens: microElisionTriggerTokens,
       });
+      let postElisionTokens: number | undefined;
       if (roundElision.stubbed > 0) {
+        markDirty();
         turnMicroElisions.push(...roundElision.elisions);
-        const postElisionTokens = estimateEffectivePromptTokens(conversationMessages, {
+        postElisionTokens = estimateEffectivePromptTokens(conversationMessages, {
           lastMeasuredPromptTokens,
           lastMeasuredEstimateTokens,
-          toolSchemaTokens: roundToolSchemaTokens,
+          precomputedToolSchemaTokens: roundToolSchemaTokens,
+          precomputedRawMessageTokens: getRawTokens(),
         });
         nextMicroElisionFloorTokens = postElisionTokens + MICRO_ELISION_REARM_DELTA_TOKENS;
       }
 
-      const preFitRawEstimate = estimateTokens(conversationMessages) + roundToolSchemaTokens;
+      const preFitRawEstimate = getRawTokens() + roundToolSchemaTokens;
       const preFitEffectiveTokens =
-        roundElision.stubbed > 0
-          ? estimateEffectivePromptTokens(conversationMessages, {
-              lastMeasuredPromptTokens,
-              lastMeasuredEstimateTokens,
-              toolSchemaTokens: roundToolSchemaTokens,
-            })
+        roundElision.stubbed > 0 && postElisionTokens !== undefined
+          ? postElisionTokens
           : preElisionEffectiveTokens;
 
       // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
@@ -836,7 +882,8 @@ export async function runChatTurn(
           lastMeasuredPromptTokens !== undefined ? preFitEffectiveTokens : undefined,
         lastMeasuredEstimateTokens:
           lastMeasuredPromptTokens !== undefined ? preFitRawEstimate : undefined,
-        toolSchemaTokens: roundToolSchemaTokens,
+        precomputedToolSchemaTokens: roundToolSchemaTokens,
+        precomputedRawMessageTokens: getRawTokens(),
         contextWindowTokens: roundContextWindowTokens,
         outputReserveTokens: ROUND_MAX_TOKENS,
       });
@@ -930,6 +977,7 @@ export async function runChatTurn(
 
         conversationMessages.length = 0;
         conversationMessages.push(...appliedMessages);
+        markDirty();
 
         // When Rung (a) or hybrid compaction replaced older history, clear the
         // pre-compaction provider baseline so the next round dispatches cleanly
@@ -978,19 +1026,20 @@ export async function runChatTurn(
       }
 
       if (compaction.highWater) {
-        appendTrailingDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+        appendRoundDirective(HIGH_WATER_BANKING_DIRECTIVE);
       }
 
       const postFitEffectiveTokens = estimateEffectivePromptTokens(conversationMessages, {
         lastMeasuredPromptTokens,
         lastMeasuredEstimateTokens,
-        toolSchemaTokens: roundToolSchemaTokens,
+        precomputedToolSchemaTokens: roundToolSchemaTokens,
+        precomputedRawMessageTokens: getRawTokens(),
       });
 
       // 2. Measure fitted tokens for continuation (with measured truth + output headroom)
       const continuation = canContinueToolLoop({
         round,
-        contextTokens: estimateTokens(conversationMessages),
+        contextTokens: getRawTokens(),
         measuredPromptTokens: postFitEffectiveTokens,
         budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
         contextWindowTokens: roundContextWindowTokens,
@@ -1027,6 +1076,7 @@ export async function runChatTurn(
               });
             } catch {}
           }
+          markDirty();
           await sendEvent({ type: "steer", texts: steers });
         }
       }
@@ -1041,10 +1091,10 @@ export async function runChatTurn(
       const isFinalRound = continuation.forceSynthesis === true;
       // Final round forced synthesis: prompt model to synthesize answer and suppress tool calls via tool_choice: "none"
       if (isFinalRound) {
-        appendTrailingDirective(conversationMessages, buildSynthesisDirective(userPrompt, true));
+        appendRoundDirective(buildSynthesisDirective(userPrompt, true));
       }
       if (isArtifactRequest) {
-        appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+        appendRoundDirective(OUTPUT_HEADROOM_THINKING_DIRECTIVE);
       }
 
       const roundOptions = resolveRoundModelOptions({
@@ -1070,13 +1120,16 @@ export async function runChatTurn(
       );
       const armRoundDeadline = roundDeadline.arm;
 
+      const fittedMessages = fitContextWindow(conversationMessages, {
+        contextWindowTokens: roundOptions.num_ctx,
+        tools: roundTools,
+        precomputedToolSchemaTokens: roundToolSchemaTokens,
+        precomputedRawMessageTokens: getRawTokens(),
+        isArtifactTurn: isArtifactRequest,
+      });
       const llmPayload: Parameters<ReturnType<typeof getLLMProvider>["streamChat"]>[1] = {
         model: turnState.activeModel,
-        messages: fitContextWindow(conversationMessages, {
-          contextWindowTokens: roundOptions.num_ctx,
-          tools: roundTools,
-          isArtifactTurn: isArtifactRequest,
-        }),
+        messages: fittedMessages,
         keep_alive: -1,
         signal: AbortSignal.any([turnAbortController.signal, roundAbortController.signal]),
         reasoning_effort: roundOptions.reasoning_effort,
@@ -1091,8 +1144,8 @@ export async function runChatTurn(
       }
 
       const dispatchedEstimateTokens =
-        estimateTokens(llmPayload.messages) +
-        (llmPayload.tools ? estimateToolSchemaTokens(llmPayload.tools) : 0);
+        (fittedMessages.estimatedTokens ?? getRawTokens()) +
+        (llmPayload.tools ? roundToolSchemaTokens : 0);
 
       let fullRoundContent = "";
       let roundThinking = "";
@@ -1307,6 +1360,7 @@ export async function runChatTurn(
             role: "user",
             content: ROUND_TIMEOUT_DIRECTIVE,
           });
+          markDirty();
           reasoningSpan.end("ok", { roundTimedOut });
           // The retry round must actually be dispatched: lastRoundTools is
           // empty after an abort, so without awaitingToolRound the loop
@@ -1321,6 +1375,7 @@ export async function runChatTurn(
             role: "assistant",
             content: fullRoundContent,
           });
+          markDirty();
         }
         reasoningSpan.end("ok");
         groundingDirectivePending = true;
@@ -1407,6 +1462,7 @@ export async function runChatTurn(
             role: "user",
             content: markupEval.directive!,
           });
+          markDirty();
           groundingDirectivePending = true;
           lastRoundTools = [];
           round++;
@@ -1426,13 +1482,12 @@ export async function runChatTurn(
           isLiveRealTimeIntent(userPrompt) &&
           webResearchCalls === 0 &&
           round < TOOL_ROUND_BACKSTOP - 1 &&
-          estimateTokens(conversationMessages) <= CHAT_CONTEXT_BUDGET_TOKENS &&
+          getRawTokens() <= CHAT_CONTEXT_BUDGET_TOKENS &&
           !groundingEnforced
         ) {
           groundingEnforced = true;
           groundingDirectivePending = true;
-          appendTrailingDirective(
-            conversationMessages,
+          appendRoundDirective(
             `[GROUNDING ENFORCEMENT]: You need current/real-time information before answering. Formulate the web search query YOURSELF: concise, the information need only. Resolve references from the conversation ("the day" means today, "there"/"it" means the place or topic already discussed -- carry place names like "Spanish Fort AL" forward). Never use the user's instructions, formatting requests, or meta-questions as the query. Only invoke search_web when you genuinely need external data -- do not search questions about the conversation itself. Invoke 'search_web' with your formulated query now. Do not hallucinate or claim you searched without invoking 'search_web'.`
           );
           round++;
@@ -1468,6 +1523,7 @@ export async function runChatTurn(
             role: "user",
             content: LENGTH_CONTINUATION_DIRECTIVE,
           });
+          markDirty();
           // Bank this half so the final answer keeps every produced part.
           carriedLengthContent = joinNarrationChunks(carriedLengthContent, fullRoundContent);
           await sendEvent({
@@ -1522,6 +1578,7 @@ export async function runChatTurn(
         tool_calls: toolCalls,
       };
       conversationMessages.push(assistantMsgToPush);
+      markDirty();
 
       let searchBlocked = false;
 
@@ -2275,7 +2332,7 @@ export async function runChatTurn(
         shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
       ) {
         honestAbortInjected = true;
-        appendTrailingDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+        appendRoundDirective(HONEST_ABORT_DIRECTIVE);
         await sendEvent({
           type: "trace",
           trace: {
@@ -2314,7 +2371,7 @@ export async function runChatTurn(
       shouldInjectHonestAbort({ userPrompt, priorUserPrompt, webResearchCalls, traces })
     ) {
       honestAbortInjected = true;
-      appendTrailingDirective(conversationMessages, HONEST_ABORT_DIRECTIVE);
+      appendTurnDirective(HONEST_ABORT_DIRECTIVE);
       await sendEvent({
         type: "trace",
         trace: {
@@ -2347,11 +2404,12 @@ export async function runChatTurn(
       }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
       ROUND_MAX_TOKENS
     );
-    const synthToolSchemaTokens = estimateToolSchemaTokens(llmTools);
+    const synthToolSchemaTokens = roundToolSchemaTokens;
     const synthMeasuredInput = estimateEffectivePromptTokens(conversationMessages, {
       lastMeasuredPromptTokens,
       lastMeasuredEstimateTokens,
-      toolSchemaTokens: synthToolSchemaTokens,
+      precomputedToolSchemaTokens: synthToolSchemaTokens,
+      precomputedRawMessageTokens: getTurnRawTokens(),
     });
     const hasOutputHeadroomForSynthesis = !(
       toolLoopStopReason === "budget" && synthMeasuredInput > synthWindowCeiling
@@ -2392,6 +2450,7 @@ export async function runChatTurn(
               });
             } catch {}
           }
+          markTurnRawTokensDirty();
           await sendEvent({ type: "steer", texts: steers });
         }
       }
@@ -2404,6 +2463,7 @@ export async function runChatTurn(
         role: "user",
         content: buildSynthesisDirective(userPrompt, false),
       });
+      markTurnRawTokensDirty();
 
       await sendEvent({
         type: "status",
@@ -2411,7 +2471,7 @@ export async function runChatTurn(
       });
 
       if (isArtifactRequest) {
-        appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+        appendTurnDirective(OUTPUT_HEADROOM_THINKING_DIRECTIVE);
       }
 
       const synthOptions = resolveRoundModelOptions({
@@ -2421,6 +2481,7 @@ export async function runChatTurn(
         isSynthesisOrFinalRound: true,
         hasCompletedToolCalls: traces.length > 0,
       });
+      const synthRawMessageTokens = getTurnRawTokens();
 
       // SYNTHESIS-RETRY: a single synthesis pass, streamed into the shared accumulators.
       const runSynthesisPass = async () => {
@@ -2435,7 +2496,9 @@ export async function runChatTurn(
             llmBaseUrl: getLlmBaseUrl(),
             activeModel: turnState.activeModel,
             conversationMessages,
-            tools: llmTools,
+            tools: roundTools,
+            precomputedRawMessageTokens: synthRawMessageTokens,
+            precomputedToolSchemaTokens: roundToolSchemaTokens,
             isArtifactRequest,
             turnAbortSignal: turnAbortController.signal,
             synthOptions,
