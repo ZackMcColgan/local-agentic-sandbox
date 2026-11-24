@@ -24,6 +24,7 @@
   - [Security boundary](#security-boundary)
   - [Observability](#observability)
 - [How a job runs](#how-a-job-runs)
+- [After the pull request](#after-the-pull-request)
 - [Running it](#running-it)
   - [Prerequisites](#prerequisites)
   - [Deploy](#deploy)
@@ -67,6 +68,8 @@
 | **Thread Store**              | [`web-ui/lib/threads/threadStore.ts`](./web-ui/lib/threads/threadStore.ts)           | Durable thread records; stat-based cheap sweeps keep the server responsive at hundreds of threads                                                          |
 | **Safe Git Operations**       | [`web-ui/lib/git/workerGitOps.ts`](./web-ui/lib/git/workerGitOps.ts)                 | Argv-safe git commands, branch isolation, and commit validation immune to shell injection                                                                  |
 | **Self-Deploy Pipeline**      | [`web-ui/lib/deploy/selfDeploy.ts`](./web-ui/lib/deploy/selfDeploy.ts)               | Automated Docker build, local save/import, Kubernetes `set image` rollout wait, and rollback on failure                                                    |
+| **Reviewer Gate**               | [`web-ui/lib/board/reviewerGate.ts`](./web-ui/lib/board/reviewerGate.ts)             | Adversarial diff audit against the item brief (scope, hygiene, test-weakening heuristics); runs in shadow mode until its agreement evidence earns merge authority |
+| **Flow Monitor**                | [`web-ui/lib/board/flowMonitor.ts`](./web-ui/lib/board/flowMonitor.ts)               | Watches open PRs to CI conclusion; a red run earns one bounded fix cycle, repeated failure surfaces as needs-attention instead of looping                      |
 | **Host Bridge**               | [`host-bridge/`](./host-bridge/)                                                     | Sole external boundary (host process): host tools, git/GitHub, internet access behind an approval classifier; credentials live only in the host OS keyring |
 | **Zero-Trust MCP Toolchain**  | [`mcp-server/src/tools/workspaceTools.ts`](./mcp-server/src/tools/workspaceTools.ts) | Hardened execution boundary in a read-only, capability-dropped pod; path traversal guards and ReDoS-safe workspace inspection                              |
 | **Browser MCP**               | [`browser-mcp/`](./browser-mcp/)                                                     | Isolated web-fetch pod with SSRF guards (RFC 1918 blocked)                                                                                                 |
@@ -96,6 +99,16 @@ Every agent turn is an OpenTelemetry trace: the collector receives spans for eac
 4. **Verify** — the change-aware test gate runs the affected tests; CI runs seven checks (typecheck, unit, coverage, container, three Playwright shards) plus the invariant net.
 5. **Ship** — green work merges to `develop` by pull request, the platform deploys itself to the local cluster, and the deploy is verified live (pod health, gateway, API) before the item is called done.
 6. **Report** — a morning report summarizes milestones, commits, test evidence, and anything flagged for human review.
+
+## After the pull request
+
+Writing the code turned out to be the easy half. The bottleneck in agent-built software is everything after the PR opens — review, red CI, merge judgment, deployment — so the platform treats that stretch as a pipeline of its own, with the same fail-closed discipline as the build:
+
+- **Adversarial review** — a reviewer with fresh context (never the job's own thread) audits the diff against the item's brief: scope vs. the brief's file allowlist, repo hygiene, tests deleted or assertions removed (an automatic fail), guard-pattern greps, and the error paths adjacent to the change.
+- **Bounded fix cycles** — the flow monitor watches each open PR to CI conclusion. A red run earns exactly one bounded fix cycle on the same PR; a second failure on the same root cause stops the loop and surfaces the item as needs-attention with the evidence attached.
+- **Finish verification** — a completion claim is checked against ground truth before anything is stamped done: the PR exists, the commits landed after the job started, the gate actually ran. A claim that does not verify is stamped unverified, never done.
+- **Verified self-deploy** — the rollback target is banked before any build starts; the new build is verified live (rollout, pod health, gateway, API) and a failed verification rolls back automatically and suspends further deploys.
+- **Staged autonomy** — each of these functions transfers from the operator to the platform one stage at a time, and only on the owner's declaration. The reviewer runs in shadow mode first: its verdicts are logged alongside the human audits, and it earns merge authority only after sustained agreement (at least 95% over at least 10 PRs) with zero escapes. Autonomy here is not a switch; it is a ladder, and every rung has an evidence bar.
 
 ## Running it
 
