@@ -547,14 +547,11 @@ describe("Batch B — Turn Survival (F5, F4, F9, F13)", () => {
         let sawStalled = false;
         while (commandInFlight) {
           await sleep(80);
-          const rawFile = threadStore.getFilePath(threadId);
-          if (fs.existsSync(rawFile)) {
-            const diskThread = JSON.parse(fs.readFileSync(rawFile, "utf8"));
-            if (diskThread.status === "active") {
-              seenUpdatedAts.add(diskThread.updatedAt);
-              const det = detectStalledTurn(diskThread, Date.now(), scaledStallWindowMs);
-              if (det.stalled) sawStalled = true;
-            }
+          const liveThread = await threadStore.getThread(threadId);
+          if (liveThread && liveThread.status === "active") {
+            seenUpdatedAts.add(liveThread.updatedAt);
+            const det = detectStalledTurn(liveThread, Date.now(), scaledStallWindowMs);
+            if (det.stalled) sawStalled = true;
           }
         }
 

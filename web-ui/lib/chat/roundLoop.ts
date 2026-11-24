@@ -2245,9 +2245,8 @@ export async function runChatTurn(
         await executeToolBatches();
       }
 
-      // TURN-LIVENESS: round boundary is a discrete progress event — persist the
-      // accumulated content + traces to the thread record immediately (bypassing the
-      // token throttle) and refresh the heartbeat so watchers read ALIVE in-flight work.
+      // PERF-P1 / P-F1: persist round-boundary traces on the throttled 5s snapshot
+      // cadence (fast <5s rounds coalesce until the interval elapses or settlement).
       const roundThought =
         accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined;
       streamSnapshot.maybeWrite(
@@ -2255,7 +2254,6 @@ export async function runChatTurn(
         roundThought,
         traces as unknown as Parameters<typeof streamSnapshot.maybeWrite>[2],
         {
-          force: true,
           roundPromptTokens: [...roundPromptTokens],
           roundGenerationMs: [...roundGenerationMs],
           outputTokens:
@@ -2266,9 +2264,6 @@ export async function runChatTurn(
           roundNarrations: roundNarrations.length > 0 ? [...roundNarrations] : undefined,
         }
       );
-      if (activeThreadId) {
-        touchActiveTurn(activeThreadId);
-      }
 
       if (searchBlocked) {
         break;

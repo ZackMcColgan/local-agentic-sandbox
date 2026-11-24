@@ -1694,6 +1694,15 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("streamPollGate.test.ts"),
     tests: ["tests/streamPollGate.test.ts"],
   },
+  {
+    match: (p) =>
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/streamSnapshot") ||
+      p.includes("components/ChatStream") ||
+      p.includes("heartbeatWrites.test.ts"),
+    tests: ["tests/heartbeatWrites.test.ts"],
+  },
 ];
 
 /**
