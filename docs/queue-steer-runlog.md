@@ -282,3 +282,28 @@ docs/queue-steer-runlog.md` -> clean. `git diff --ignore-cr-at-eol --stat` -> em
   out of scope - left untouched). develop tip advanced to `ed91eb0` (PR #254 MCP Streamable
   HTTP merged); does not affect this scope.
 - Status: COMPLETE. Nothing left in scope; PR #252 awaits owner-side merge into develop.
+
+## board-57 (2026-11-24) - scrub personal names, host paths, banned vendor terms
+
+- Branch `feature/hygiene-scrub-personal-data` rebased onto `origin/develop` (`ed91eb0`).
+- Runtime/metadata/comments: `web-ui/app/layout.tsx` metadata already neutral; scrubbed
+  personal-name fixtures in `web-ui/tests/userProfile.test.ts`, `operatorMemory.test.ts`,
+  `operatorMemoryInjection.test.ts`, `morningReport.test.ts`,
+  `dogfoodPhase1Acceptance.test.ts`, `web-ui/scripts/run-dogfood-overnight.ts` (-> "Alex" /
+  "Owner" neutral terms).
+- Scripts fixtures: `scripts/bench-quality.js`, `scripts/verify-phase-c.js` personal-name
+  fixtures replaced with neutral names.
+- Host paths: sanitized `C:\Users\...` examples in `web-ui/components/settings/HostZone.tsx`
+  placeholder, `web-ui/lib/activityTimeline.ts` and `web-ui/lib/chatUtils.ts` doc comments;
+  committed eval scorecards (`eval/results/baseline-*/endpoint/scorecard.{json,md}`) verified
+  clean of absolute user paths (untracked timestamped eval dirs left untouched).
+- Banned vendor terms: test descriptions neutralized in
+  `web-ui/tests/e2e/layoutInvariants.spec.ts`, `web-ui/tests/mobileHeaderNav.test.ts`,
+  `web-ui/tests/llmProvider.test.ts` describe titles.
+- Automated hygiene check: `web-ui/tests/repoHygiene.test.ts` detector covers runtime,
+  metadata, docs, tests, scripts, eval - flags personal names, absolute user paths, banned
+  vendor terms; runs in the `test:gate` suite. Allowlist extended for functional deploy
+  manifests (HOST_CHECKOUT_PATH drives the live host runner; prod must stay up - assumption
+  logged, out of brief evidence scope).
+- Verification: `npx tsx web-ui/tests/repoHygiene.test.ts` -> 0 violations;
+  `npm run test:gate` -> PASSED 15/15 in 13.5s.
