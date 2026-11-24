@@ -493,6 +493,23 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
     // execute against the container's shared /workspace, so a worktree here
     // added git churn without providing isolation. Re-enable repoRoot only
     // when MCP workspace tools accept a workspace-root argument.
+    const isBoardJob =
+      turnPriority === SlotPriority.P1_BUILDER || Boolean(threadData?.boardItemId);
+    const configuredWorkspaceDir = process.env.WORKSPACE_DIR?.trim();
+    const configuredHostCheckout = process.env.HOST_CHECKOUT_PATH?.trim();
+    const envThreadsDir = process.env.THREADS_DIR?.trim();
+    const usesContainerWorkspace =
+      Boolean(configuredWorkspaceDir) ||
+      Boolean(envThreadsDir && envThreadsDir.startsWith("/workspace")) ||
+      (process.env.NODE_ENV === "production" && !envThreadsDir && fs.existsSync("/workspace"));
+    const usesSharedHostCheckout =
+      Boolean(configuredHostCheckout) && (threadHostAccess || isBoardJob);
+    const sharedWorkspaceKey = usesContainerWorkspace
+      ? configuredWorkspaceDir || "/workspace"
+      : usesSharedHostCheckout
+        ? configuredHostCheckout
+        : undefined;
+
     const turnHandle = serializeTurn(
       chatJobQueue,
       {
@@ -504,6 +521,9 @@ ${buildFileDeliverablesDirective(activeThreadId, threadsDir)}`;
         priority: turnPriority,
         scheduler: getSharedSlotScheduler(),
         signal: turnAbortController.signal,
+        ...(sharedWorkspaceKey
+          ? { workspaceKey: sharedWorkspaceKey, sharedWorkspace: true }
+          : {}),
         onQueued: (position) => {
           sendEvent({
             type: "status",

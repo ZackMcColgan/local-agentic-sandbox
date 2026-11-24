@@ -2229,10 +2229,17 @@ export async function runChatTurn(
         }
       }; // end executeToolBatches
 
-      // Board #129 P5-B: release the engine slot lease for the tool-wait span
-      // (host installs/tests run outside the engine), then re-acquire before
-      // the next LLM round. No lease (non-gated callers) executes directly.
-      if (lease) {
+      // Board #129 P5-B + R5: on single-slot engines (LLM_CONCURRENCY === 1),
+      // keep the lease held across short read-only parallel batches to preserve
+      // KV cache residency; only release when a barrier/long wait is present or
+      // when LLM_CONCURRENCY > 1.
+      const hasBarrierBatch = batches.some((b) => b.kind === "barrier");
+      const parsedConcurrency = process.env.LLM_CONCURRENCY
+        ? parseInt(process.env.LLM_CONCURRENCY, 10)
+        : 1;
+      const llmConcurrency =
+        Number.isFinite(parsedConcurrency) && parsedConcurrency > 0 ? parsedConcurrency : 1;
+      if (lease && (hasBarrierBatch || llmConcurrency > 1)) {
         await lease.releaseForWait(executeToolBatches);
       } else {
         await executeToolBatches();
