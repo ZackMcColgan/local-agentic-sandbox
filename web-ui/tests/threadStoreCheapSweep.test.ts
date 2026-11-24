@@ -208,7 +208,7 @@ test("A3: message-level streaming on a non-active thread is still detected and e
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTempDirWithRetries(dir);
   }
 });
 
