@@ -376,6 +376,21 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("reviewerVerdictParser.test.ts"),
+    tests: ["tests/reviewerVerdictParser.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("app/api/board/reviewer-audit") ||
+      p.includes("lib/board/reviewerAuditEvaluate") ||
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("reviewerAuditEvaluate.test.ts"),
+    tests: ["tests/reviewerAuditEvaluate.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/board/boardOrchestrator") ||
       p.includes("lib/board/boardControl.ts") ||
       p.includes("app/api/board/drain") ||
