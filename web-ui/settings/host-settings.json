@@ -1,0 +1,7 @@
+{
+  "hostAccessEnabled": true,
+  "allowUnattendedHostGit": false,
+  "jobChunkingEnabled": true,
+  "fileRestrictionEnabled": false,
+  "allowedHostPaths": []
+}

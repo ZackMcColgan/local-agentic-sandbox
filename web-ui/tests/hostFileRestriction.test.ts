@@ -24,24 +24,24 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
   let settingsFile: string;
   let originalContent: string | null = null;
   let prevRunnerUrl: string | undefined;
+  let prevSettingsDir: string | undefined;
+  let isolatedDir: string;
 
   beforeEach(() => {
+    // Isolate the server-side settings store in a temp dir (SETTINGS_DIR override)
+    // so concurrent gate-batch processes never read a restriction we toggled ON.
+    isolatedDir = fs.mkdtempSync(path.join(fs.tmpdir(), "b132-settings-"));
+    prevSettingsDir = process.env.SETTINGS_DIR;
+    process.env.SETTINGS_DIR = isolatedDir;
     settingsFile = getHostSettingsFilePath();
-    if (fs.existsSync(settingsFile)) {
-      originalContent = fs.readFileSync(settingsFile, "utf8");
-      fs.unlinkSync(settingsFile);
-    } else {
-      originalContent = null;
-    }
+    originalContent = null;
     prevRunnerUrl = process.env.HOST_RUNNER_URL;
   });
 
   afterEach(() => {
-    if (originalContent !== null) {
-      fs.writeFileSync(settingsFile, originalContent, "utf8");
-    } else if (fs.existsSync(settingsFile)) {
-      fs.unlinkSync(settingsFile);
-    }
+    if (prevSettingsDir === undefined) delete process.env.SETTINGS_DIR;
+    else process.env.SETTINGS_DIR = prevSettingsDir;
+    fs.rmSync(isolatedDir, { recursive: true, force: true });
     if (prevRunnerUrl === undefined) delete process.env.HOST_RUNNER_URL;
     else process.env.HOST_RUNNER_URL = prevRunnerUrl;
   });
