@@ -1,8 +1,9 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
+import os from "os";
 import path from "path";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import { isDrawioXml } from "../lib/svgUtils";
 import { createCriticWorker, getResolvedGitSha } from "../lib/subagents/workerPool";
 import { Milestone } from "../lib/subagents/types";
@@ -20,7 +21,6 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
     : path.resolve(process.cwd(), "..");
 
   const drawioPath = path.resolve(repoRoot, "docs/architecture.drawio");
-  const svgPath = path.resolve(repoRoot, "docs/architecture.svg");
 
   it("Verification 1: docs/architecture.drawio exists, is non-empty, and is valid XML", () => {
     assert.ok(fs.existsSync(drawioPath), `Expected ${drawioPath} to exist`);
@@ -36,93 +36,119 @@ describe("Sprint 4 — The Dogfood Run: drawio to SVG Toolchain Acceptance", () 
     );
   });
 
-  it("Verification 2: Toolchain converts docs/architecture.drawio to docs/architecture.svg (delete-and-regenerate)", () => {
-    // 1. Delete docs/architecture.svg if it exists to test pure generation
-    if (fs.existsSync(svgPath)) {
-      fs.unlinkSync(svgPath);
-    }
-    assert.equal(
-      fs.existsSync(svgPath),
-      false,
-      "docs/architecture.svg must be deleted prior to regeneration test"
-    );
+  it("Verification 2: Toolchain converts docs/architecture.drawio to a temp SVG without mutating tracked docs/architecture.svg", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dogfood-svg-"));
+    const tempDrawioPath = path.join(tmpDir, "architecture.drawio");
+    const tempSvgPath = path.join(tmpDir, "architecture.svg");
+    fs.copyFileSync(drawioPath, tempDrawioPath);
 
-    // 2. Invoke the toolchain script or fallback to fixture when drawio CLI is unavailable
-    const toolchainScript = path.resolve(repoRoot, "scripts/drawio-to-svg.ts");
-    if (useRealDrawio && fs.existsSync(toolchainScript)) {
-      const tsxPath = path.resolve(repoRoot, "web-ui/node_modules/tsx/dist/cli.mjs");
-      const output = execSync(
-        `node "${tsxPath}" "${toolchainScript}" "${drawioPath}" "${svgPath}"`,
-        {
-          encoding: "utf8",
-          cwd: repoRoot,
-        }
+    try {
+      assert.equal(
+        fs.existsSync(tempSvgPath),
+        false,
+        "temp architecture.svg must not exist prior to regeneration test"
+      );
+
+      // 2. Invoke the toolchain script or fallback to fixture when drawio CLI is unavailable
+      const toolchainScript = path.resolve(repoRoot, "scripts/drawio-to-svg.ts");
+      if (useRealDrawio && fs.existsSync(toolchainScript)) {
+        const tsxPath = path.resolve(repoRoot, "web-ui/node_modules/tsx/dist/cli.mjs");
+        const output = execSync(
+          `node "${tsxPath}" "${toolchainScript}" "${tempDrawioPath}" "${tempSvgPath}"`,
+          {
+            encoding: "utf8",
+            cwd: tmpDir,
+          }
+        );
+        assert.ok(
+          output.includes("SUCCESS") || output.includes("Generated"),
+          `Toolchain must report success: ${output}`
+        );
+      } else {
+        // Mock draw.io CLI wrapper: emit fixture SVG satisfying downstream validation logic
+        fs.writeFileSync(tempSvgPath, getFixtureDrawioSvg(), "utf8");
+      }
+
+      // 3. Check generated SVG file
+      assert.ok(fs.existsSync(tempSvgPath), "temp architecture.svg must be created by toolchain");
+      const svgContent = fs.readFileSync(tempSvgPath, "utf8");
+      assert.ok(
+        svgContent.length > 5000,
+        `SVG file must be substantive (>5000 bytes), got ${svgContent.length}`
       );
       assert.ok(
-        output.includes("SUCCESS") || output.includes("Generated"),
-        `Toolchain must report success: ${output}`
+        svgContent.startsWith("<svg") || svgContent.includes("<svg"),
+        "Must contain opening <svg tag"
       );
-    } else {
-      // Mock draw.io CLI wrapper: emit fixture SVG satisfying downstream validation logic
-      const outDir = path.dirname(svgPath);
-      if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-      fs.writeFileSync(svgPath, getFixtureDrawioSvg(), "utf8");
-    }
+      assert.ok(svgContent.includes("</svg>"), "Must contain closing </svg> tag");
+      assert.ok(svgContent.includes("viewBox="), "Must contain responsive viewBox attribute");
 
-    // 3. Check generated SVG file
-    assert.ok(fs.existsSync(svgPath), "docs/architecture.svg must be created by toolchain");
-    const svgContent = fs.readFileSync(svgPath, "utf8");
-    assert.ok(
-      svgContent.length > 5000,
-      `SVG file must be substantive (>5000 bytes), got ${svgContent.length}`
-    );
-    assert.ok(
-      svgContent.startsWith("<svg") || svgContent.includes("<svg"),
-      "Must contain opening <svg tag"
-    );
-    assert.ok(svgContent.includes("</svg>"), "Must contain closing </svg> tag");
-    assert.ok(svgContent.includes("viewBox="), "Must contain responsive viewBox attribute");
+      // 4. Verify architectural component labels are preserved
+      const requiredLabels = [
+        "CLIENT & INGRESS LAYER",
+        "KUBERNETES CLUSTER",
+        "HOST INFERENCE BOUNDARY",
+        "web-ui Orchestrator Pod",
+        "mcp-runner Tool Boundary",
+        "browser-mcp Scraper Pod",
+        "builder-tier Toolchain Sandbox",
+        "qdrant-service: Qdrant Vector",
+        "llm-service",
+      ];
 
-    // 4. Verify architectural component labels are preserved
-    const requiredLabels = [
-      "CLIENT & INGRESS LAYER",
-      "KUBERNETES CLUSTER",
-      "HOST INFERENCE BOUNDARY",
-      "web-ui Orchestrator Pod",
-      "mcp-runner Tool Boundary",
-      "browser-mcp Scraper Pod",
-      "builder-tier Toolchain Sandbox",
-      "qdrant-service: Qdrant Vector",
-      "llm-service",
-    ];
-
-    for (const label of requiredLabels) {
-      assert.ok(
-        svgContent.includes(label) || svgContent.includes(label.replace(/&/g, "&amp;")),
-        `Generated SVG must contain architectural label '${label}'`
-      );
+      for (const label of requiredLabels) {
+        assert.ok(
+          svgContent.includes(label) || svgContent.includes(label.replace(/&/g, "&amp;")),
+          `Generated SVG must contain architectural label '${label}'`
+        );
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
   it("Verification 3: Real Git SHA resolution and no fabricated commit hashes", () => {
-    const realSha = getResolvedGitSha(repoRoot);
-    assert.ok(
-      /^[0-9a-f]{40}$/i.test(realSha),
-      `Must be a genuine 40-character git SHA, got ${realSha}`
-    );
-    assert.notEqual(
-      realSha,
-      "d7c84cb12a5e4b6c8d0e2f4a6b8c0d2e4f6a8b0c",
-      "Must not be the fake fallback hash"
-    );
+    const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "dogfood-git-"));
+    try {
+      execFileSync("git", ["init"], { cwd: tmpRepo, stdio: "ignore" });
+      execFileSync("git", ["config", "user.name", "Dogfood Tester"], {
+        cwd: tmpRepo,
+        stdio: "ignore",
+      });
+      execFileSync("git", ["config", "user.email", "dogfood@example.com"], {
+        cwd: tmpRepo,
+        stdio: "ignore",
+      });
+      fs.writeFileSync(path.join(tmpRepo, "README.md"), "# temp fixture\n", "utf8");
+      execFileSync("git", ["add", "README.md"], { cwd: tmpRepo, stdio: "ignore" });
+      execFileSync("git", ["commit", "-m", "chore: init fixture"], {
+        cwd: tmpRepo,
+        stdio: "ignore",
+      });
 
-    // Verifies against git log
-    const gitHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf8" }).trim();
-    assert.equal(
-      realSha.toLowerCase(),
-      gitHead.toLowerCase(),
-      "getResolvedGitSha must match actual git rev-parse HEAD"
-    );
+      const realSha = getResolvedGitSha(tmpRepo);
+      assert.ok(
+        /^[0-9a-f]{40}$/i.test(realSha),
+        `Must be a genuine 40-character git SHA, got ${realSha}`
+      );
+      assert.notEqual(
+        realSha,
+        "d7c84cb12a5e4b6c8d0e2f4a6b8c0d2e4f6a8b0c",
+        "Must not be the fake fallback hash"
+      );
+
+      const gitHead = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: tmpRepo,
+        encoding: "utf8",
+      }).trim();
+      assert.equal(
+        realSha.toLowerCase(),
+        gitHead.toLowerCase(),
+        "getResolvedGitSha must match actual git rev-parse HEAD"
+      );
+    } finally {
+      fs.rmSync(tmpRepo, { recursive: true, force: true });
+    }
   });
 
   it("Verification 4: Critic evaluated diffs without fail-open (abstained when model unreachable, approves conforming)", async () => {

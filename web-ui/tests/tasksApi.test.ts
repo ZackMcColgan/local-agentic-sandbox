@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { POST, GET, DELETE } from "../app/api/tasks/route.js";
+import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
 describe("Phase 1 — Tasks API Route Suite", () => {
   const prevWorkspaceDir = process.env.WORKSPACE_DIR;
@@ -33,6 +34,7 @@ describe("Phase 1 — Tasks API Route Suite", () => {
   });
 
   after(() => {
+    closeSharedRunLedger();
     if (prevWorkspaceDir === undefined) delete process.env.WORKSPACE_DIR;
     else process.env.WORKSPACE_DIR = prevWorkspaceDir;
     if (prevCheckpointDir === undefined) delete process.env.AGENT_CHECKPOINT_DIR;

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { BoardItem, BoardStatus } from "../board/boardStore";
 
 export const SELF_DEPLOY_VERIFIED_STAGE_DEFAULT = false;
@@ -48,6 +50,7 @@ export interface VerifyDeploymentResult {
   gatewayStatus: number;
   threadListLoads: boolean;
   observedTag: string;
+  observedSha?: string | null;
   failedStep?: string;
   observed?: string;
 }
@@ -171,10 +174,82 @@ export async function runSelfDeployVerified(
     status: "deployed",
     rollbackTarget: s1.tag,
     deployTag,
-    prodEqualsDevelop: true,
+    prodEqualsDevelop: computeProdEqualsDevelop(
+      input.developSha,
+      s4.observedTag ?? deployTag,
+      s4.observedSha ?? resolveDeployedCommitSha()
+    ),
     needsAttention: false,
     evidence: `Deployed ${deployTag} (develop ${input.developSha}); gateway ${s4.gatewayStatus}`,
   };
+}
+
+/**
+ * HO-4: Resolves the deployed commit SHA from build-time env vars or an optional
+ * baked `build-info.json` file. Returns null when unavailable.
+ */
+export function resolveDeployedCommitSha(
+  env: Record<string, string | undefined> = process.env,
+  buildInfoPath?: string
+): string | null {
+  const fromEnv =
+    env.DEPLOYED_COMMIT_SHA?.trim() || env.BUILD_COMMIT_SHA?.trim() || env.GIT_SHA?.trim() || "";
+  if (/^[0-9a-f]{7,40}$/i.test(fromEnv)) {
+    return fromEnv.toLowerCase();
+  }
+  const candidatePath = buildInfoPath ?? path.resolve(process.cwd(), "build-info.json");
+  try {
+    if (fs.existsSync(candidatePath)) {
+      const parsed = JSON.parse(fs.readFileSync(candidatePath, "utf8")) as {
+        commitSha?: unknown;
+        sha?: unknown;
+      };
+      const raw =
+        typeof parsed?.commitSha === "string"
+          ? parsed.commitSha.trim()
+          : typeof parsed?.sha === "string"
+            ? parsed.sha.trim()
+            : "";
+      if (/^[0-9a-f]{7,40}$/i.test(raw)) {
+        return raw.toLowerCase();
+      }
+    }
+  } catch {
+    // Ignore unreadable build-info.json
+  }
+  return null;
+}
+
+/**
+ * HO-4: Computes whether the deployed image/commit matches `developSha` by
+ * comparing hex SHA prefixes (>= 7 chars) rather than hardcoding `true`.
+ */
+export function computeProdEqualsDevelop(
+  developSha: string,
+  observedTag?: string,
+  deployedCommitSha?: string | null
+): boolean {
+  const target = (developSha || "").trim().toLowerCase();
+  if (!/^[0-9a-f]{7,40}$/.test(target)) return false;
+
+  // Prefer explicit SHA extracted from observedTag when present; fall back to deployedCommitSha.
+  let candidate: string | null = null;
+  if (typeof observedTag === "string" && observedTag.trim()) {
+    const tagPart = observedTag.trim().split(":").pop() ?? "";
+    const shaMatch = /(?:^|[-_])([0-9a-f]{7,40})$/i.exec(tagPart);
+    if (shaMatch) candidate = shaMatch[1].toLowerCase();
+  }
+  if (
+    !candidate &&
+    typeof deployedCommitSha === "string" &&
+    /^[0-9a-f]{7,40}$/i.test(deployedCommitSha.trim())
+  ) {
+    candidate = deployedCommitSha.trim().toLowerCase();
+  }
+  if (!candidate) return false;
+
+  const minLen = Math.min(candidate.length, target.length);
+  return minLen >= 7 && target.slice(0, minLen) === candidate.slice(0, minLen);
 }
 
 export interface SprintReportItem {

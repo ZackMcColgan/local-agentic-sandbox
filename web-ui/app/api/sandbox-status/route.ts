@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PRESET_MODEL_PROFILES, DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import { getLLMProvider } from "@/lib/llm/provider";
+import { resolveDeployedCommitSha } from "@/lib/deploy/selfDeployVerified";
 
 const LLM_BASE_URL =
   process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://llm-service:11434";
@@ -52,6 +53,7 @@ export async function GET() {
 
   return NextResponse.json({
     timestamp,
+    deployed_commit_sha: resolveDeployedCommitSha(),
     cluster: {
       network: "ai-mesh",
       air_gapped: true,

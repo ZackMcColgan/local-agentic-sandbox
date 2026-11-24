@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { BOARD_SEED_ITEMS } from "./boardSeed";
 import { extractThreadIdFromLink } from "./threadLink";
-import { atomicWriteFileSync } from "../fsAtomic";
+import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 
 export { extractThreadIdFromLink };
 
@@ -240,14 +240,33 @@ export class BoardStore {
     );
   }
 
+  private lastQuarantinePath: string | null = null;
+
+  getLastQuarantinePath(): string | null {
+    return this.lastQuarantinePath;
+  }
+
   private readAll(): BoardItem[] {
     if (!fs.existsSync(this.filePath)) {
       return [];
     }
-    const raw = fs.readFileSync(this.filePath, "utf8");
-    if (!raw.trim()) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    try {
+      const raw = fs.readFileSync(this.filePath, "utf8");
+      if (!raw.trim()) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        this.lastQuarantinePath = quarantineCorruptFile(
+          this.filePath,
+          "board.json root is not an array"
+        );
+        return [];
+      }
+      return parsed;
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.lastQuarantinePath = quarantineCorruptFile(this.filePath, reason);
+      return [];
+    }
   }
 
   private writeAll(items: BoardItem[]): void {
