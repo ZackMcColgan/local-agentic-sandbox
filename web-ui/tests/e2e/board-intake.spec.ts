@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setupStubbedEngineRoutes } from "../tests/e2e/helpers/mockEngine";
+import { setupStubbedEngineRoutes } from "./helpers/mockEngine";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
