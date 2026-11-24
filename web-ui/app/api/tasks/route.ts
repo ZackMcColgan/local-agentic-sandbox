@@ -9,6 +9,7 @@ import { generateMorningReport, MorningReport } from "@/lib/subagents/morningRep
 import { TaskManifest, ToolchainType } from "@/lib/subagents/types";
 import { activeExecutionSet } from "@/lib/threads/threadStore";
 import { unloadAllModels } from "@/lib/subagents/residency";
+import { parseJsonBody } from "@/lib/apiJson";
 
 // In-memory task store & active cancellation tokens
 const tasksRegistry = new Map<string, TaskManifest>();
@@ -32,7 +33,9 @@ async function resolveTaskById(
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     // 1. Action: Cancellation via POST
     if (body.action === "cancel") {

@@ -24,6 +24,7 @@ import { unloadAllModels } from "@/lib/subagents/residency";
 import { getSharedRunLedger } from "@/lib/ledger/runLedger";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import { getSharedSlotScheduler } from "@/lib/slotScheduler";
+import { parseJsonBody } from "@/lib/apiJson";
 
 // Store is created per request so a runtime THREADS_DIR change (tests, container env
 // refresh) is always honored — mirrors the chat route's per-request store.
@@ -349,16 +350,14 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const supervisor = getSupervisor();
     const { id } = await context.params;
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
-    }
-
-    const body = await req.json();
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
 
     // 1. Action: Stop / Cancel Run

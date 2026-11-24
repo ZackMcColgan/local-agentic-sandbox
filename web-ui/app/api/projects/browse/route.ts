@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
+import { parseJsonBody } from "@/lib/apiJson";
 
 export const dynamic = "force-dynamic";
 
@@ -121,8 +122,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const allowedRoot = getAllowedRoot();
-    const body = await req.json();
     const { action, targetPath, name } = body;
 
     if (action === "init-repo") {
