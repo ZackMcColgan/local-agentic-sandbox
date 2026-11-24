@@ -8,6 +8,7 @@
 
 import crypto from "crypto";
 import { getBridgeManifest, PROTOCOL_VERSION } from "../../host-bridge/manifest";
+import { issueApprovalToken } from "../../host-bridge/approvalToken";
 import { computeUnifiedFileDiff, TurnFileDiff } from "./chatDiffs";
 import { getHostSettings } from "./hostSettings";
 import { evaluateFileRestriction } from "./hostPathRestriction";
@@ -428,7 +429,15 @@ export async function executeHostTool(
     "X-Host-Runner-Secret": secret,
   };
   if (approvalId) {
-    headers["X-Host-Approval-Id"] = approvalId;
+    // Bind the approval to this exact tool + payload (Board #131). The token
+    // is minted from the shared secret over the final (post-dialect-guard)
+    // args so the bridge can verify the payload was not altered in transit.
+    // Single-use, TTL <= 5 minutes.
+    if (secret) {
+      headers["X-Host-Approval-Id"] = issueApprovalToken(secret, tool, args);
+    } else {
+      headers["X-Host-Approval-Id"] = approvalId;
+    }
   }
 
   const execStartMs = Date.now();

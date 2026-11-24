@@ -8,6 +8,7 @@ import { spawn, execSync } from "child_process";
 import { isDestructiveHostAction } from "../../host-bridge/classifier";
 import { getBridgeManifest } from "../../host-bridge/manifest";
 import { createHostServer } from "../../host-bridge/server";
+import { issueApprovalToken } from "../../host-bridge/approvalToken";
 
 const VECTORS_PATH = path.resolve(
   __dirname,
@@ -196,11 +197,16 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
       "enforces dual-layer destructive action gate (403 missing, 200 success, 409 replay)",
       { skip: process.platform !== "win32" ? "Windows PowerShell test" : false },
       async () => {
-        const approvalId = `appr-test-${Date.now()}`;
         const destructivePayload = {
           tool: "host_run_powershell",
           args: { command: "Remove-Item -Path nonexistent.txt" },
         };
+        // Approval token bound to this exact tool + payload (Board #131).
+        const approvalToken = issueApprovalToken(
+          VALID_SECRET,
+          destructivePayload.tool,
+          destructivePayload.args
+        );
 
         // 1. Missing approval header -> 403
         const resMissing = await fetch(`${baseUrl}/execute`, {
@@ -216,26 +222,26 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
         const missingData = await resMissing.json();
         assert.ok(missingData.error.includes("explicit approval header"));
 
-        // 2. With approval header -> 200
+        // 2. With bound approval token -> 200
         const resAllowed = await fetch(`${baseUrl}/execute`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Host-Runner-Secret": VALID_SECRET,
-            "X-Host-Approval-Id": approvalId,
+            "X-Host-Approval-Id": approvalToken,
             Host: `127.0.0.1:${TEST_PORT}`,
           },
           body: JSON.stringify(destructivePayload),
         });
         assert.equal(resAllowed.status, 200);
 
-        // 3. Replay with same approval header -> 409 Conflict
+        // 3. Replay with same bound token -> 409 Conflict
         const resReplay = await fetch(`${baseUrl}/execute`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Host-Runner-Secret": VALID_SECRET,
-            "X-Host-Approval-Id": approvalId,
+            "X-Host-Approval-Id": approvalToken,
             Host: `127.0.0.1:${TEST_PORT}`,
           },
           body: JSON.stringify(destructivePayload),
@@ -381,7 +387,10 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
     it("host_delete_path requires recursive: true for directories", async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "del-test-"));
       try {
-        const app1 = `del-${Date.now()}-1`;
+        const app1 = issueApprovalToken(VALID_SECRET, "host_delete_path", {
+          path: tempDir,
+          recursive: false,
+        });
         const resNonRec = await fetch(`${baseUrl}/execute`, {
           method: "POST",
           headers: {
@@ -399,7 +408,10 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
         assert.equal(dataNonRec.success, false);
         assert.ok(dataNonRec.error.includes("requires recursive: true"));
 
-        const app2 = `del-${Date.now()}-2`;
+        const app2 = issueApprovalToken(VALID_SECRET, "host_delete_path", {
+          path: tempDir,
+          recursive: true,
+        });
         const resRec = await fetch(`${baseUrl}/execute`, {
           method: "POST",
           headers: {
