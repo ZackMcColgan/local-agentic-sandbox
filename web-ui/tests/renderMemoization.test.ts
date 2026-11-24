@@ -171,9 +171,7 @@ describe("U-F4 render memoization, rAF batching, shallow stint derivation, and b
     function FixtureHarness() {
       const [msgs, setMsgs] = useState<ChatMessage[]>(initialList);
       updateTail = (next: Partial<ChatMessage>) => {
-        setMsgs((prev) =>
-          prev.map((m, i) => (i === prev.length - 1 ? { ...m, ...next } : m))
-        );
+        setMsgs((prev) => prev.map((m, i) => (i === prev.length - 1 ? { ...m, ...next } : m)));
       };
 
       return React.createElement(
@@ -369,7 +367,9 @@ describe("U-F4 render memoization, rAF batching, shallow stint derivation, and b
       await act(async () => {
         for (let i = 0; i < 5; i++) {
           streamController.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "thinking", content: `step ${i} ` })}\n\n`)
+            encoder.encode(
+              `data: ${JSON.stringify({ type: "thinking", content: `step ${i} ` })}\n\n`
+            )
           );
         }
         streamController.enqueue(
