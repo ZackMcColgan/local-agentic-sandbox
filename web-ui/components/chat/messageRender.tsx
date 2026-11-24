@@ -46,7 +46,11 @@ import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
 import { StintCard } from "../StintCard";
 import { sumRoundGenerationMs } from "../../lib/turnSpeed";
-import { mergeLiveAndSettledTraces, type TimelineWriteDiff } from "../../lib/activityTimeline";
+import {
+  extractWriteDiffFromTrace,
+  mergeLiveAndSettledTraces,
+  type TimelineWriteDiff,
+} from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a

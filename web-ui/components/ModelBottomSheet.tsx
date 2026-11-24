@@ -322,7 +322,7 @@ export function ModelBottomSheet({
                   className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`}
                 />
                 <span className="text-xs font-bold text-stone-900 dark:text-stone-100">
-                  Inference Engine
+                  Strata Engine (host GPU)
                 </span>
               </div>
               <span className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">

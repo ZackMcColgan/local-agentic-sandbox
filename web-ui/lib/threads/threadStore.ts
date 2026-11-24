@@ -1049,6 +1049,14 @@ export class ThreadStore {
       lastMessagePreview,
       hasDiffs,
       hasStreamingMessage,
+      ...(hasStreamingMessage
+        ? {
+            streamingChars: msgs.reduce(
+              (n, m) => n + (m.content ? m.content.replace(/\s/g, "").length : 0),
+              0
+            ),
+          }
+        : {}),
       ...(t.queuedForExecution ? { queuedForExecution: true } : {}),
     };
 
