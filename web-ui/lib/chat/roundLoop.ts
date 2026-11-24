@@ -585,9 +585,29 @@ export async function runChatTurn(
         activeThreadId || "general"
       );
       if (!consumed.ok) {
+        const errMsgText = `Approval continuation failed: ${consumed.reason}`;
+        if (activeThreadId && !turnState.assistantPersisted) {
+          turnState.assistantPersisted = true;
+          try {
+            threadStore.addMessage(activeThreadId, {
+              id: assistantMessageId,
+              role: "assistant",
+              content: `⚠️ [Turn error: ${errMsgText}]`,
+              modelUsed: turnState.activeModel,
+              selectedModel: requestedModel || turnState.activeModel,
+              timestamp: new Date().toISOString(),
+              status: "error",
+            });
+          } catch (errSave) {
+            console.warn(
+              "[ChatRoute] Failed to persist approval continuation error message:",
+              errSave
+            );
+          }
+        }
         await sendEvent({
           type: "error",
-          error: `Approval continuation failed: ${consumed.reason}`,
+          error: errMsgText,
         });
         sseWriter.stopHeartbeat();
         for (const s of activeSessions) {
@@ -1113,6 +1133,7 @@ export async function runChatTurn(
       const currentRoundNumber = dispatchedRounds;
 
       try {
+        if (firstLlmRequestMs === null) firstLlmRequestMs = Date.now();
         for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
           if (chunk.finish_reason) {
             turnState.lastFinishReason = chunk.finish_reason;

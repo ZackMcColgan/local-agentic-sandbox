@@ -1097,6 +1097,7 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) =>
       p.includes("app/api/chat/route") ||
+      p.includes("lib/chat/roundLoop") ||
       p.includes("lib/progressiveTools") ||
       p.includes("lib/conversationCompaction"),
     tests: [
@@ -1717,6 +1718,29 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ChatStream") ||
       p.includes("heartbeatWrites.test.ts"),
     tests: ["tests/heartbeatWrites.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/apiJson") ||
+      p.includes("lib/subagents/scheduler") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/jobChunking") ||
+      p.includes("lib/chat/mcpClients") ||
+      p.includes("lib/board/boardOrchestrator") ||
+      p.includes("app/api/board/intake/route") ||
+      p.includes("app/api/deploy/route") ||
+      p.includes("app/api/settings/host/route") ||
+      p.includes("app/api/settings/memory/route") ||
+      p.includes("app/api/settings/notifications/route") ||
+      p.includes("app/api/skills/route") ||
+      p.includes("app/api/tasks/route") ||
+      p.includes("app/api/schedules/route") ||
+      p.includes("app/api/threads/route") ||
+      p.includes("app/api/threads/[id]/route") ||
+      p.includes("app/api/projects/browse/route") ||
+      p.includes("schedulerHygiene.test.ts"),
+    tests: ["tests/schedulerHygiene.test.ts"],
   },
 ];
 

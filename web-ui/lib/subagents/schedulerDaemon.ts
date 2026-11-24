@@ -179,30 +179,34 @@ export class SchedulerDaemon {
 
   async checkStartupRecovery(): Promise<void> {
     const hb = this.readHeartbeat();
-    if (hb && hb.active) {
-      const lastTickTime = new Date(hb.lastTick).getTime();
-      const staleThresholdMs = 5 * 60 * 1000; // 5 minutes
-      if (Date.now() - lastTickTime > staleThresholdMs) {
+    const schedHb = typeof this.scheduler.readHeartbeat === "function" ? this.scheduler.readHeartbeat() : null;
+    if ((hb && hb.active) || (schedHb && schedHb.active)) {
+      if (hb && hb.active) {
         this.log(
           "WARN",
           `Stale heartbeat detected (PID: ${hb.pid}, lastTick: ${hb.lastTick}). Invoking crash recovery.`
         );
-        try {
-          const recoveryRes = await this.scheduler.checkCrashAndRecover();
-          if (recoveryRes.recovered) {
-            this.log(
-              "INFO",
-              `Crash recovery triggered for schedule: ${recoveryRes.scheduleId} (attempt: ${recoveryRes.attempt})`
-            );
-          } else {
-            this.log("INFO", `Crash recovery completed with no active schedule recovered.`);
-          }
-        } catch (err: unknown) {
+      } else if (schedHb && schedHb.active) {
+        this.log(
+          "WARN",
+          `Active scheduler heartbeat detected on startup (runId: ${schedHb.runId}, scheduleId: ${schedHb.scheduleId}). Invoking crash recovery.`
+        );
+      }
+      try {
+        const recoveryRes = await this.scheduler.checkCrashAndRecover();
+        if (recoveryRes.recovered) {
           this.log(
-            "ERROR",
-            `Crash recovery failed: ${err instanceof Error ? err.message : String(err)}`
+            "INFO",
+            `Crash recovery triggered for schedule: ${recoveryRes.scheduleId} (attempt: ${recoveryRes.attempt})`
           );
+        } else {
+          this.log("INFO", `Crash recovery completed with no active schedule recovered.`);
         }
+      } catch (err: unknown) {
+        this.log(
+          "ERROR",
+          `Crash recovery failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
   }

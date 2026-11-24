@@ -637,3 +637,55 @@ test("A9: createThread persists isSubagent and isScheduled when provided and omi
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("A10: post-restart non-board taskId sweep reads raw active thread before reconcileThread stops it and auto-resumes", async () => {
+  const dir = makeTempDir("sweep-a10-");
+  try {
+    const now = Date.now();
+    const staleIso = new Date(now - STALL_WINDOW_MS - 60_000).toISOString();
+    const jobId = "job-post-restart-1";
+    const taskDir = path.join(dir, "tasks", jobId);
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, "runlog.md"), "# Runlog\nStep 1 banked.\n", "utf8");
+
+    writeThreadFile(dir, {
+      id: "t-job-post-restart",
+      title: "Post Restart Job Thread",
+      status: "active",
+      taskId: jobId,
+      autoResumeCount: 0,
+      createdAt: staleIso,
+      updatedAt: staleIso,
+      messages: [
+        { id: "m1", role: "user", content: "execute job", createdAt: staleIso },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "step 1 done...",
+          status: "streaming",
+          createdAt: staleIso,
+        },
+      ],
+    });
+
+    // Simulate fresh server restart: do NOT call markTurnActive("t-job-post-restart")
+    const store = new ThreadStore(dir);
+    store.stopSupervisorSweep();
+    const dispatched: Array<{ threadId: string; prompt: string }> = [];
+    store.setSupervisorDispatchTurn((threadId, prompt) => {
+      dispatched.push({ threadId, prompt });
+    });
+
+    const acted = await store.sweepStalledThreads(now + STALL_WINDOW_MS + 60_000);
+    assert.equal(acted, 1, "post-restart stale taskId thread must be supervised and resumed");
+    assert.equal(dispatched.length, 1, "auto-resume must dispatch a fresh turn");
+
+    const oldThread = await store.getThread("t-job-post-restart");
+    assert.ok(oldThread);
+    assert.equal(oldThread.status, "stopped");
+    assert.ok(oldThread.stalledReason);
+    assert.ok(oldThread.resumedToThreadId);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

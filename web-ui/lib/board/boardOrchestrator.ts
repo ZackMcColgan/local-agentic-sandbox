@@ -311,6 +311,14 @@ export class BoardOrchestrator {
     return store.list() as DispatcherBoardItem[];
   }
 
+  private reloadItem(fallback: DispatcherBoardItem): DispatcherBoardItem {
+    if (this.dryRun || this.deps.items) {
+      return this.getItems().find((i) => i.id === fallback.id) ?? fallback;
+    }
+    const store = this.deps.boardStore ?? new BoardStore(this.deps.boardDir);
+    return (store.get(fallback.id) as DispatcherBoardItem | undefined) ?? fallback;
+  }
+
   private updateItem(
     item: DispatcherBoardItem,
     patch: {
@@ -788,7 +796,7 @@ export class BoardOrchestrator {
         }
       }
 
-      const head = selectHeadEligibleItem(items);
+      let head = selectHeadEligibleItem(items);
       if (!head) {
         stopReason = "idle";
         break;
@@ -802,6 +810,7 @@ export class BoardOrchestrator {
       });
 
       const onThreadCreated = (threadId: string) => {
+        if (!head) return;
         this.updateItem(head, {
           status: "working",
           threadLink: `/?thread=${threadId}`,
@@ -820,6 +829,7 @@ export class BoardOrchestrator {
         const triage = await boundedTriage(issue, head, this.deps.triageAutoFix);
 
         if (triage.action === "fixed") {
+          head = this.reloadItem(head);
           const retryBrief = composeDispatcherBrief(head, {
             operatorMemory: this.deps.operatorMemory,
             hostCheckoutPath: this.deps.hostCheckoutPath,
