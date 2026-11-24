@@ -115,6 +115,16 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Patch: web-ui/app/api/chat/route.ts - dropped repoRoot from serializeTurn options, renamed chatTurnWorktreeSeq -> chatTurnSeq, updated comment to record the #63 rationale.
 - Verification: jobQueueRoute.test.ts 11 pass / 0 fail; npm run test:gate PASSED: 370 tests, 0 failed (budget 240s, took ~48s).
 
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24) — retryAfter scope closed; EOL renormalize follow-up for PR #222
+
+- Banked state on resume: job-auto-1 scope (`parseRetryAfter`, AC-2-1/2-2/2-3) is DONE and merged — PR #217 MERGED 2026-11-22T23:24:59Z; `web-ui/lib/retryAfter.mjs` and `web-ui/tests/retryAfter.test.ts` present on origin/develop (blobs 5c39409 / 104866c). No restart needed; scope verified by presence, not re-implementation.
+- Repo-standards work (Board #120) also already banked: PR #222 MERGED 2026-11-23T01:23:19Z (`feature/repo-standards-sweep` @ b074983: community files, dependabot, `.nvmrc`, `.gitattributes`, `repoStandards.test.ts`, gate wiring).
+- Real residual on resume: working tree showed a phantom 140-line diff on `web-ui/Dockerfile` + 2-line diff on `.gitignore`. Root cause: PR #222 added `.gitattributes` (`* text=auto eol=lf`, explicit `Dockerfile text eol=lf`, `.gitignore text eol=lf`), but blobs committed before that attribute carry CRLF, so git reports a content-identical line-ending change. Confirmed with `git diff --ignore-cr-at-eol --stat` -> empty (pure EOL change, zero content drift).
+- Fix: `git add --renormalize .` sweep. On the develop tree the sweep lands exactly one file (`web-ui/Dockerfile`, 70/70 lines); `.gitignore` was already LF. Committed on `feature/eol-renormalize` (off origin/develop @ 4a96d6b) as `1271b44 chore(repo): renormalize CRLF blobs to LF per .gitattributes eol=lf`.
+- Gate: `node scripts/test-gate.js --since=HEAD~1` -> PASSED, 7 pass / 0 fail in 11.9s (<90s budget). Targeted `repoStandards.test.ts` -> 9 pass / 0 fail (5.3s).
+- Pitfall reconfirmed (blocking, not a regression): `node scripts/test-gate.js --since=origin/develop` from this checkout counts the 8 untracked `eval/results/*` scratch dirs as changed files (124 files inspected, 0 suites selected) and then rejects with ZERO TEST COVERAGE on unrelated develop-side modules (`web-ui/lib/hostPathRestriction.ts`, `web-ui/lib/streamPollGate.ts`). Scope the gate with `--since=HEAD~1` (committed diff only) or clean the scratch dirs first. Scratch dirs left untouched (eval artifacts, not this job's scope).
+- Status: job-auto-1 scope COMPLETE (merged). EOL renormalize follow-up committed on `feature/eol-renormalize`, PR into develop.
+
 ## Board #125 (Perf P2) - enable parallel tool calls for read-only fanout
 
 - Worktree: C:\Users\zackm\Desktop\repos\perf-p2-wt, branch feature/perf-p2-parallel-tools (off develop).
