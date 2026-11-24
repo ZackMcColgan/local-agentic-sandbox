@@ -14,6 +14,7 @@ import {
   createProductionBoardOrchestrator,
   createProductionIssueAndWait,
   createProductionWorkingItemLivenessCheck,
+  evaluateSettledThreadOutcome,
 } from "../lib/board/productionDrain";
 import { TURN_CHUNK_COMPLETE_MARKER } from "../lib/jobChunking";
 import { writeMilestoneHandoff } from "../lib/subagents/finishVerificationGate";
@@ -960,5 +961,117 @@ test("A4: chunk-complete settle returns chunk-complete with handoff, persists ha
     assert.equal(afterPass2.status, "done");
   } finally {
     env.cleanup();
+  }
+});
+
+test("R2: evaluateSettledThreadOutcome fails closed when thread is missing or has non-completed status", async () => {
+  const okResponse = { ok: true, status: 200, rawStream: "" };
+
+  const missingOutcome = evaluateSettledThreadOutcome({
+    thread: null,
+    threadId: "thread-missing-r2",
+    response: okResponse,
+  });
+  assert.equal(missingOutcome.status, "failed");
+  if (missingOutcome.status === "failed") {
+    assert.ok(missingOutcome.error.trim().length > 0);
+    assert.match(missingOutcome.error, /Thread missing at settlement/);
+    assert.equal(missingOutcome.issue?.code, "execution-failed");
+    assert.equal(missingOutcome.issue?.message, missingOutcome.error);
+  }
+
+  const nonTerminalStatuses: Array<Thread["status"]> = [
+    "paused",
+    "active",
+    "running",
+    "needs_input",
+  ];
+  for (const status of nonTerminalStatuses) {
+    const outcome = evaluateSettledThreadOutcome({
+      thread: makeThreadRecord({
+        id: `thread-${status}-r2`,
+        status,
+        messages: [
+          {
+            id: "m-1",
+            role: "assistant",
+            content: "Partial output before unexpected non-terminal state.",
+            status: "streaming",
+            timestamp: "2026-11-23T00:00:00.000Z",
+          },
+        ],
+      }),
+      threadId: `thread-${status}-r2`,
+      response: okResponse,
+    });
+    assert.equal(outcome.status, "failed", `status '${status}' must fail closed`);
+    if (outcome.status === "failed") {
+      assert.ok(outcome.error.trim().length > 0);
+      assert.equal(outcome.error, `Unexpected thread status '${status}'`);
+      assert.equal(outcome.issue?.code, "execution-failed");
+      assert.equal(outcome.issue?.message, outcome.error);
+    }
+  }
+
+  const failedWithReason = evaluateSettledThreadOutcome({
+    thread: makeThreadRecord({
+      id: "thread-failed-r2",
+      status: "failed",
+      error: "Explicit failure reason preserved",
+    }),
+    threadId: "thread-failed-r2",
+    response: okResponse,
+  });
+  assert.equal(failedWithReason.status, "failed");
+  if (failedWithReason.status === "failed") {
+    assert.equal(failedWithReason.error, "Explicit failure reason preserved");
+  }
+
+  const completedOutcome = evaluateSettledThreadOutcome({
+    thread: makeThreadRecord({
+      id: "thread-completed-r2",
+      status: "completed",
+      messages: [
+        {
+          id: "m-done",
+          role: "assistant",
+          content: "Opened PR #301.",
+          status: "completed",
+          timestamp: "2026-11-23T00:00:00.000Z",
+        },
+      ],
+    }),
+    threadId: "thread-completed-r2",
+    response: okResponse,
+  });
+  assert.equal(completedOutcome.status, "completed");
+
+  const issueAndWaitMissing = createProductionIssueAndWait({
+    hostCheckoutPath: "/tmp/repo",
+    executeHostTool: async () => ({ ok: true, exitCode: 0, stdout: "develop\n" }),
+    threadStore: {
+      createThread: () => makeThreadRecord({ id: "thread-deleted-midrun", status: "active" }),
+      getThread: async () => null,
+    },
+    dispatchChatTurn: async () => okResponse,
+  });
+  const deletedMidRun = await issueAndWaitMissing({
+    item: {
+      id: "item-deleted-r2",
+      key: "#90",
+      title: "Deleted thread mid-run",
+      brief: "Do work.",
+      status: "queued",
+      dependencies: [],
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-23T00:00:00.000Z",
+      updatedAt: "2026-11-23T00:00:00.000Z",
+    },
+    brief: "Do work.",
+  });
+  assert.equal(deletedMidRun.status, "failed");
+  if (deletedMidRun.status === "failed") {
+    assert.match(deletedMidRun.error, /Thread missing at settlement/);
   }
 });
