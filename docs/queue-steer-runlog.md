@@ -230,4 +230,3 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - testGate.ts MAPPING_RULES: additive lines only.
 - Suites: targeted board/reviewer suites 20/20; gate --since=origin/develop 99 pass / 0 fail; npx tsc --noEmit clean.
 - Assumption: gh-level head resolution accepts any non-empty string (preserves existing pollChecks behavior); strict 40-char hex enforced at verdict-recording.
-

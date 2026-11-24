@@ -47,10 +47,7 @@ test("parseReviewerVerdictContent parses plain Verdict label and bare verdict to
 });
 
 test("parseReviewerVerdictContent fails closed with unparseable evidence note when no verdict line exists", () => {
-  const verdict = parseReviewerVerdictContent(
-    "thread-8",
-    "Looks mostly okay, maybe ship it?"
-  );
+  const verdict = parseReviewerVerdictContent("thread-8", "Looks mostly okay, maybe ship it?");
   assert.equal(verdict.verdict, "FAIL");
   assert.ok(verdict.evidence.some((e) => /unparseable/i.test(e)));
 });

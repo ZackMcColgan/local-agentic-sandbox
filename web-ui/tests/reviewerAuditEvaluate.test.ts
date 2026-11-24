@@ -110,7 +110,12 @@ test("evaluate action rejects a missing or non-integer pr with 400", async () =>
   process.env.BOARD_DIR = boardDir;
 
   const mock: MockReviewerEvaluateDeps = {
-    getMechanicalInput: async () => ({ diff: "", allowlist: [], commitSubjects: [], branchName: "" }),
+    getMechanicalInput: async () => ({
+      diff: "",
+      allowlist: [],
+      commitSubjects: [],
+      branchName: "",
+    }),
     resolveHeadSha: async () => null,
     issueReviewerThread: async () => ({ threadId: "x", verdict: "PASS", evidence: [] }),
   };
@@ -153,14 +158,16 @@ test("evaluate action records the placeholder head SHA with a note when head res
       branchName: "",
     }),
     resolveHeadSha: async () => null,
-    issueReviewerThread: async () => ({ threadId: "rev-eval-2", verdict: "FAIL", evidence: ["no"] }),
+    issueReviewerThread: async () => ({
+      threadId: "rev-eval-2",
+      verdict: "FAIL",
+      evidence: ["no"],
+    }),
   };
 
   try {
     await withMock(mock, async () => {
-      const res = await postReviewerAudit(
-        makeRequest({ action: "evaluate", pr: 301, brief: "b" })
-      );
+      const res = await postReviewerAudit(makeRequest({ action: "evaluate", pr: 301, brief: "b" }));
       assert.equal(res.status, 200);
       const payload = (await res.json()) as {
         entry: { headSha: string; reason?: string };

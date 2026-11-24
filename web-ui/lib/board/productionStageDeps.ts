@@ -172,7 +172,10 @@ function extractItemAllowlist(item: DispatcherBoardItem): string[] {
 const REVIEWER_VERDICT_LINE = /^(?:verdict\s*[:=]?\s*)?(PASS|FAIL)\b[.!?]*$/i;
 
 function normalizeReviewerVerdictLine(line: string): string {
-  return line.replace(/^#{1,6}\s+/, "").replace(/\*/g, "").trim();
+  return line
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/\*/g, "")
+    .trim();
 }
 
 export function parseReviewerVerdictContent(threadId: string, content: string): ReviewerVerdict {

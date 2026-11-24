@@ -106,7 +106,9 @@ async function handleEvaluate(body: {
   }
 
   const allowlist = Array.isArray(body.allowlist)
-    ? body.allowlist.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    ? body.allowlist.filter(
+        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+      )
     : [];
 
   const mock = (globalThis as { __mockReviewerEvaluateDeps?: ReviewerEvaluateDeps | null })
