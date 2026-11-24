@@ -308,3 +308,10 @@ docs/queue-steer-runlog.md` -> clean. `git diff --ignore-cr-at-eol --stat` -> em
   logged, out of brief evidence scope).
 - Verification: `npx tsx web-ui/tests/repoHygiene.test.ts` -> 0 violations;
   `npm run test:gate` -> PASSED 15/15 in 13.5s.
+
+## #58 Repair testGate ghost paths, dead Playwright rule, unmapped E2E specs, orphaned suites
+
+- Scope: remove 3 ghost test paths (liveStatus/executionSummary/modelEval), fix explorerPanel.spec.ts evaluation order, map remaining Playwright specs, make test-gate --all discover the full set, wire/retire orphaned files, fix host-bridge/package.json test script.
+- Changes: web-ui/lib/testGate.ts (ghost removal, explorerPanel rule order, spec mapping rules, discoverAllTests() filesystem discovery, testsOverride, host-bridge:tests + repo-root .js stage); web-ui/scripts/test-gate.ts (--all now seeds discoverAllTests()); web-ui/tests/testGate.test.ts (test-first additions); relocated web-ui/tests-live/board-{intake,orchestrator}.spec.ts -> web-ui/tests/e2e/ (scoped loose getByText to .first() to satisfy strict mode against mobile+desktop duplicate render); host-bridge/package.json test script now runs the real daemon suites in web-ui/tests instead of missing host-bridge/tests/.
+- Orphan disposition: scripts/tests/supervisorControl.test.js wired into the gate via a repo-root node --test stage; tests-live/aiLifecycle.live.ts kept as an opt-in destructive lifecycle suite (npm run test:lifecycle), never in the gate.
+- Verification: targeted npx tsx --test tests/testGate.test.ts -> 12/12; testGateRunner + gateManifestCompleteness -> 18/18; relocated specs npx playwright test -> 8/8. npm run test:gate -> the #58 suites pass; the only failure is hostRunnerScript.test.ts Test 4 (manifest.json bridgeSourceSha256 84b93... vs computed ff98485...). That is pre-existing repo debt from prettier reformatting of host-bridge source without regenerating the provenance digest - it fails on develop too and is OUT of #58 scope; flagged for a separate provenance-regeneration job.
