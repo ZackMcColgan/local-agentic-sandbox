@@ -1363,7 +1363,10 @@ test("R8: resolveChunkRunlogPath writes under PVC AGENT_CHECKPOINT_DIR when work
         }) => string;
       }
     ).resolveChunkRunlogPath;
-    assert.ok(typeof resolveChunkRunlogPath === "function", "resolveChunkRunlogPath must be exported");
+    assert.ok(
+      typeof resolveChunkRunlogPath === "function",
+      "resolveChunkRunlogPath must be exported"
+    );
 
     const runlogNoWorktree = resolveChunkRunlogPath({
       worktreePath: null,
@@ -1380,10 +1383,7 @@ test("R8: resolveChunkRunlogPath writes under PVC AGENT_CHECKPOINT_DIR when work
       jobId: "job-wt-1",
       checkpointDir: env.checkpointDir,
     });
-    assert.equal(
-      runlogWithWorktree,
-      path.join("/tmp/wt-1", "docs/internal/queue-steer-runlog.md")
-    );
+    assert.equal(runlogWithWorktree, path.join("/tmp/wt-1", "docs/internal/queue-steer-runlog.md"));
   } finally {
     env.cleanup();
   }

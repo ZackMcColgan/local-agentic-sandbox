@@ -385,7 +385,10 @@ export class BoardOrchestrator {
     } else if (patch.chunkRequeueCount !== undefined) {
       item.chunkRequeueCount = patch.chunkRequeueCount;
     }
-    if (patch.needsAttention === null || (isTransitionToClear && patch.needsAttention === undefined)) {
+    if (
+      patch.needsAttention === null ||
+      (isTransitionToClear && patch.needsAttention === undefined)
+    ) {
       delete item.needsAttention;
     } else if (patch.needsAttention !== undefined) {
       item.needsAttention = patch.needsAttention;

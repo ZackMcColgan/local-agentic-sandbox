@@ -481,7 +481,11 @@ test("R8: paused and stopped control states still reconcile dead working items w
 
     const report = await orchestrator.drain();
     assert.equal(issued, 0, `must not launch queued item when control is ${state}`);
-    assert.equal(deadWorking.status, "done", `dead working item must settle when control is ${state}`);
+    assert.equal(
+      deadWorking.status,
+      "done",
+      `dead working item must settle when control is ${state}`
+    );
     assert.equal(deadWorking.evidence?.prNumber, 311);
     assert.equal(queuedItem.status, "queued");
     assert.equal(report.stopReason, state === "paused" ? "control-paused" : "control-stopped");

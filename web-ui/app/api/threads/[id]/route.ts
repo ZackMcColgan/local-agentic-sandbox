@@ -302,10 +302,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
               ? `${existingContent.trimEnd()}\n\n*[Stopped by user]*`
               : "*[Stopped by user]*";
           }
-          if (
-            !freshThread.messages[i].status ||
-            freshThread.messages[i].status === "streaming"
-          ) {
+          if (!freshThread.messages[i].status || freshThread.messages[i].status === "streaming") {
             freshThread.messages[i].status = "incomplete";
           }
           break;
@@ -382,7 +379,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           getThreadStore().saveThread(freshThread);
 
           const restartedWithBudget = restarted as TaskManifest & { chunkBudget?: unknown };
-          if (freshThread.chunkBudget !== undefined && restartedWithBudget.chunkBudget === undefined) {
+          if (
+            freshThread.chunkBudget !== undefined &&
+            restartedWithBudget.chunkBudget === undefined
+          ) {
             restartedWithBudget.chunkBudget = freshThread.chunkBudget;
           }
           launchTaskExecution(freshThread.id, restarted, freshThread.model);
