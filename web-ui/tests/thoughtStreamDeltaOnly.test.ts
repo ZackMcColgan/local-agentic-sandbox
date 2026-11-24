@@ -569,7 +569,9 @@ describe("PERF-P3 — thought stream is delta-only per token, cumulative thought
         );
         emitTokens = () => {
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "token", content: "Visible reply." })}\n\n`)
+            encoder.encode(
+              `data: ${JSON.stringify({ type: "token", content: "Visible reply." })}\n\n`
+            )
           );
         };
         closeStream = () => {
@@ -599,7 +601,8 @@ describe("PERF-P3 — thought stream is delta-only per token, cumulative thought
       return new Response(JSON.stringify({}), { status: 200 });
     }) as typeof fetch;
 
-    let trackedMessages: Array<{ id: string; role: string; content: string; thought?: string }> = [];
+    let trackedMessages: Array<{ id: string; role: string; content: string; thought?: string }> =
+      [];
     const setMessages = (
       updater:
         | Array<{ id: string; role: string; content: string; thought?: string }>

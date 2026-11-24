@@ -1191,7 +1191,9 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         {
           role: "assistant",
           content: "Calling tool",
-          tool_calls: [{ id: "tc-1", type: "function", function: { name: "read", arguments: "{}" } }],
+          tool_calls: [
+            { id: "tc-1", type: "function", function: { name: "read", arguments: "{}" } },
+          ],
         },
         { role: "tool", name: "read", tool_call_id: "tc-1", content: "file content" },
       ];
