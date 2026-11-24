@@ -1,18 +1,17 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { GlobalWindow } from "happy-dom";
 import React, { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { renderToString, renderToStaticMarkup } from "react-dom/server";
 import { NextRequest } from "next/server";
 
 import { ThreadStore } from "../lib/threads/threadStore";
 import { ThreadsSidebar } from "../components/ThreadsSidebar";
 import { formatHumanReadableTrace } from "../lib/chatUtils";
-import { ActivityTimeline } from "../components/ActivityTimeline";
 import { ChatMessageItem } from "../components/chat/messageRender";
 import { CanvasProvider } from "../components/CanvasContext";
 import { CanvasDiffSheet } from "../components/CanvasDiffSheet";

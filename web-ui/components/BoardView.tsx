@@ -605,7 +605,7 @@ export function BoardView({
         >
           <form
             onSubmit={handleSaveEdit}
-            className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0e0e12] p-5 text-zinc-100 space-y-3"
+            className="w-full max-w-md rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-zinc-900 dark:text-zinc-100 space-y-3"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-zinc-100">Edit {editingItem.key}</h2>

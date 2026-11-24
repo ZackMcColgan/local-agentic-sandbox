@@ -46,11 +46,7 @@ import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
 import { StintCard } from "../StintCard";
 import { sumRoundGenerationMs } from "../../lib/turnSpeed";
-import {
-  extractWriteDiffFromTrace,
-  mergeLiveAndSettledTraces,
-  type TimelineWriteDiff,
-} from "../../lib/activityTimeline";
+import { mergeLiveAndSettledTraces, type TimelineWriteDiff } from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
@@ -764,16 +760,15 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           )}
 
           {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline);
-              suppressed when the timeline already renders this turn's write diffs */}
-          {fileDiffCards.length > 0 &&
-            !(
-              Boolean(onOpenCanvasDiff) &&
-              turnTraces.some((t) => Boolean(extractWriteDiffFromTrace(t)))
-            ) && (
-              <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                <CanvasDiffCard diffs={fileDiffCards} />
-              </div>
-            )}
+              suppressed only when the timeline already renders this turn's
+              persisted diffs. Trace-only turns keep the card: ChatStream
+              always passes onOpenCanvasDiff, so gating on it suppressed the
+              card for every file-write turn (Phase Omega test). */}
+          {fileDiffCards.length > 0 && !(Array.isArray(m.diffs) && m.diffs.length > 0) && (
+            <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
+              <CanvasDiffCard diffs={fileDiffCards} />
+            </div>
+          )}
 
           {/* Stint card on completed turns */}
           {!isTaskHostMessage &&
