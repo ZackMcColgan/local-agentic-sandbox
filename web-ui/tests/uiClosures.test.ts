@@ -431,7 +431,7 @@ describe("U-F9 — Board DELETE/edit, settled Thread links, rose needs-attention
     }
   });
 
-  it("BuildsView removes dead Rollback button and preserves threadLink & real branch on board fallback", async () => {
+  it("BuildsView keeps the Rollback affordance disabled-with-reason and preserves threadLink & real branch on board fallback", async () => {
     const win = new GlobalWindow({ url: "http://localhost:3000" });
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     globalThis.window = win as unknown as Window & typeof globalThis;
@@ -483,10 +483,20 @@ describe("U-F9 — Board DELETE/edit, settled Thread links, rose needs-attention
       });
       await flushEffects();
 
-      assert.equal(
+      // Mockup 04 keeps the Rollback affordance on the card; with no previous
+      // deploy it is honestly disabled with its reason, never a live dead control.
+      assert.ok(
         container.textContent?.includes("Rollback (Previous)"),
-        false,
-        "Permanently disabled Rollback button must be removed"
+        "Rollback affordance must render per Mockup 04"
+      );
+      const rollbackBtn = container.querySelector(
+        'button[title="No previous deploy available to roll back"]'
+      );
+      assert.ok(rollbackBtn, "Rollback button must carry its disabled reason");
+      assert.equal(
+        (rollbackBtn as HTMLButtonElement).disabled,
+        true,
+        "Rollback button must be disabled while no previous deploy exists"
       );
       assert.ok(
         container.textContent?.includes("feat/real-branch-b1"),
