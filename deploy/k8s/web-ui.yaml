@@ -75,7 +75,11 @@ spec:
             - name: LLM_CONCURRENCY
               value: "1"
             - name: LLM_SUPERVISOR_TOKEN
-              value: "local-sandbox-token-2026"
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-llm-supervisor
+                  key: token
+                  optional: true
             - name: WORKER_MODEL_TIMEOUT_MS
               value: "900000"
             - name: THREADS_DIR
