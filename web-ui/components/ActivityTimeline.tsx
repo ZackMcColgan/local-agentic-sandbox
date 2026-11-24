@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, FileDiff } from "lucide-react";
 import {
   buildActivityTimeline,
@@ -432,7 +432,7 @@ function TimelineRowView({
   );
 }
 
-export function ActivityTimeline({
+export const ActivityTimeline = React.memo(function ActivityTimeline({
   traces,
   thinkingSegments,
   roundNarrations,
@@ -441,19 +441,25 @@ export function ActivityTimeline({
   hasContent = false,
   onOpenCanvasDiff,
 }: ActivityTimelineProps) {
-  const rows = buildActivityTimeline(traces, undefined, {
-    thinkingSegments,
-    roundNarrations,
-    roundGenerationMs,
-    isStreaming,
-  });
-  if (rows.length === 0) return null;
+  const rows = useMemo(
+    () =>
+      buildActivityTimeline(traces, undefined, {
+        thinkingSegments,
+        roundNarrations,
+        roundGenerationMs,
+        isStreaming,
+      }),
+    [traces, thinkingSegments, roundNarrations, roundGenerationMs, isStreaming]
+  );
+  const allTurnDiffs = useMemo(() => {
+    const rawTurnDiffs: TimelineWriteDiff[] = [];
+    for (const r of rows) {
+      if (r.writeDiff) rawTurnDiffs.push(r.writeDiff);
+    }
+    return coalesceTimelineWriteDiffs(rawTurnDiffs);
+  }, [rows]);
 
-  const rawTurnDiffs: TimelineWriteDiff[] = [];
-  for (const r of rows) {
-    if (r.writeDiff) rawTurnDiffs.push(r.writeDiff);
-  }
-  const allTurnDiffs = coalesceTimelineWriteDiffs(rawTurnDiffs);
+  if (rows.length === 0) return null;
 
   return (
     <div
@@ -481,4 +487,4 @@ export function ActivityTimeline({
       )}
     </div>
   );
-}
+});

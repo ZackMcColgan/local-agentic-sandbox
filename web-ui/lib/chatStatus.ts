@@ -146,10 +146,16 @@ export function mergeStreamedTokens(accumulatedRaw: string, eventContent?: strin
     return `${acc}\n\n${evt}`;
   }
 
-  // Check if evt overlaps with the end of acc
-  const maxOverlap = Math.min(acc.length, evt.length);
+  // Check if evt overlaps with the end of acc (bounded to a 4 KB window)
+  const maxOverlap = Math.min(acc.length, evt.length, 4096);
+  const evtStartCode = evt.charCodeAt(0);
+  const accEndCode = acc.charCodeAt(acc.length - 1);
   for (let len = maxOverlap; len > 0; len--) {
-    if (acc.endsWith(evt.slice(0, len))) {
+    if (
+      acc.charCodeAt(acc.length - len) === evtStartCode &&
+      evt.charCodeAt(len - 1) === accEndCode &&
+      acc.endsWith(evt.slice(0, len))
+    ) {
       return acc + evt.slice(len);
     }
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import NextImage from "next/image";
 import {
   Sparkles,
@@ -125,25 +125,25 @@ export interface ChatMessageItemProps {
   isStoppingTask: boolean;
   activeAssistantMsgId: string | null;
   completedTurnMsgId: string | null;
-  streamStatus: string | null;
-  turnStartedAtMs: number | null;
-  lastActivityAtMs: number;
-  expandedTraces: Record<string, boolean>;
-  expandedProofs: Record<string, boolean>;
+  streamStatus?: string | null;
+  turnStartedAtMs?: number | null;
+  lastActivityAtMs?: number;
+  expandedTraces?: Record<string, boolean>;
+  expandedProofs?: Record<string, boolean>;
   hasResolvedDetachedTurn: boolean;
   activeModel: string;
   onPreviewImage: (url: string | null) => void;
   onCopyToClipboard: (text: string, id: string) => void;
   onRetry: () => void;
-  onToggleProof: (proofKey: string) => void;
-  onToggleTraces: (messageId: string) => void;
+  onToggleProof?: (proofKey: string) => void;
+  onToggleTraces?: (messageId: string) => void;
   onStopTask?: () => Promise<void> | void;
   onRunControlAction: (action: "pause" | "resume" | "restart") => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }
 
-export function ChatMessageItem({
+export const ChatMessageItem = React.memo(function ChatMessageItem({
   message: m,
   idx,
   copiedMessageId,
@@ -170,6 +170,55 @@ export function ChatMessageItem({
   const isCopied = copiedMessageId === m.id;
   const isTaskHostMessage = idx === lastLinkedTaskMsgIndex && !!activeTask;
   const isSupersededTaskMessage = !!m.taskId && !isTaskHostMessage;
+  const isStreamingThis = Boolean(
+    m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
+  );
+
+  const turnTraces = useMemo(
+    () => mergeLiveAndSettledTraces(m.traces, isStreamingThis ? liveTurnTraces : undefined),
+    [m.traces, isStreamingThis, liveTurnTraces]
+  );
+
+  const fileDiffCards = useMemo(() => {
+    if (isUser || isSupersededTaskMessage) return [];
+    type TurnDiffEntry = {
+      path: string;
+      diff: string;
+      diffFull?: string;
+      addedLines: number;
+      removedLines: number;
+    };
+    const normalizeDiffPath = (p: string) => {
+      const s = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+      return /^[A-Za-z]:\//.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+    };
+    const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
+      path: d.path,
+      diff: d.diffPreview,
+      diffFull: d.diffFull,
+      addedLines: d.addedLines,
+      removedLines: d.removedLines,
+    }));
+    const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs) ? coalesceTurnDiffs(m.diffs) : [];
+    const mergedMap = new Map<string, TurnDiffEntry>();
+    for (const d of traceDiffs) {
+      mergedMap.set(normalizeDiffPath(d.path), d);
+    }
+    for (const d of serverDiffs) {
+      const key = normalizeDiffPath(d.path);
+      const existing = mergedMap.get(key);
+      const isUnified = d.removedLines > 0 || /^@@\s+-\d+/m.test(d.diff);
+      if (!existing || isUnified) {
+        mergedMap.set(key, d);
+      }
+    }
+    return Array.from(mergedMap.values()).map((d) => ({
+      path: d.path,
+      diff: d.diffFull ?? d.diff,
+      addedLines: d.addedLines,
+      removedLines: d.removedLines,
+    }));
+  }, [isUser, isSupersededTaskMessage, m.traces, m.diffs]);
 
   if (isSupersededTaskMessage) {
     return null;
@@ -313,13 +362,6 @@ export function ChatMessageItem({
           {/* Activity Timeline + Thinking Preview for ALL non-task-host turns */}
           {!isTaskHostMessage &&
             (() => {
-              const isStreamingThis = Boolean(
-                m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
-              );
-              const turnTraces = mergeLiveAndSettledTraces(
-                m.traces,
-                isStreamingThis ? liveTurnTraces : undefined
-              );
               const hasThought = Boolean(m.thought && m.thought.trim());
               const hasNarrations = Boolean(
                 Array.isArray(m.roundNarrations) && m.roundNarrations.length > 0
@@ -713,65 +755,11 @@ export function ChatMessageItem({
           )}
 
           {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline) */}
-          {(() => {
-            if (isUser) return null;
-
-            type TurnDiffEntry = {
-              path: string;
-              diff: string;
-              diffFull?: string;
-              addedLines: number;
-              removedLines: number;
-              truncated?: boolean;
-              totalDiffLines?: number;
-              omittedLines?: number;
-            };
-            const normalizeDiffPath = (p: string) => {
-              const s = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
-              return /^[A-Za-z]:\//.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
-            };
-            const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map(
-              (d) => ({
-                path: d.path,
-                diff: d.diffPreview,
-                diffFull: d.diffFull,
-                addedLines: d.addedLines,
-                removedLines: d.removedLines,
-                truncated: d.diffPreview.includes("more lines"),
-              })
-            );
-            const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs)
-              ? coalesceTurnDiffs(m.diffs)
-              : [];
-            const mergedMap = new Map<string, TurnDiffEntry>();
-            for (const d of traceDiffs) {
-              mergedMap.set(normalizeDiffPath(d.path), d);
-            }
-            for (const d of serverDiffs) {
-              const key = normalizeDiffPath(d.path);
-              const existing = mergedMap.get(key);
-              const isUnified = d.removedLines > 0 || /^@@\s+-\d+/m.test(d.diff);
-              if (!existing || isUnified) {
-                mergedMap.set(key, d);
-              }
-            }
-            const fileDiffs = Array.from(mergedMap.values());
-
-            if (fileDiffs.length === 0) return null;
-
-            return (
-              <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                <CanvasDiffCard
-                  diffs={fileDiffs.map((d) => ({
-                    path: d.path,
-                    diff: d.diffFull ?? d.diff,
-                    addedLines: d.addedLines,
-                    removedLines: d.removedLines,
-                  }))}
-                />
-              </div>
-            );
-          })()}
+          {fileDiffCards.length > 0 && (
+            <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
+              <CanvasDiffCard diffs={fileDiffCards} />
+            </div>
+          )}
 
           {/* Stint card on completed turns */}
           {!isTaskHostMessage &&
@@ -825,4 +813,4 @@ export function ChatMessageItem({
       )}
     </div>
   );
-}
+});
