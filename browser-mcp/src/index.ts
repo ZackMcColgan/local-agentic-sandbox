@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import express, { Request, Response } from "express";
 import { registerBrowserTools } from "./tools/browser.js";
 
@@ -17,11 +15,6 @@ export function createBrowserMcpServer(): McpServer {
   return mcp;
 }
 
-const sessions = new Map<
-  string,
-  { server: McpServer; transport: StreamableHTTPServerTransport }
->();
-
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
     status: "HEALTHY",
@@ -33,44 +26,27 @@ app.get("/health", (_req: Request, res: Response) => {
       ssrf_protection: "ACTIVE",
       workspace_access: "NONE",
     },
-    active_sessions: sessions.size,
+    transport_mode: "streamable-http-stateless",
   });
 });
 
 app.post("/mcp", async (req: Request, res: Response) => {
+  const server = createBrowserMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  res.on("close", () => {
+    void transport.close().catch(() => {});
+    void server.close().catch(() => {});
+  });
+
   try {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    let entry = sessionId ? sessions.get(sessionId) : undefined;
-
-    if (!entry && isInitializeRequest(req.body)) {
-      const server = createBrowserMcpServer();
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sid) => {
-          sessions.set(sid, { server, transport });
-        },
-      });
-      transport.onclose = () => {
-        if (transport.sessionId) {
-          sessions.delete(transport.sessionId);
-        }
-      };
-      await server.connect(transport);
-      entry = { server, transport };
-    }
-
-    if (!entry) {
-      res.status(400).json({
-        jsonrpc: "2.0",
-        error: { code: -32000, message: "Bad Request: No valid session ID provided" },
-        id: null,
-      });
-      return;
-    }
-
-    await entry.transport.handleRequest(req, res, req.body);
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("Failed to handle Streamable HTTP request in browser-mcp:", error);
+    console.error("Failed to handle stateless Streamable HTTP request in browser-mcp:", error);
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",
@@ -97,7 +73,7 @@ const isMainModule = Boolean(
 if (isMainModule) {
   app.listen(PORT, HOST, () => {
     console.log(`[Browser MCP] Active and listening at http://${HOST}:${PORT}`);
-    console.log(`[Browser MCP] Streamable HTTP Endpoint: http://${HOST}:${PORT}/mcp`);
+    console.log(`[Browser MCP] Streamable HTTP Endpoint (stateless): http://${HOST}:${PORT}/mcp`);
     console.log(`[Browser MCP] Registered Tools: search_web, fetch_webpage_markdown`);
   });
 }

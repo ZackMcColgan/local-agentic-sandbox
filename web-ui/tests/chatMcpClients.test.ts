@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import { describe, it } from "node:test";
 import { NextRequest } from "next/server";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
 import { POST } from "../app/api/chat/route";
 import { getMcpUrl, getBrowserMcpUrl, connectMcpClient } from "../lib/chat/mcpClients";
 
@@ -87,5 +91,60 @@ describe("chat route MCP client characterization", () => {
     assert.equal(clientClosed, true);
     assert.equal(transportClosed, true);
     assert.equal(warnings.length, 1);
+  });
+
+  it("connectMcpClient connects over real StreamableHTTPClientTransport to a stateless server", async () => {
+    const server = http.createServer(async (req, res) => {
+      if (req.method !== "POST" || req.url !== "/mcp") {
+        res.writeHead(404);
+        res.end("not found");
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
+      const mcp = new McpServer({ name: "stateless-test-server", version: "1.0.0" });
+      mcp.tool("echo_ping", "Echo back input", { msg: z.string() }, async ({ msg }) => ({
+        content: [{ type: "text" as const, text: `pong:${msg}` }],
+      }));
+
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+      res.on("close", () => {
+        void transport.close().catch(() => {});
+        void mcp.close().catch(() => {});
+      });
+      await mcp.connect(transport);
+      await transport.handleRequest(req, res, body);
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+
+    try {
+      const handle = await connectMcpClient(`http://127.0.0.1:${port}`, "stateless-web-ui-test", {
+        log: () => {},
+        warn: () => {},
+      });
+      assert.ok(handle, "connectMcpClient should connect to stateless Streamable HTTP server");
+      assert.equal(handle.transport.sessionId, undefined, "stateless server assigns no sessionId");
+      assert.ok(handle.tools.some((t) => t.name === "echo_ping"));
+
+      const res1 = await handle.client.callTool({ name: "echo_ping", arguments: { msg: "one" } });
+      const res2 = await handle.client.callTool({ name: "echo_ping", arguments: { msg: "two" } });
+      assert.equal((res1.content as Array<{ text: string }>)[0].text, "pong:one");
+      assert.equal((res2.content as Array<{ text: string }>)[0].text, "pong:two");
+
+      await handle.client.close();
+      await handle.transport.close();
+    } finally {
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
+      server.close();
+    }
   });
 });
