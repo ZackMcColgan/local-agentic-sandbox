@@ -6,10 +6,7 @@ export interface DnsLookupAddress {
   family: number;
 }
 
-export type DnsLookupFn = (
-  hostname: string,
-  options: { all: true }
-) => Promise<DnsLookupAddress[]>;
+export type DnsLookupFn = (hostname: string, options: { all: true }) => Promise<DnsLookupAddress[]>;
 
 export interface SsrfValidationResult {
   allowed: boolean;
@@ -245,7 +242,11 @@ export function isBlockedIp(raw: string): boolean {
 }
 
 function normalizeHostname(rawHostname: string): string {
-  return rawHostname.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  return rawHostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.+$/, "");
 }
 
 function isBlockedHostnameLiteral(host: string): string | null {

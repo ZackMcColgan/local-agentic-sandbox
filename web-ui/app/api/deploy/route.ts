@@ -128,9 +128,10 @@ export async function POST(req: NextRequest) {
             taskId,
             deploymentUrl,
             deploymentNamespace,
-            deployStatus: matchingDeploy?.status && matchingDeploy.status !== "deployed"
-              ? matchingDeploy.status
-              : "failed",
+            deployStatus:
+              matchingDeploy?.status && matchingDeploy.status !== "deployed"
+                ? matchingDeploy.status
+                : "failed",
             healthStatus,
             rollbackStatus: matchingDeploy?.rollbackStatus || "none",
             error: verificationError || "Deployment verification failed",
