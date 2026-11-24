@@ -1066,116 +1066,116 @@ export function ChatStream({
     }
 
     onLocalSseOpenChangeRef.current?.(true);
-    try {
-      const decoder = new TextDecoder();
-      let streamBuffer = "";
-      let accumulatedRawContent = "";
-      let currentTraces: ExecutionTraceItem[] = [];
-      let currentModel = activeModel;
-      let compactedThisTurn = false;
-      let tokensBeforeCompaction: number | undefined = undefined;
-      let tokensAfterCompaction: number | undefined = undefined;
+    const decoder = new TextDecoder();
+    let streamBuffer = "";
+    let accumulatedRawContent = "";
+    let currentTraces: ExecutionTraceItem[] = [];
+    let currentModel = activeModel;
+    let compactedThisTurn = false;
+    let tokensBeforeCompaction: number | undefined = undefined;
+    let tokensAfterCompaction: number | undefined = undefined;
 
-      const upsertAssistant = (
-        prev: ChatMessage[],
-        patch: (existing: ChatMessage) => ChatMessage
-      ): ChatMessage[] => {
-        const exists = prev.some((msg) => msg.id === assistantMsgId);
-        const base: ChatMessage = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          thought: "",
-          traces: [],
-          modelUsed: currentModel,
-          selectedModel: activeModel,
-        };
-        if (!exists) {
-          return [...prev, patch(base)];
-        }
-        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+    const upsertAssistant = (
+      prev: ChatMessage[],
+      patch: (existing: ChatMessage) => ChatMessage
+    ): ChatMessage[] => {
+      const exists = prev.some((msg) => msg.id === assistantMsgId);
+      const base: ChatMessage = {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        thought: "",
+        traces: [],
+        modelUsed: currentModel,
+        selectedModel: activeModel,
       };
+      if (!exists) {
+        return [...prev, patch(base)];
+      }
+      return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+    };
 
-      let pendingThinkingDelta = "";
-      let pendingTokenCommit = false;
-      let pendingActivityTs: number | null = null;
+    let pendingThinkingDelta = "";
+    let pendingTokenCommit = false;
+    let pendingActivityTs: number | null = null;
 
-      const cancelScheduledStreamRaf = () => {
-        streamRafCancelRef.current?.();
-        streamRafCancelRef.current = null;
-      };
+    const cancelScheduledStreamRaf = () => {
+      streamRafCancelRef.current?.();
+      streamRafCancelRef.current = null;
+    };
 
-      const flushBufferedStreamUpdates = () => {
-        cancelScheduledStreamRaf();
-        if (!isMountedRef.current) return;
-        if (!pendingThinkingDelta && !pendingTokenCommit && pendingActivityTs === null) return;
+    const flushBufferedStreamUpdates = () => {
+      cancelScheduledStreamRaf();
+      if (!isMountedRef.current) return;
+      if (!pendingThinkingDelta && !pendingTokenCommit && pendingActivityTs === null) return;
 
-        const thinkingDelta = pendingThinkingDelta;
-        const shouldCommitToken = pendingTokenCommit;
-        const activityTs = pendingActivityTs;
-        pendingThinkingDelta = "";
-        pendingTokenCommit = false;
-        pendingActivityTs = null;
+      const thinkingDelta = pendingThinkingDelta;
+      const shouldCommitToken = pendingTokenCommit;
+      const activityTs = pendingActivityTs;
+      pendingThinkingDelta = "";
+      pendingTokenCommit = false;
+      pendingActivityTs = null;
 
-        if (activityTs !== null) {
-          setLastActivityAtMs(activityTs);
-        }
+      if (activityTs !== null) {
+        setLastActivityAtMs(activityTs);
+      }
 
-        if (thinkingDelta || shouldCommitToken) {
-          const parsed = shouldCommitToken ? parseThinkingAndContent(accumulatedRawContent) : null;
-          setMessages((prev) =>
-            upsertAssistant(prev, (msg) => {
-              const nextThought = thinkingDelta
-                ? msg.thought
-                  ? msg.thought + thinkingDelta
-                  : thinkingDelta
-                : msg.thought;
-              if (parsed) {
-                return {
-                  ...msg,
-                  content: parsed.content,
-                  thought: parsed.thought,
-                  modelUsed: currentModel,
-                };
-              }
+      if (thinkingDelta || shouldCommitToken) {
+        const parsed = shouldCommitToken ? parseThinkingAndContent(accumulatedRawContent) : null;
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => {
+            const nextThought = thinkingDelta
+              ? msg.thought
+                ? msg.thought + thinkingDelta
+                : thinkingDelta
+              : msg.thought;
+            if (parsed) {
               return {
                 ...msg,
-                thought: nextThought,
+                content: parsed.content,
+                thought: parsed.thought,
+                modelUsed: currentModel,
               };
-            })
-          );
-        }
+            }
+            return {
+              ...msg,
+              thought: nextThought,
+            };
+          })
+        );
+      }
+    };
+
+    const scheduleBufferedStreamFlush = () => {
+      if (streamRafCancelRef.current) return;
+      const rafFn =
+        typeof globalThis.requestAnimationFrame === "function"
+          ? globalThis.requestAnimationFrame.bind(globalThis)
+          : typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+            ? window.requestAnimationFrame.bind(window)
+            : null;
+      const cancelRafFn =
+        typeof globalThis.cancelAnimationFrame === "function"
+          ? globalThis.cancelAnimationFrame.bind(globalThis)
+          : typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+            ? window.cancelAnimationFrame.bind(window)
+            : null;
+
+      if (!rafFn) {
+        flushBufferedStreamUpdates();
+        return;
+      }
+
+      const rafId = rafFn(() => {
+        streamRafCancelRef.current = null;
+        flushBufferedStreamUpdates();
+      });
+      streamRafCancelRef.current = () => {
+        cancelRafFn?.(rafId);
       };
+    };
 
-      const scheduleBufferedStreamFlush = () => {
-        if (streamRafCancelRef.current) return;
-        const rafFn =
-          typeof globalThis.requestAnimationFrame === "function"
-            ? globalThis.requestAnimationFrame.bind(globalThis)
-            : typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
-              ? window.requestAnimationFrame.bind(window)
-              : null;
-        const cancelRafFn =
-          typeof globalThis.cancelAnimationFrame === "function"
-            ? globalThis.cancelAnimationFrame.bind(globalThis)
-            : typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
-              ? window.cancelAnimationFrame.bind(window)
-              : null;
-
-        if (!rafFn) {
-          flushBufferedStreamUpdates();
-          return;
-        }
-
-        const rafId = rafFn(() => {
-          streamRafCancelRef.current = null;
-          flushBufferedStreamUpdates();
-        });
-        streamRafCancelRef.current = () => {
-          cancelRafFn?.(rafId);
-        };
-      };
-
+    try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
