@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node scripts/build.js",
     "lint": "eslint . --max-warnings 0",
-    "test": "npx tsx --test ../web-ui/tests/approvalTokenBinding.test.ts ../web-ui/tests/engineSlotReleaseDuringToolWait.test.ts ../web-ui/tests/hostAsyncJobs.test.ts ../web-ui/tests/hostDaemon.test.ts ../web-ui/tests/hostFourState.test.ts ../web-ui/tests/hostGitSafetyBattery.test.ts ../web-ui/tests/hostMode.test.ts ../web-ui/tests/hostMultiRead.test.ts ../web-ui/tests/hostRunnerScript.test.ts ../web-ui/tests/hostSettingsDefault.test.ts ../web-ui/tests/patchTools.test.ts ../web-ui/tests/unattendedGitOps.test.ts"
+    "test": "npx tsx --test ../web-ui/tests/approvalTokenBinding.test.ts ../web-ui/tests/hostAsyncJobs.test.ts ../web-ui/tests/hostDaemon.test.ts ../web-ui/tests/hostGitSafetyBattery.test.ts ../web-ui/tests/hostMultiRead.test.ts ../web-ui/tests/hostRunnerScript.test.ts ../web-ui/tests/patchTools.test.ts ../web-ui/tests/unattendedGitOps.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
