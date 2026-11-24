@@ -118,6 +118,10 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
       browserResult.tests.includes("browser-mcp:tests"),
       "Must map browser-mcp files to browser-mcp:tests"
     );
+    assert.ok(
+      !browserResult.tests.includes("browser-mcp/tests/tools.test.ts"),
+      "Must not pass browser-mcp test paths to web-ui tsx runner"
+    );
     assert.equal(
       browserResult.uncoveredFiles.length,
       0,

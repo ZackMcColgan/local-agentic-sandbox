@@ -1799,8 +1799,12 @@ export function resolveAffectedTests(changedFiles: string[]): AffectedTestsResul
       continue;
     }
 
-    // Direct test file changed
-    if (/tests\/[^/]+\.test\.(ts|js)$/.test(normalized)) {
+    // Direct test file changed (web-ui tests only; workspace tests map via MAPPING_RULES)
+    if (
+      !normalized.startsWith("browser-mcp/") &&
+      !normalized.startsWith("mcp-server/") &&
+      /tests\/[^/]+\.test\.(ts|js)$/.test(normalized)
+    ) {
       const testFile = normalized.startsWith("web-ui/")
         ? normalized.replace(/^web-ui\//, "")
         : normalized;
