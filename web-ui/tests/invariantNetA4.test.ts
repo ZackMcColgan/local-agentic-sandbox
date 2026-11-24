@@ -42,10 +42,16 @@ test("Phase A4 — BoardView column headers stay at primary/high-contrast tier (
   const headerMatches = [...boardSrc.matchAll(/<h2[^>]*className="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(headerMatches.length > 0, "Expected BoardView <h2> column headers");
   for (const cls of headerMatches) {
-    assert.equal(
-      /text-zinc-[5-9]00/.test(cls),
-      false,
-      `BoardView column header class "${cls}" must not drop to zinc-500 or dimmer`
+    // The rule governs the DARK canvas tier: when a class pairs a light-mode
+    // text-zinc-* with a dark: variant, the dark: variant is what renders on
+    // the dark canvas (a light-mode text-zinc-900 is the highest-contrast
+    // choice there, not a dim tier). Only an unpaired unprefixed class is
+    // judged directly.
+    const darkTier =
+      /dark:text-zinc-(\d+)00/.exec(cls)?.[1] ?? /(?<![:\w-])text-zinc-(\d+)00/.exec(cls)?.[1];
+    assert.ok(
+      darkTier === undefined || Number(darkTier) < 5,
+      `BoardView column header class "${cls}" must not drop to zinc-500 or dimmer on the dark canvas`
     );
   }
 });
