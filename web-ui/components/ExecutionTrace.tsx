@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { copyText } from "@/lib/clipboard";
+import { extractTraceError } from "@/lib/activityTimeline";
 
 export interface ExecutionTraceItem {
   tool: string;
@@ -23,6 +24,7 @@ export interface ExecutionTraceItem {
   model?: string;
   tier?: "sandbox" | "browser";
   round?: number;
+  isError?: boolean;
 }
 
 interface ExecutionTraceProps {
@@ -82,7 +84,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
               ? (trace.result as { isError?: boolean; content?: Array<{ text?: string }> })
               : null;
           const isSuccess =
-            !resObj?.isError && !resObj?.content?.[0]?.text?.includes("EXECUTION_ERROR");
+            trace.isError !== undefined ? !trace.isError : !extractTraceError(trace.result);
 
           // Parse result text if it's formatted as stringified JSON
           let parsedResult: unknown = trace.result;
@@ -163,7 +165,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                         )}
                       </button>
                     </div>
-                    <pre className="text-xs font-mono bg-zinc-50 dark:bg-black p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-emerald-700 dark:text-emerald-300 overflow-x-auto max-h-48">
+                    <pre className="text-xs font-mono bg-zinc-50 dark:bg-black p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-emerald-700 dark:text-emerald-300 max-h-64 overflow-y-auto overflow-x-auto overscroll-contain">
                       {JSON.stringify(trace.args, null, 2)}
                     </pre>
                   </div>
@@ -173,7 +175,7 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
                     <div className="text-[11px] font-mono text-slate-600 dark:text-zinc-300 mb-1">
                       Execution Result & Sandbox Attestation:
                     </div>
-                    <pre className="text-xs font-mono bg-zinc-50 dark:bg-black p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-emerald-800 dark:text-emerald-300 overflow-x-auto max-h-56">
+                    <pre className="text-xs font-mono bg-zinc-50 dark:bg-black p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-emerald-800 dark:text-emerald-300 max-h-64 overflow-y-auto overflow-x-auto overscroll-contain">
                       {typeof parsedResult === "object"
                         ? JSON.stringify(parsedResult, null, 2)
                         : String(parsedResult)}

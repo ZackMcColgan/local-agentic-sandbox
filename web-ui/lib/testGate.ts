@@ -1751,6 +1751,17 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("schedulerHygiene.test.ts"),
     tests: ["tests/schedulerHygiene.test.ts"],
   },
+  {
+    match: (p) =>
+      p.includes("components/chat/messageRender") ||
+      p.includes("components/ActivityTimeline") ||
+      p.includes("components/StintCard") ||
+      p.includes("components/ChatStream") ||
+      p.includes("lib/stintDerivation") ||
+      p.includes("lib/chatStatus") ||
+      p.includes("renderMemoization.test.ts"),
+    tests: ["tests/renderMemoization.test.ts"],
+  },
 ];
 
 /**
