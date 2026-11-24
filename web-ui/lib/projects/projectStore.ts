@@ -580,6 +580,32 @@ export function cancelProjectTask(
   return getProjectTask(taskId, db)!;
 }
 
+/**
+ * Marks a project task as failed and releases the project's active_task_id lock.
+ */
+export function failProjectTask(
+  taskId: string,
+  _reason?: string,
+  dbOverride?: SqliteDb
+): ProjectTaskRecord {
+  const db = getDb(dbOverride);
+  const current = getProjectTask(taskId, db);
+  if (!current) {
+    throw new Error(`Project task not found: ${taskId}`);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(
+    "UPDATE project_tasks SET status = 'failed', completed_at = ?, updated_at = ? WHERE task_id = ?"
+  ).run(now, now, taskId);
+
+  db.prepare(
+    "UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?"
+  ).run(now, current.project_id, taskId);
+
+  return getProjectTask(taskId, db)!;
+}
+
 export interface ProjectFileReviewRecord {
   id: string;
   task_id: string;
