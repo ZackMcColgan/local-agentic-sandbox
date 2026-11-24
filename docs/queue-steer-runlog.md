@@ -240,3 +240,17 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - testGate.ts MAPPING_RULES: additive lines only.
 - Suites: targeted board/reviewer suites 20/20; gate --since=origin/develop 99 pass / 0 fail; npx tsc --noEmit clean.
 - Assumption: gh-level head resolution accepts any non-empty string (preserves existing pollChecks behavior); strict 40-char hex enforced at verdict-recording.
+
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24 re-verification) - nothing left to do
+
+- Banked state on resume: scope (parseRetryAfter, AC-2-1/2-2/2-3) already MERGED via PR #217
+  (mergedAt 2026-11-22T23:24:59Z); web-ui/lib/retryAfter.mjs and web-ui/tests/retryAfter.test.ts
+  confirmed present on origin/develop via git cat-file -e. No restart, no re-implementation.
+- Follow-up (EOL renormalize) already banked: branch eature/eol-renormalize @ 1271b44 pushed;
+  PR #252 OPEN, MERGEABLE, mergeStateStatus CLEAN, base develop. Working tree clean apart from
+  8 untracked eval/results/* scratch dirs (eval artifacts, out of scope - left untouched).
+- Gate re-run on the committed diff: 
+ode scripts/test-gate.js --since=HEAD~1 -> PASSED,
+  7 pass / 0 fail in 6.2s (<90s budget). git diff --ignore-cr-at-eol --stat -> empty (zero
+  content drift; the renormalize commit is pure line-ending normalization).
+- Status: COMPLETE. No further work in scope; PR #252 awaits owner-side merge into develop.
