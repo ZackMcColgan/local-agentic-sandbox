@@ -1158,6 +1158,14 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/shakeoutFixes.test.ts",
     ],
   },
+  {
+    match: (p) =>
+      p.includes("components/BoardView") ||
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("components/ChatStream") ||
+      p.includes("uiPolishBatch8.test.ts"),
+    tests: ["tests/uiPolishBatch8.test.ts"],
+  },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
