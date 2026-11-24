@@ -130,8 +130,10 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
 
     // Allowlisted: this detector itself, reviewer-gate pattern lists and their
     // detection fixtures, board-UI forbidden lists, repoMap's vendor-config
-    // ignore-directory entries, and path-confinement/fixture tests that
-    // intentionally exercise drive-letter host paths.
+    // ignore-directory entries, path-confinement/fixture tests that
+    // intentionally exercise drive-letter host paths, and the deployment
+    // manifest's HOST_CHECKOUT_PATH (functional per-machine runtime config the
+    // prod stack requires, not runtime text or metadata).
     const allowlist = [
       "web-ui/tests/repoHygiene.test.ts",
       "web-ui/lib/board/reviewerGate.ts",
@@ -144,6 +146,7 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
       "web-ui/tests/hostFileRestriction.test.ts",
       "web-ui/tests/uiuxAuditFixes.test.ts",
       "web-ui/tests/conversationCompaction.test.ts",
+      "deploy/k8s/web-ui.yaml",
     ];
 
     const targets = tracked.filter((file) => {
@@ -161,7 +164,7 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
     // The ban targets vendor branding, not the OpenAI wire-format compatibility
     // contract that the engine layer legitimately references.
     const vendorExceptionPattern =
-      /openai[-\s]?compatible|normalizeOpenAIMessages|mock-openai-server|openai-server/i;
+      /openai[-\s]?compatible|normalizeOpenAIMessages|mock-openai-server|openai-server|OpenAI multimodal|OpenAI-format/i;
     // Repo-origin identity URLs (CI badge, Helm chart home, PR-link fixtures)
     // legitimately carry the GitHub owner slug; they are repo identity, not
     // runtime personal-name leakage.

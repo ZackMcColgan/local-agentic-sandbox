@@ -66,7 +66,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board #54 â€” eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
-- Worktree: `C:\Users\zackm\Desktop\repos\ls-worktree-54`, branch `feature/eval-run-tool-discipline-and-fault-isolation` (off origin/develop @ 8579193).
+- Worktree: `C:\repos\ls-worktree-54`, branch `feature/eval-run-tool-discipline-and-fault-isolation` (off origin/develop @ 8579193).
 - Test-first: added `web-ui/tests/evalRunnerEndpointDiscipline.test.ts` (6 tests) covering all three ACs before implementation.
 - Fixes in `eval/run.mjs`:
   - `callEndpoint` now records `toolCallsExecuted` from `finish_reason: 'tool_calls'` (was hardcoded 0, which failed compliant models â€” run 2026-11-20T17-10-01-179Z) and simulates the injected stall round: injects a `role: "tool"` stall message and asks for a follow-up, so tool-discipline grades stall honesty instead of penalizing valid tool_calls.
@@ -94,7 +94,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board Item #59 â€” Single-emerald accent + dark-mode contrast floor (BoardView, ChatStream, SettingsView)
 
-- Worktree: `C:\Users\zackm\Desktop\repos\board59-wt`, branch `feature/emerald-accent-contrast-floor` (off develop).
+- Worktree: `C:\repos\board59-wt`, branch `feature/emerald-accent-contrast-floor` (off develop).
 - Test-first: `web-ui/tests/accentContrastAudit.test.ts` (banned cyan/sky scan on BoardView + ChatStream; rose-400 heading floor check; disabled-control floor check) and `web-ui/tests/e2e/settingsMobile.spec.ts` (412px dark Playwright render audit: zero banned accent classes across Settings/Board/Chat, Danger Zone heading and disabled Start button clear the zinc-400-on-#000 floor of 8.2). Both red before the fix.
 - Patches (one file per commit):
   - web-ui/components/BoardView.tsx: banned cyan accents on active/working states replaced with single-emerald tokens (`border-emerald-500/40`, `text-emerald-300/400`, `bg-emerald-*`).
@@ -108,7 +108,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board item #63 ï¿½ skip unused per-chat worktree creation
 
-- Worktree: C:\Users\zackm\Desktop\repos\lsb-job63, branch feature/chat-turn-worktree-skip (off develop).
+- Worktree: C:\repos\lsb-job63, branch feature/chat-turn-worktree-skip (off develop).
 - Evidence: web-ui/app/api/chat/route.ts passed repoRoot: resolveJobRepoRoot() to serializeTurn, which created+deleted a git worktree per chat turn; the handle was only consumed by chunkWorkspaceRoot (web-ui/lib/chat/roundLoop.ts:663) for the runlog path. MCP workspace tools execute via target.client.callTool against the container shared /workspace (roundLoop.ts:1613) - never _worktree.path. So the worktree was pure git churn, no isolation.
 - Decision (assumption logged): REMOVE the unused per-turn worktree rather than thread a workspace root through MCP tools; mcp-server/src/tools/workspaceTools.ts has no workspace-root parameter today, so real isolation is a separate mcp-server change. serializeTurn keeps repoRoot support for job-queue callers (jobQueueIsolation.test.ts untouched).
 - Test-first: web-ui/tests/jobQueueRoute.test.ts - new test asserts chat route source has no repoRoot: resolveJobRepoRoot()/createJobWorktree, and serializeTurn without repoRoot runs runTurn with null worktree and creates no .git/worktrees dir. Red before fix.
@@ -127,7 +127,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board #125 (Perf P2) - enable parallel tool calls for read-only fanout
 
-- Worktree: C:\Users\zackm\Desktop\repos\perf-p2-wt, branch feature/perf-p2-parallel-tools (off develop).
+- Worktree: C:\repos\perf-p2-wt, branch feature/perf-p2-parallel-tools (off develop).
 - Test-first (commit 8f7b6fd, banked by prior attempt): web-ui/tests/parallelReadOnlyFanout.test.ts pins partitionToolCallBatches (read-only batch + write barrier + cap 8) and a roundLoop contract proving 3 read-only calls produce 3 traces in ONE round; wired into web-ui/lib/testGate.ts manifest.
 - Contract test flipped in web-ui/tests/llmProvider.test.ts: streamChat must send parallel_tool_calls: true when tools are present (runaway protection lives in the fanout partition, not the request flag).
 - New test added: multi-index delta tool_calls must survive accumulation (index 1 deltas no longer dropped) so parallel batches reach partitionToolCallBatches in emission order.
@@ -137,7 +137,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board #127 (Perf P3) - thought stream delta-only
 
-- Worktree: C:\Users\zackm\Desktop\repos\perf-wt, branch feature/perf-p3-thought-stream (off fresh origin/develop).
+- Worktree: C:\repos\perf-wt, branch feature/perf-p3-thought-stream (off fresh origin/develop).
 - Client claim verified: web-ui/components/ChatStream.tsx handles delta `thinking` events (line ~1177, appends event.content to msg.thought) and round-boundary `thought` events (line ~1167, replaces msg.thought + thinkingSegments); the terminal `done` event carries the final thought. So per-token cumulative `thought` events are NOT required by the client - item proceeds.
 - Test-first: web-ui/tests/thoughtStreamDeltaOnly.test.ts (3 tests) - N thinking tokens produce N `thinking` deltas and at most one `thought` per round; synthesis pass emits deltas only, never a cumulative `thought`. Confirmed failing for the stated reason before the fix (roundLoop emitted 0 thinking deltas + per-token cumulative thought; synthesis emitted 3 cumulative thought events).
 - Patch web-ui/lib/chat/roundLoop.ts: per thinking token now emits ONLY the `thinking` delta; cumulative `thought` fires at most once per round - either a throttled snapshot flush (streamSnapshot.maybeWrite returns true, <=1/sec) or the round boundary, deduped via thoughtEventThisRound. Removed the redundant post-round thought emit.
@@ -149,7 +149,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board #129 (Perf P5) - mid-turn compaction uses extraction digest + release engine slot during tool waits
 
-- Worktree: C:\Users\zackm\Desktop\repos\local-agentic-sandbox\.worktrees\perf-p5, branch feature/perf-p5-compaction-slot (base f209f39, perf-p3 merged).
+- Worktree: C:\repos\local-agentic-sandbox\.worktrees\perf-p5, branch feature/perf-p5-compaction-slot (base f209f39, perf-p3 merged).
 - Problem A: mid-turn hybrid compaction dispatched a secondary summarization LLM call on the SINGLE engine slot with a different system prompt, evicting the active turn's prefix state (next main round restarts at zero reuse; 1,158 evictions in the engine log).
 - Problem B: the turn's slot lease was held through long tool waits (30-60s installs/tests) although lease.releaseForWait() existed in web-ui/lib/slotScheduler.ts and was never called.
 - Test-first: web-ui/tests/engineSlotReleaseDuringToolWait.test.ts (3 tests) - P5-A pins resolveMidTurnHybridEnabled default OFF + roundLoop mid-turn branch gated on it; P5-B drives two turns through serializeTurn+JobQueue+shared scheduler with a mock engine and asserts queued turn B dispatches its LLM round DURING turn A's tool wait, and A re-acquires before its round 2. Red before fix (order was llm_A1, tool_start, tool_end, llm_A2, llm_B).
@@ -165,7 +165,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board #128 (Perf P4) - snapshot interval 5s + pause full-thread polling while streaming
 
-- Worktree: C:\Users\zackm\Desktop\repos\wt-perf-p4, branch feature/perf-p4-snapshot-poll (off fresh origin/develop @ f209f39).
+- Worktree: C:\repos\wt-perf-p4, branch feature/perf-p4-snapshot-poll (off fresh origin/develop @ f209f39).
 - Test-first: web-ui/tests/snapshotIntervalFiveSeconds.test.ts (4 tests: 5000 ms default constant, throttle skips inside the 5s window and lands past it, forced round-boundary writes still bypass the throttle, route constructs the snapshot with the shared default) and web-ui/tests/streamPollGate.test.ts (6 tests: quiet window equals STREAM_POLL_INTERVAL_MS, delivering/quiet arithmetic incl. boundary + non-finite clock, gate truth table, page.tsx source wiring with no new stream-active state). Both confirmed failing before implementation (default was 1000 ms; lib/streamPollGate.ts did not exist).
 - Patch web-ui/lib/streamSnapshot.ts: STREAM_SNAPSHOT_INTERVAL_MS 1000 -> 5000. Round-boundary { force: true } writes unchanged (TURN-LIVENESS contract intact).
 - New web-ui/lib/streamPollGate.ts: pure predicate isSseStreamDelivering(lastChunkAtMs, nowMs) + shouldPollLiveThread({ threadLiveStreaming, sseStreamDelivering }); quiet window = STREAM_POLL_INTERVAL_MS (1500 ms). Extracted because app/page.tsx has no browser harness (same pattern as lib/reconcilePollPolicy.ts).
@@ -178,7 +178,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 
 ## Board #130 (Perf P6) - measure prompt estimate once per round (kill repeated full-history scans)
 
-- Worktree: C:\Users\zackm\Desktop\repos\local-agentic-sandbox\.worktrees\perf-p6, branch feature/perf-p6-estimate-scans (off fresh origin/develop).
+- Worktree: C:\repos\local-agentic-sandbox\.worktrees\perf-p6, branch feature/perf-p6-estimate-scans (off fresh origin/develop).
 - Test-first: web-ui/tests/estimateScanPerRound.test.ts (2 tests: counting observer proves <= 2 array scans per round on the standard path; golden math assertion estimateTokens still ceil(len/4)). Confirmed failing before implementation (setEstimateTokensObserver seam did not exist; standard path re-stringified the full history 8-14x per round).
 - Patch web-ui/lib/contextBudget.ts:
   - Added setEstimateTokensObserver(fn|null) test-only seam; estimateTokens invokes it on every call (observer never changes the returned value).

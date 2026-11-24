@@ -6,11 +6,11 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { NavigationDrawer } from "../components/NavigationDrawer";
 
-describe("Work Order #2 — Gemini Pattern Mobile Navigation & Full-Screen Views", () => {
+describe("Work Order #2 — Mobile Navigation & Full-Screen Views", () => {
   const componentsDir = path.resolve(__dirname, "../components");
   const appDir = path.resolve(__dirname, "../app");
 
-  it("ensures ChatStream header implements Gemini mobile pattern: hamburger + Projects + model pill, no Stop pill", () => {
+  it("ensures ChatStream header implements the mobile navigation pattern: hamburger + Projects + model pill, no Stop pill", () => {
     const file = fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf-8");
 
     // Hamburger button: visible on mobile (< md:), opens drawer, min-h-[44px] min-w-[44px]
