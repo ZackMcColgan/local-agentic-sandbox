@@ -24,7 +24,7 @@ import {
   TurnFileDiff,
 } from "@/lib/chatDiffs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { DEFAULT_PRIMARY_MODEL, AgentMode } from "@/config/models";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags } from "@/lib/toolParser";
@@ -251,8 +251,8 @@ export interface RunChatTurnDeps {
   /** Optional override for the in-turn touchActiveTurn heartbeat interval (defaults to 30s). */
   heartbeatIntervalMs?: number;
 
-  // MCP sessions & telemetry
-  activeSessions: Array<{ client: Client; transport: SSEClientTransport }>;
+  // Stateless MCP client handles (tracked per turn for cleanup only) & telemetry
+  activeSessions: Array<{ client: Client; transport: StreamableHTTPClientTransport }>;
   toolClientMap: Map<
     string,
     { client: Client | null; tier: "sandbox" | "browser" | "workspace" | "host" }
@@ -593,6 +593,9 @@ export async function runChatTurn(
         for (const s of activeSessions) {
           try {
             await s.client.close();
+          } catch {}
+          try {
+            await s.transport.close();
           } catch {}
         }
         await sseWriter.closeWriterWithTimeout(1000);
@@ -2891,6 +2894,9 @@ export async function runChatTurn(
     for (const session of activeSessions) {
       try {
         await session.client.close();
+      } catch {}
+      try {
+        await session.transport.close();
       } catch {}
     }
     // job-queue-isolation: drain the readable before close so a client that

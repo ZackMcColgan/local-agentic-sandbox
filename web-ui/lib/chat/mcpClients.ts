@@ -1,5 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { normalizeMcpUrl } from "@/lib/toolParser";
 
 export interface McpClientLike {
@@ -20,37 +20,37 @@ export interface McpClientDeps {
 }
 
 export const getMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
-  env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
+  env.MCP_SERVER_URL || "http://mcp-server:8080/mcp";
 
 export const getBrowserMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
-  env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
+  env.BROWSER_MCP_URL || "http://browser-mcp:8081/mcp";
 
 export async function connectMcpClient(url: string, name: string, deps: McpClientDeps = {}) {
-  const sseUrl = normalizeMcpUrl(url);
+  const mcpUrl = normalizeMcpUrl(url);
   const log = deps.log ?? console.log;
   const warn = deps.warn ?? console.warn;
-  let transport: SSEClientTransport | McpTransportLike | null = null;
+  let transport: StreamableHTTPClientTransport | McpTransportLike | null = null;
   let client: Client | McpClientLike | null = null;
   try {
     transport = deps.createTransport
-      ? deps.createTransport(new URL(sseUrl))
-      : new SSEClientTransport(new URL(sseUrl));
+      ? deps.createTransport(new URL(mcpUrl))
+      : new StreamableHTTPClientTransport(new URL(mcpUrl));
     client = deps.createClient
       ? deps.createClient(name)
       : new Client({ name, version: "1.0.0" }, { capabilities: {} });
-    await client.connect(transport as SSEClientTransport);
+    await client.connect(transport as StreamableHTTPClientTransport);
     const toolsResult = await client.listTools();
     log(
-      `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
+      `[Orchestrator] Connected to MCP (${name}) at ${mcpUrl} with ${toolsResult.tools.length} tools`
     );
     return {
       client: client as Client,
-      transport: transport as SSEClientTransport,
+      transport: transport as StreamableHTTPClientTransport,
       tools: toolsResult.tools,
     };
   } catch (err: unknown) {
     warn(
-      `[Orchestrator] Could not connect to MCP at ${sseUrl}:`,
+      `[Orchestrator] Could not connect to MCP at ${mcpUrl}:`,
       err instanceof Error ? err.message : String(err)
     );
     if (client) {
