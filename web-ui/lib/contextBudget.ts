@@ -246,6 +246,8 @@ export interface PromptTokenCalibration {
   lastMeasuredEstimateTokens?: number;
   /** Pre-computed tool-schema token count for the current round. */
   toolSchemaTokens?: number;
+  /** Pre-computed tool-schema token count (alias for toolSchemaTokens). */
+  precomputedToolSchemaTokens?: number;
   /** Tool-schema array for the current round (used if toolSchemaTokens is omitted). */
   tools?: unknown[];
 }
@@ -268,7 +270,9 @@ export function estimateEffectivePromptTokens(
       ? calibration.precomputedRawMessageTokens
       : estimateTokens(messages);
   const schemaTokens =
-    calibration?.toolSchemaTokens ?? estimateToolSchemaTokens(calibration?.tools);
+    calibration?.precomputedToolSchemaTokens ??
+    calibration?.toolSchemaTokens ??
+    estimateToolSchemaTokens(calibration?.tools);
   const rawTotal = rawMessageTokens + schemaTokens;
 
   const measured = calibration?.lastMeasuredPromptTokens;
@@ -488,6 +492,7 @@ export interface FitContextOptions {
   reserveOutputTokens?: number;
   outputHeadroomTokens?: number;
   toolSchemaTokens?: number;
+  precomputedToolSchemaTokens?: number;
   compactHistory?: boolean;
   /**
    * Pre-computed estimateTokens(messages) to reuse instead of re-stringifying the
@@ -605,7 +610,10 @@ export function fitContextWindow(
     options?.reserveOutputTokens ?? ROUND_MAX_TOKENS
   );
   let maxTokens = Math.min(options?.maxContentTokens ?? CHAT_CONTEXT_BUDGET_TOKENS, windowCeiling);
-  const rawToolTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
+  const rawToolTokens =
+    options?.precomputedToolSchemaTokens ??
+    options?.toolSchemaTokens ??
+    estimateToolSchemaTokens(options?.tools);
   const toolSchemaTokens = rawToolTokens;
 
   if (toolSchemaTokens > 0) {
@@ -828,31 +836,51 @@ export async function runChatToolLoop(
   const initialUserMsg = [...conversationMessages].reverse().find((m) => m?.role === "user");
   const userPrompt = typeof initialUserMsg?.content === "string" ? initialUserMsg.content : "";
   const { isArtifactRequest } = hasArtifactCreationIntent(userPrompt);
+  const roundToolSchemaTokens = estimateToolSchemaTokens(llmTools);
 
   while (true) {
     // Perf P6 (#130): measure the raw full-history estimate ONCE per round and
     // thread it through the fit ladder, continuation check, and provider payload
     // fit so those helpers reuse it instead of re-stringifying the history.
-    const rawRoundTokens = estimateTokens(conversationMessages);
+    // Any mutation (compaction or appendTrailingDirective) invalidates the cache.
+    let rawRoundTokens = estimateTokens(conversationMessages);
+    let rawRoundDirty = false;
+    const markRawRoundDirty = () => {
+      rawRoundDirty = true;
+    };
+    const getRawRoundTokens = () => {
+      if (rawRoundDirty) {
+        rawRoundTokens = estimateTokens(conversationMessages);
+        rawRoundDirty = false;
+      }
+      return rawRoundTokens;
+    };
+    const appendDirectiveAndInvalidate = (directive: string) => {
+      const lenBefore = conversationMessages.length;
+      appendTrailingDirective(conversationMessages, directive);
+      if (conversationMessages.length !== lenBefore) {
+        markRawRoundDirty();
+      }
+    };
 
     // Fit conversation to budget first through the compaction/elision ladder
     const fitResult = fitConversationToBudget(conversationMessages, {
       budgetTokens: maxContentTokens,
-      precomputedRawMessageTokens: rawRoundTokens,
+      precomputedRawMessageTokens: getRawRoundTokens(),
+      precomputedToolSchemaTokens: roundToolSchemaTokens,
     });
     if (fitResult.compacted) {
       conversationMessages.length = 0;
       conversationMessages.push(...fitResult.messages);
+      markRawRoundDirty();
     }
     if (fitResult.highWater) {
-      appendTrailingDirective(conversationMessages, HIGH_WATER_BANKING_DIRECTIVE);
+      appendDirectiveAndInvalidate(HIGH_WATER_BANKING_DIRECTIVE);
     }
 
     // After a no-op fit the raw estimate is still valid; after compaction/elision
-    // the history changed, so re-measure once.
-    const contextTokens = fitResult.compacted
-      ? estimateTokens(conversationMessages)
-      : rawRoundTokens;
+    // or directive append the history changed, so re-measure once via getRawRoundTokens().
+    const contextTokens = getRawRoundTokens();
 
     // CHAT-7: continuation is governed by context headroom, with maxToolRounds acting
     // as an explicit (optional) backstop override rather than a normal work ceiling.
@@ -870,10 +898,10 @@ export async function runChatToolLoop(
 
     const isFinalRound = decision.forceSynthesis === true;
     if (isFinalRound) {
-      appendTrailingDirective(conversationMessages, FINAL_ROUND_SYNTHESIS_DIRECTIVE);
+      appendDirectiveAndInvalidate(FINAL_ROUND_SYNTHESIS_DIRECTIVE);
     }
     if (isArtifactRequest) {
-      appendTrailingDirective(conversationMessages, OUTPUT_HEADROOM_THINKING_DIRECTIVE);
+      appendDirectiveAndInvalidate(OUTPUT_HEADROOM_THINKING_DIRECTIVE);
     }
 
     const roundTools = llmTools;
@@ -882,8 +910,9 @@ export async function runChatToolLoop(
       messages: fitContextWindow(conversationMessages, {
         maxContentTokens,
         tools: roundTools,
+        precomputedToolSchemaTokens: roundToolSchemaTokens,
         isArtifactTurn: isArtifactRequest,
-        precomputedRawMessageTokens: contextTokens,
+        precomputedRawMessageTokens: getRawRoundTokens(),
       }),
       keep_alive: -1,
       options: resolveRoundModelOptions({
@@ -1092,6 +1121,8 @@ export function fitConversationToBudget(
     tools?: unknown[];
     /** Pre-computed tool-schema token count (Fix D1). */
     toolSchemaTokens?: number;
+    /** Pre-computed tool-schema token count (alias for toolSchemaTokens). */
+    precomputedToolSchemaTokens?: number;
     /** Physical context window size (Fix D2). */
     contextWindowTokens?: number;
     /** Per-round output reserve (defaults to ROUND_MAX_TOKENS, Fix D2). */
@@ -1125,7 +1156,10 @@ export function fitConversationToBudget(
   );
   const thresholdRatio = options?.compactionThreshold ?? COMPACTION_THRESHOLD_RATIO;
   const thresholdTokens = Math.floor(budgetTokens * thresholdRatio);
-  const schemaTokens = options?.toolSchemaTokens ?? estimateToolSchemaTokens(options?.tools);
+  const schemaTokens =
+    options?.precomputedToolSchemaTokens ??
+    options?.toolSchemaTokens ??
+    estimateToolSchemaTokens(options?.tools);
   const rawInitialMessageTokens =
     typeof options?.precomputedRawMessageTokens === "number"
       ? options.precomputedRawMessageTokens

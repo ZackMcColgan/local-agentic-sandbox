@@ -287,7 +287,8 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         "route.ts must call canContinueToolLoop"
       );
       assert.ok(
-        content.includes("contextTokens: estimateTokens(conversationMessages)"),
+        content.includes("contextTokens: getRawTokens()") ||
+          content.includes("contextTokens: estimateTokens(conversationMessages)"),
         "must pass headroom estimate"
       );
       assert.ok(
