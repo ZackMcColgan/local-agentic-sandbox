@@ -7,6 +7,7 @@ import {
   fitContextWindow,
   clampToolOutput,
   runChatToolLoop,
+  appendTrailingDirective,
   FINAL_ROUND_SYNTHESIS_DIRECTIVE,
   EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER,
   CHAT_CONTEXT_BUDGET_TOKENS,
@@ -1121,6 +1122,104 @@ describe("Chat Context-Budget Enforcement Suite", () => {
         chatStreamSrc.includes("compactedThisTurn"),
         "ChatStream must support compactedThisTurn property"
       );
+    });
+  });
+
+  describe("R9: Synthetic directive tagging (isDirective: true) across budget, compaction, tail & provider", () => {
+    it("appendTrailingDirective sets isDirective: true and fitContextWindow excludes directives from latestUserIdx", () => {
+      const messages: ContextMessage[] = [
+        { role: "system", content: "System instructions." },
+        { role: "user", content: "First user brief: build the module." },
+        { role: "assistant", content: "Working on earlier step. " + "A".repeat(4000) },
+        { role: "assistant", content: "Another old message. " + "B".repeat(4000) },
+        { role: "user", content: "Latest real user prompt: verify error handling." },
+        { role: "assistant", content: "Checking error handling now." },
+      ];
+      appendTrailingDirective(messages, HIGH_WATER_BANKING_DIRECTIVE);
+
+      const directiveMsg = messages[messages.length - 1];
+      assert.equal(directiveMsg.role, "user");
+      assert.equal(
+        directiveMsg.isDirective,
+        true,
+        "appendTrailingDirective must tag synthetic directives with isDirective: true"
+      );
+
+      // Force eviction of non-protected messages (maxContentTokens tight enough to evict older/non-protected)
+      const fitted = fitContextWindow(messages, { maxContentTokens: 1200 });
+      assert.ok(
+        fitted.some((m) => m.content === "First user brief: build the module."),
+        "First real user brief must survive"
+      );
+      assert.ok(
+        fitted.some((m) => m.content === "Latest real user prompt: verify error handling."),
+        "Latest real user prompt must NOT be evicted because of a trailing isDirective message"
+      );
+    });
+
+    it("summarizeTurnHistory excludes isDirective: true messages from Prior User Goals & Requests", async () => {
+      const { summarizeTurnHistory } = await import("../lib/conversationCompaction.js");
+      const digest = summarizeTurnHistory([
+        { role: "user", content: "Real user request: analyze database schema." },
+        {
+          role: "user",
+          content: HIGH_WATER_BANKING_DIRECTIVE,
+          isDirective: true,
+        } as ContextMessage,
+      ]);
+      assert.ok(digest.includes("Real user request: analyze database schema."));
+      assert.ok(
+        !digest.includes("CONTEXT BUDGET HIGH-WATER WARNING"),
+        "Synthetic directive must NOT be recorded in Prior User Goals & Requests"
+      );
+    });
+
+    it("extractInFlightTail ignores trailing isDirective: true messages when finding last real user message", async () => {
+      const roundLoopMod = (await import("../lib/chat/roundLoop.js")) as Record<string, unknown>;
+      assert.equal(
+        typeof roundLoopMod.extractInFlightTail,
+        "function",
+        "roundLoop must export extractInFlightTail"
+      );
+      const extractInFlightTail = roundLoopMod.extractInFlightTail as (
+        msgs: ContextMessage[]
+      ) => ContextMessage[];
+
+      const messages: ContextMessage[] = [
+        { role: "system", content: "System" },
+        { role: "user", content: "Real user turn prompt" },
+        {
+          role: "assistant",
+          content: "Calling tool",
+          tool_calls: [
+            { id: "tc-1", type: "function", function: { name: "read", arguments: "{}" } },
+          ],
+        },
+        { role: "tool", name: "read", tool_call_id: "tc-1", content: "file content" },
+      ];
+      appendTrailingDirective(messages, HIGH_WATER_BANKING_DIRECTIVE);
+
+      const tail = extractInFlightTail(messages);
+      assert.ok(
+        tail.some((m) => m.role === "tool" && m.tool_call_id === "tc-1"),
+        "extractInFlightTail must keep tool results when a trailing directive follows the real user prompt"
+      );
+    });
+
+    it("normalizeOpenAIMessages omits isDirective while keeping prior messages intact", async () => {
+      const { normalizeOpenAIMessages } = await import("../lib/llm/provider.js");
+      const priorUser = { role: "user", content: "Real prompt" };
+      const directive = {
+        role: "user",
+        content: HIGH_WATER_BANKING_DIRECTIVE,
+        isDirective: true,
+      };
+      const normalized = normalizeOpenAIMessages([priorUser, directive]);
+      assert.equal(normalized.length, 2);
+      assert.deepEqual(normalized[0], priorUser, "Prior message must stay intact");
+      assert.equal("isDirective" in normalized[1], false, "isDirective must be stripped for API");
+      assert.equal(normalized[1].role, "user");
+      assert.equal(normalized[1].content, HIGH_WATER_BANKING_DIRECTIVE);
     });
   });
 

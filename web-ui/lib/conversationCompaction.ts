@@ -136,6 +136,7 @@ export interface CompactionMessage {
   content: string;
   name?: string;
   tool_call_id?: string;
+  isDirective?: boolean;
   tool_calls?: Array<{
     id?: string;
     type?: string;
@@ -529,7 +530,7 @@ export function summarizeTurnHistory(olderMessages: CompactionMessage[]): string
   for (const msg of olderMessages) {
     if (!msg) continue;
 
-    if (msg.role === "user" && typeof msg.content === "string") {
+    if (msg.role === "user" && !msg.isDirective && typeof msg.content === "string") {
       const trimmed = msg.content.trim().slice(0, 2000);
       if (trimmed) userQueries.push(trimmed);
     } else if (msg.role === "tool") {

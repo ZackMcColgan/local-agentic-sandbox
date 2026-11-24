@@ -631,7 +631,10 @@ export class ThreadStore {
       if (drainOwnedThreadIds.has(s.id)) {
         continue;
       }
-      const thread = await this.getThread(s.id);
+      // For non-board taskId candidates, read raw JSON before reconcileThread so
+      // post-restart reconciliation does not flip "active" -> "stopped" before
+      // superviseStalledThread can inspect and auto-resume the stalled job.
+      const thread = s.taskId ? this.readRawThreadFile(s.id) : await this.getThread(s.id);
       if (!thread) {
         continue;
       }
@@ -1318,7 +1321,7 @@ export class ThreadStore {
     return summaries;
   }
 
-  async getThread(threadId: string): Promise<Thread | null> {
+  private readRawThreadFile(threadId: string): Thread | null {
     let filePath = this.getFilePath(threadId);
     if (!fs.existsSync(filePath)) {
       const prefixedPath = this.getFilePath(`thread-${threadId}`);
@@ -1331,12 +1334,17 @@ export class ThreadStore {
 
     try {
       const raw = fs.readFileSync(filePath, "utf8");
-      const thread = JSON.parse(raw) as Thread;
-      this.reconcileThread(thread);
-      return thread;
+      return JSON.parse(raw) as Thread;
     } catch {
       return null;
     }
+  }
+
+  async getThread(threadId: string): Promise<Thread | null> {
+    const thread = this.readRawThreadFile(threadId);
+    if (!thread) return null;
+    this.reconcileThread(thread);
+    return thread;
   }
 
   private supervisorDispatchTurn?: (threadId: string, prompt: string) => void;

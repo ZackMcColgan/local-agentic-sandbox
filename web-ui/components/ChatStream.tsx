@@ -1133,7 +1133,7 @@ export function ChatStream({
               return {
                 ...msg,
                 content: parsed.content,
-                thought: parsed.thought,
+                thought: parsed.thought ?? msg.thought,
                 modelUsed: currentModel,
               };
             }

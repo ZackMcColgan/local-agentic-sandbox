@@ -3,6 +3,7 @@ import { SelfDeployPipeline, isSelfDeployKillSwitchEnabled } from "@/lib/deploy/
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { TaskManifest } from "@/lib/subagents/types";
+import { parseJsonBody } from "@/lib/apiJson";
 
 export async function GET(_req: NextRequest) {
   try {
@@ -39,7 +40,9 @@ function isSameOriginRequest(req: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const { action } = body;
 
     if (action === "toggleKillSwitch") {
