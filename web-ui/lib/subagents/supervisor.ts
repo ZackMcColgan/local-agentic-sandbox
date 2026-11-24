@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync } from "../fsAtomic";
 import { FileCheckpointSaver } from "./checkpointSaver";
 export { FileCheckpointSaver };
 import { buildVerificationAdapters } from "./verification";
@@ -270,10 +271,10 @@ export class OvernightSupervisor {
 
     console.log(`[supervisor] saving checkpoint for ${task.taskId}`);
     try {
-      fs.writeFileSync(
+      atomicWriteFileSync(
         this.getCheckpointFilePath(task.taskId),
         JSON.stringify(task, null, 2),
-        "utf8"
+        0o660
       );
       console.log(`[supervisor] checkpoint saved for ${task.taskId}`);
       this.syncTaskToRunLedger(task);

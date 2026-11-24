@@ -10,7 +10,7 @@ import { OvernightSupervisor, createProductionStepExecutor, type StepExecutor } 
 import { generatePlanSpec, type PlanSpec, type PlanSpecInput } from "./planner";
 import { WorkerPool } from "./workerPool";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
-import { atomicWriteFileSync } from "../fsAtomic";
+import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 
 export type ScheduleId = string;
 
@@ -147,7 +147,11 @@ export class UnattendedScheduler {
       if (!fs.existsSync(this.storageFile)) return [];
       const raw = fs.readFileSync(this.storageFile, "utf8");
       return JSON.parse(raw);
-    } catch {
+    } catch (err) {
+      quarantineCorruptFile(
+        this.storageFile,
+        err instanceof Error ? err.message : "corrupt schedules.json"
+      );
       return [];
     }
   }
@@ -303,7 +307,7 @@ ${ambiguities.length > 0 ? ambiguities.map((a) => `- [${a.id}]: ${a.question} (A
 ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
 `;
 
-    fs.writeFileSync(reportPath, reportContent, "utf8");
+    atomicWriteFileSync(reportPath, reportContent, 0o660);
     return reportContent;
   }
 
@@ -316,7 +320,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         attempt,
         active,
       };
-      fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(payload, null, 2), "utf8");
+      atomicWriteFileSync(this.getHeartbeatPath(), JSON.stringify(payload, null, 2), 0o660);
     } catch {}
   }
 
@@ -371,7 +375,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
             manifest.status = "crashed";
             manifest.parkedReason = manifest.parkedReason || "Interrupted by scheduler restart";
             manifest.updatedAt = nowIso;
-            fs.writeFileSync(filePath, JSON.stringify(manifest, null, 2), "utf8");
+            atomicWriteFileSync(filePath, JSON.stringify(manifest, null, 2), 0o660);
             if (this.supervisor) {
               try {
                 this.supervisor.syncTaskToRunLedger(manifest);

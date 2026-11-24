@@ -3,6 +3,7 @@ import path from "path";
 import { createRequire } from "module";
 import { TaskManifest } from "../subagents/types";
 import { getDefaultLedgerDbPath, migrateLegacyRunsDbIfNeeded } from "../ledger/runLedger";
+import { configureSqliteHandle, runImmediateTransaction } from "../ledger/sqliteConfig";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -39,7 +40,9 @@ function openSqliteDatabase(dbPath: string): SqliteDatabase {
   const { DatabaseSync } = requireModule("node:sqlite") as {
     DatabaseSync: new (filename: string) => SqliteDatabase;
   };
-  return new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  configureSqliteHandle(db, dbPath);
+  return db;
 }
 
 export function getDefaultSkillsDbPath(): string {
@@ -96,19 +99,21 @@ export class FlywheelSkillsStore {
         use_count = skills.use_count + 1
     `);
 
-    for (const s of skills) {
-      stmt.run(
-        s.skillId,
-        s.name,
-        s.description,
-        s.domain,
-        s.patternTemplate,
-        s.sourceTaskId,
-        s.confidenceScore,
-        s.createdAt,
-        s.useCount ?? 0
-      );
-    }
+    runImmediateTransaction(this.db, () => {
+      for (const s of skills) {
+        stmt.run(
+          s.skillId,
+          s.name,
+          s.description,
+          s.domain,
+          s.patternTemplate,
+          s.sourceTaskId,
+          s.confidenceScore,
+          s.createdAt,
+          s.useCount ?? 0
+        );
+      }
+    });
   }
 
   public listSkills(domain?: string): SkillPattern[] {

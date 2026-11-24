@@ -13,6 +13,7 @@ import { DEFAULT_PRIMARY_MODEL } from "../config/models";
 import type { TaskManifest } from "../lib/subagents/types";
 import { POST as threadsPost } from "../app/api/threads/route";
 import { POST as threadByIdPost } from "../app/api/threads/[id]/route";
+import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
 function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -144,6 +145,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
         "Deliverable must exist in isolated worktree"
       );
     } finally {
+      closeSharedRunLedger();
       WorkerGitOps.prototype.runGateTest = origRunGateTest;
       globalThis.fetch = origFetch;
       if (origWorkspaceDir === undefined) delete process.env.WORKSPACE_DIR;
@@ -254,6 +256,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
       );
       assert.notEqual(capturedModels[0], "swift-15-27b-mtp");
     } finally {
+      closeSharedRunLedger();
       globalThis.fetch = origFetch;
       if (origFastGraph === undefined) delete process.env.FAST_GRAPH_TEST;
       else process.env.FAST_GRAPH_TEST = origFastGraph;
@@ -459,6 +462,7 @@ describe("ITEM-2: Task-Path Functional Fix & Unified Execution Contract", () => 
         `Expected auto-resume POST to /api/threads/${threadId}, got: ${JSON.stringify(resumeCalls)}`
       );
     } finally {
+      closeSharedRunLedger();
       globalThis.fetch = origFetch;
       fs.rmSync(repoDir, { recursive: true, force: true });
       fs.rmSync(ckptDir, { recursive: true, force: true });

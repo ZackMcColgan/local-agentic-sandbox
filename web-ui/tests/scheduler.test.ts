@@ -10,6 +10,7 @@ import {
 import { TaskManifest } from "../lib/subagents/types.js";
 import { type StepExecutor } from "../lib/subagents/supervisor.js";
 import { WorkerPool } from "../lib/subagents/workerPool.js";
+import { closeSharedRunLedger } from "../lib/ledger/runLedger";
 
 describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
   it("Cron parser correctly calculates next run for '0 2 * * *' (2am daily)", () => {
@@ -60,6 +61,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(list2[0].taskDescription, "Run nightly test and build suite");
       assert.equal(list2[0].cronExpression, "0 2 * * *");
     } finally {
+      closeSharedRunLedger();
       resetGlobalScheduler();
       if (savedWorkspace !== undefined) {
         process.env.WORKSPACE_DIR = savedWorkspace;
@@ -101,6 +103,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const backoffDiff = new Date(updated!.backoffUntil!).getTime() - Date.now();
       assert.ok(backoffDiff > 50000 && backoffDiff <= 61000);
     } finally {
+      closeSharedRunLedger();
       resetGlobalScheduler();
       if (savedWorkspace !== undefined) {
         process.env.WORKSPACE_DIR = savedWorkspace;
@@ -178,6 +181,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const expectedReportPath = path.join(testWorkspace, "reports", `morning-${dateStr}.md`);
       assert.ok(fs.existsSync(expectedReportPath));
     } finally {
+      closeSharedRunLedger();
       resetGlobalScheduler();
       if (savedWorkspace !== undefined) {
         process.env.WORKSPACE_DIR = savedWorkspace;
@@ -210,6 +214,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       const res = await scheduler.executeScheduledRun(schedId);
       assert.equal(res, null, "Disabled schedule must not execute");
     } finally {
+      closeSharedRunLedger();
       resetGlobalScheduler();
       if (savedWorkspace !== undefined) {
         process.env.WORKSPACE_DIR = savedWorkspace;
@@ -266,6 +271,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(m1.diffSummary, "+fake line in file.ts");
       assert.equal(m1.builderModel, "swift-27b-mtp");
     } finally {
+      closeSharedRunLedger();
       resetGlobalScheduler();
       if (typeof savedWorkspace !== "undefined") {
         process.env.WORKSPACE_DIR = savedWorkspace;
@@ -350,6 +356,7 @@ describe("Phase 2 — Item 1: Unattended Overnight Scheduler Suite", () => {
       assert.equal(updated?.failureCount, 1, "Failure count must be incremented");
       assert.ok(updated?.backoffUntil, "Backoff until must be set");
     } finally {
+      closeSharedRunLedger();
       if (savedFastGraph !== undefined) process.env.FAST_GRAPH_TEST = savedFastGraph;
       resetGlobalScheduler();
       if (typeof savedWorkspace !== "undefined") {

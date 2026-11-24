@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync } from "../fsAtomic";
 import { resolveSettingsDir } from "../notifications";
 
 /**
@@ -89,32 +90,12 @@ export function saveOperatorMemory(text: string, customPath?: string): OperatorM
   }
 
   const filePath = customPath || getOperatorMemoryPath();
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
   const updatedAt = new Date().toISOString();
   const payload = JSON.stringify({ text, updatedAt }, null, 2);
-  const tempPath = path.join(
-    dir,
-    `.operator-memory.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
-  );
 
   try {
-    fs.writeFileSync(tempPath, payload, "utf8");
-    try {
-      fs.renameSync(tempPath, filePath);
-    } catch {
-      fs.copyFileSync(tempPath, filePath);
-      fs.unlinkSync(tempPath);
-    }
+    atomicWriteFileSync(filePath, payload, 0o660);
   } catch (err: unknown) {
-    if (fs.existsSync(tempPath)) {
-      try {
-        fs.unlinkSync(tempPath);
-      } catch (_) {}
-    }
     throw new Error(
       `[OperatorMemory] Failed to write memory to ${filePath}: ${err instanceof Error ? err.message : String(err)}`
     );

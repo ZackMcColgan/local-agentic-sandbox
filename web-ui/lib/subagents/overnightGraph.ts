@@ -117,6 +117,8 @@ export interface CreateGraphOptions {
   checkpointer?: FileCheckpointSaver | MemorySaver;
   workerPool?: WorkerPool;
   tracer?: TelemetryTracer;
+  /** Optional isolated repo root (used by tests to avoid mutating the working repo). */
+  repoRoot?: string;
 }
 
 /**
@@ -126,9 +128,11 @@ export interface CreateGraphOptions {
 export function createOvernightGraph(options?: CreateGraphOptions) {
   const workerPool = options?.workerPool || new WorkerPool();
   const tracer = options?.tracer;
-  const repoRoot = fs.existsSync(path.join(process.cwd(), "deploy"))
-    ? process.cwd()
-    : path.resolve(process.cwd(), "..");
+  const repoRoot =
+    options?.repoRoot ||
+    (fs.existsSync(path.join(process.cwd(), "deploy"))
+      ? process.cwd()
+      : path.resolve(process.cwd(), ".."));
 
   const workflow = new StateGraph(OvernightStateAnnotation)
     // 1. Planner Node: decomposes goal into machine-checkable milestones & SPEC.md

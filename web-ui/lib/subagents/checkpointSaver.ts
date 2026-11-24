@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { MemorySaver } from "@langchain/langgraph";
+import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 
 function packValue(obj: unknown): unknown {
   if (obj instanceof Uint8Array || Buffer.isBuffer(obj)) {
@@ -64,28 +65,36 @@ export class FileCheckpointSaver extends MemorySaver {
 
   private loadFromDisk() {
     if (!fs.existsSync(this.checkpointDir)) return;
+    let files: string[] = [];
     try {
-      const files = fs.readdirSync(this.checkpointDir);
-      for (const file of files) {
-        if (file.endsWith("-lg-checkpoint.json")) {
-          const threadId = file.replace("-lg-checkpoint.json", "");
-          const fullPath = path.join(this.checkpointDir, file);
-          const raw = JSON.parse(fs.readFileSync(fullPath, "utf8"));
-          if (raw && raw.storage) {
-            this.storage[threadId] = unpackValue(raw.storage) as (typeof this.storage)[string];
-          }
-          if (raw && raw.writes) {
-            for (const wk of Object.keys(raw.writes)) {
-              this.writes[wk] = unpackValue(raw.writes[wk]) as (typeof this.writes)[string];
-            }
-          }
-        }
-      }
+      files = fs.readdirSync(this.checkpointDir);
     } catch (err: unknown) {
       console.error(
-        `[FileCheckpointSaver] Failed to load checkpoints from disk at ${this.checkpointDir}:`,
+        `[FileCheckpointSaver] Failed to list checkpoints at ${this.checkpointDir}:`,
         err instanceof Error ? err.message : err
       );
+      return;
+    }
+    for (const file of files) {
+      if (!file.endsWith("-lg-checkpoint.json")) continue;
+      const threadId = file.replace("-lg-checkpoint.json", "");
+      const fullPath = path.join(this.checkpointDir, file);
+      try {
+        const raw = JSON.parse(fs.readFileSync(fullPath, "utf8"));
+        if (raw && raw.storage) {
+          this.storage[threadId] = unpackValue(raw.storage) as (typeof this.storage)[string];
+        }
+        if (raw && raw.writes) {
+          for (const wk of Object.keys(raw.writes)) {
+            this.writes[wk] = unpackValue(raw.writes[wk]) as (typeof this.writes)[string];
+          }
+        }
+      } catch (err: unknown) {
+        quarantineCorruptFile(
+          fullPath,
+          err instanceof Error ? err.message : "corrupt LangGraph checkpoint JSON"
+        );
+      }
     }
   }
 
@@ -98,7 +107,7 @@ export class FileCheckpointSaver extends MemorySaver {
       }
     }
     const fullPath = this.getFilePath(threadId);
-    fs.writeFileSync(
+    atomicWriteFileSync(
       fullPath,
       JSON.stringify(
         {
@@ -108,7 +117,7 @@ export class FileCheckpointSaver extends MemorySaver {
         null,
         2
       ),
-      "utf8"
+      0o660
     );
   }
 
