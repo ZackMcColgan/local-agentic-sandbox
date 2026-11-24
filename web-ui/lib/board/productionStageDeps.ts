@@ -65,6 +65,7 @@ export interface ProductionStageDepsOptions {
 export interface ProductionStageDeps {
   flowMonitor: NonNullable<BoardOrchestratorDeps["flowMonitor"]>;
   reviewerGate: NonNullable<BoardOrchestratorDeps["reviewerGate"]>;
+  resolveHeadSha: NonNullable<BoardOrchestratorDeps["resolveHeadSha"]>;
   selfDeploy: {
     deps: SelfDeployVerifiedDeps;
   };
@@ -275,6 +276,33 @@ export function createProductionStageDeps(
     return execBridge("host_run_powershell", args);
   }
 
+  /**
+   * Resolve the real head SHA for a PR via `gh pr view --json headRefOid`.
+   * Returns the reported head string, or null when the PR number is invalid or
+   * the command fails. Used by check polling and by shadow-verdict recording;
+   * verdict recording additionally requires a 40-char hex SHA.
+   */
+  async function resolvePrHeadSha(prNumber: number): Promise<string | null> {
+    if (typeof prNumber !== "number" || !Number.isInteger(prNumber) || prNumber <= 0) {
+      return null;
+    }
+    try {
+      const headRes = await runHostCommand(`gh pr view ${prNumber} --json headRefOid`, 60);
+      if (!isCommandSuccess(headRes) || typeof headRes.stdout !== "string") {
+        return null;
+      }
+      const parsedHead: unknown = JSON.parse(headRes.stdout);
+      const rawHeadSha =
+        parsedHead && typeof parsedHead === "object" && !Array.isArray(parsedHead)
+          ? (parsedHead as { headRefOid?: unknown }).headRefOid
+          : undefined;
+      const headSha = typeof rawHeadSha === "string" ? rawHeadSha.trim() : "";
+      return headSha.length > 0 ? headSha : null;
+    } catch {
+      return null;
+    }
+  }
+
   const flowMonitor: NonNullable<BoardOrchestratorDeps["flowMonitor"]> = {
     async pollChecks(item: FlowMonitorBoardItem): Promise<PrChecksSnapshot> {
       const prNumber = item.prNumber;
@@ -284,24 +312,13 @@ export function createProductionStageDeps(
       }
 
       try {
-        const [checksRes, headRes] = await Promise.all([
+        const [checksRes, headSha] = await Promise.all([
           runHostCommand(`gh pr checks ${prNumber} --json name,state,bucket`, 60),
-          runHostCommand(`gh pr view ${prNumber} --json headRefOid`, 60),
+          resolvePrHeadSha(prNumber),
         ]);
-        if (
-          !isCommandSuccess(headRes) ||
-          typeof headRes.stdout !== "string" ||
-          !isCommandSuccess(checksRes) ||
-          typeof checksRes.stdout !== "string"
-        ) {
+        if (!isCommandSuccess(checksRes) || typeof checksRes.stdout !== "string") {
           return { headSha: fallbackHeadSha, checks: [] };
         }
-        const parsedHead: unknown = JSON.parse(headRes.stdout);
-        const rawHeadSha =
-          parsedHead && typeof parsedHead === "object" && !Array.isArray(parsedHead)
-            ? (parsedHead as { headRefOid?: unknown }).headRefOid
-            : undefined;
-        const headSha = typeof rawHeadSha === "string" ? rawHeadSha.trim() : "";
         if (!headSha) {
           return { headSha: fallbackHeadSha, checks: [] };
         }
@@ -648,6 +665,7 @@ export function createProductionStageDeps(
   return {
     flowMonitor,
     reviewerGate,
+    resolveHeadSha: resolvePrHeadSha,
     selfDeploy: {
       deps: selfDeployDeps,
     },

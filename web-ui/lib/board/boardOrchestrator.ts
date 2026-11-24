@@ -192,6 +192,12 @@ export interface BoardOrchestratorDeps {
     ) => Promise<MechanicalCheckInput> | MechanicalCheckInput;
     issueReviewerThread: EvaluateReviewerGateOptions["issueReviewerThread"];
   };
+  /**
+   * Resolve the real head SHA for a PR (gh pr view --json headRefOid). Used
+   * when recording a shadow verdict so the verdict is tied to the exact head
+   * that was reviewed, even when check polling fell back to a placeholder.
+   */
+  resolveHeadSha?: (prNumber: number) => Promise<string | null> | string | null;
   selfDeploy?: {
     deps?: SelfDeployVerifiedDeps;
     getDeployInput?: (
@@ -364,6 +370,40 @@ export class BoardOrchestrator {
     return this.deps.agreementLedger ?? new AgreementLedgerStore(this.deps.boardDir);
   }
 
+  /**
+   * Resolve the head SHA to persist with a shadow verdict. A real 40-char SHA
+   * is used as-is; otherwise the resolver (gh pr view --json headRefOid) is
+   * consulted. If resolution fails, the placeholder is kept and the failure is
+   * logged - never recorded silently.
+   */
+  private async resolveRecordedHeadSha(
+    pr: { prNumber: number; headSha: string },
+    itemKey: string
+  ): Promise<string> {
+    if (/^[0-9a-f]{40}$/i.test(pr.headSha)) {
+      return pr.headSha;
+    }
+    const resolver = this.deps.resolveHeadSha;
+    if (resolver) {
+      try {
+        const resolved = await resolver(pr.prNumber);
+        if (resolved && /^[0-9a-f]{40}$/i.test(resolved)) {
+          return resolved;
+        }
+      } catch (err) {
+        this.log(
+          `[orchestrator] head sha resolution threw for PR ${pr.prNumber} (${itemKey}): ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    }
+    this.log(
+      `[orchestrator] head sha unresolved for PR ${pr.prNumber} (${itemKey}); recording placeholder '${pr.headSha}'`
+    );
+    return pr.headSha;
+  }
+
   async runPrOpenShadowStages(
     item: DispatcherBoardItem,
     pr: { prNumber: number; headSha: string }
@@ -402,9 +442,10 @@ export class BoardOrchestrator {
         ...gateResult,
         mergeAuthorized: stage3Enabled ? gateResult.mergeAuthorized : false,
       };
+      const recordedHeadSha = await this.resolveRecordedHeadSha(pr, item.key);
       result.ledger = this.getAgreementLedger().recordShadowVerdict({
         prNumber: pr.prNumber,
-        headSha: pr.headSha,
+        headSha: recordedHeadSha,
         reviewerVerdict: gateResult.verdict,
       });
     }
