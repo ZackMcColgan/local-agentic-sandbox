@@ -163,8 +163,36 @@ export interface ChatInputMessage {
   role: string;
   content: string;
   timestamp?: string;
+  isDirective?: boolean;
   tool_calls?: LlmToolCall[];
   [key: string]: unknown;
+}
+
+/**
+ * Extracts in-flight assistant tool_calls and tool results occurring after the
+ * last real user message (ignoring synthetic `isDirective: true` user messages).
+ */
+export function extractInFlightTail<
+  T extends { role?: string; isDirective?: boolean; tool_calls?: unknown[] },
+>(conversationMessages: T[]): T[] {
+  let lastUserIdx = -1;
+  for (let i = conversationMessages.length - 1; i >= 0; i--) {
+    if (conversationMessages[i]?.role === "user" && !conversationMessages[i]?.isDirective) {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx >= 0 && lastUserIdx < conversationMessages.length - 1) {
+    const inFlightTail = conversationMessages.slice(lastUserIdx + 1);
+    if (
+      inFlightTail.some(
+        (m) => m?.role === "tool" || (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0)
+      )
+    ) {
+      return inFlightTail;
+    }
+  }
+  return [];
 }
 
 export type ChatThreadData = NonNullable<Awaited<ReturnType<ThreadStore["getThread"]>>> & {
@@ -187,6 +215,8 @@ export interface RunChatTurnState {
   turnMicroElisions: ElisionMeta[];
   turnReadDedups: ReadDedupMeta[];
   accumulatedThoughts: string[];
+  inFlightThinking?: string;
+  inFlightThinkingRound?: number;
 }
 
 /** Default in-turn heartbeat cadence to keep thread.updatedAt fresh during long spans. */
@@ -250,6 +280,8 @@ export interface RunChatTurnDeps {
   turnStartMs?: number;
   /** Optional override for the in-turn touchActiveTurn heartbeat interval (defaults to 30s). */
   heartbeatIntervalMs?: number;
+  /** Optional override for TOOL_ROUND_BACKSTOP (defaults to TOOL_ROUND_BACKSTOP). */
+  roundBackstop?: number;
 
   // MCP sessions & telemetry
   activeSessions: Array<{ client: Client; transport: SSEClientTransport }>;
@@ -313,6 +345,7 @@ export async function runChatTurn(
   } = turnState;
 
   const turnStartMs = deps.turnStartMs ?? Date.now();
+  const effectiveRoundBackstop = deps.roundBackstop ?? TOOL_ROUND_BACKSTOP;
   turnState.cumulativeOutputTokens = turnState.cumulativeOutputTokens ?? 0;
 
   let effectiveReasoningEffort = deps.initialEffectiveReasoningEffort;
@@ -895,24 +928,9 @@ export async function runChatTurn(
                   const liveSystem =
                     conversationMessages[0]?.role === "system" ? conversationMessages[0] : null;
                   if (liveSystem && rebuilt[0]?.role !== "system") rebuilt.unshift(liveSystem);
-                  let lastUserIdx = -1;
-                  for (let i = conversationMessages.length - 1; i >= 0; i--) {
-                    if (conversationMessages[i]?.role === "user") {
-                      lastUserIdx = i;
-                      break;
-                    }
-                  }
-                  if (lastUserIdx >= 0 && lastUserIdx < conversationMessages.length - 1) {
-                    const inFlightTail = conversationMessages.slice(lastUserIdx + 1);
-                    if (
-                      inFlightTail.some(
-                        (m) =>
-                          m?.role === "tool" ||
-                          (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0)
-                      )
-                    ) {
-                      rebuilt.push(...inFlightTail);
-                    }
+                  const inFlightTail = extractInFlightTail(conversationMessages);
+                  if (inFlightTail.length > 0) {
+                    rebuilt.push(...inFlightTail);
                   }
                   appliedMessages = rebuilt;
                 }
@@ -997,7 +1015,9 @@ export async function runChatTurn(
         outputReserveTokens: ROUND_MAX_TOKENS,
         lastRoundTools,
         webResearchCalls,
-        roundBackstop: TOOL_ROUND_BACKSTOP,
+        ...(deps.roundBackstop !== undefined
+          ? { roundBackstop: deps.roundBackstop }
+          : { roundBackstop: TOOL_ROUND_BACKSTOP }),
         awaitingToolRound: groundingDirectivePending,
       });
       if (!continuation.canContinue) {
@@ -1098,16 +1118,14 @@ export async function runChatTurn(
       let roundThinking = "";
       let roundFinishReason: string | undefined = undefined;
       let roundSizeCapped = false;
-      // PERF-P3: at most one cumulative `thought` event per round — either a
-      // throttled snapshot flush or the round-boundary emission, whichever
-      // fires first. Per-token thinking rides the `thinking` delta only.
-      let thoughtEventThisRound = false;
       const toolCallsFromMessage: LlmToolCall[] = [];
       const roundStreamStartMs = Date.now();
       let roundOutputTokens = 0;
       let roundPromptTokenCount: number | undefined = undefined;
       dispatchedRounds++;
       const currentRoundNumber = dispatchedRounds;
+      turnState.inFlightThinking = "";
+      turnState.inFlightThinkingRound = currentRoundNumber;
 
       try {
         for await (const chunk of streamLlmChat(getLlmBaseUrl(), llmPayload)) {
@@ -1143,33 +1161,28 @@ export async function runChatTurn(
             }
             lastThinkingChunkMs = nowMs;
             roundThinking += chunk.message.thinking;
+            turnState.inFlightThinking = roundThinking;
+            turnState.inFlightThinkingRound = currentRoundNumber;
             armRoundDeadline();
-            const currentCumulativeThought =
-              accumulatedThoughts.length > 0
-                ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
-                : roundThinking;
-            const liveSegments = roundThinking.trim()
-              ? [...thinkingSegments, { round: currentRoundNumber, text: roundThinking.trim() }]
-              : [...thinkingSegments];
-            const snapshotFlushed = streamSnapshot.maybeWrite(
-              turnState.accumulatedStreamedTokens,
-              currentCumulativeThought,
-              undefined,
-              { thinkingSegments: liveSegments }
-            );
-            // PERF-P3: per-token delta only. The cumulative `thought` event is
-            // re-joined and re-sent ONLY on a throttled snapshot flush (≤1/sec)
-            // or at the round boundary (below) — never per token, which was
-            // O(T^2) SSE bytes across a long turn.
-            await sendEvent({ type: "thinking", content: chunk.message.thinking });
-            if (snapshotFlushed && !thoughtEventThisRound) {
-              thoughtEventThisRound = true;
-              await sendEvent({
-                type: "thought",
-                thought: currentCumulativeThought,
-                thinkingSegments: liveSegments,
-              });
+            // P-F6: skip cumulative thought joins and segment clones on throttled sub-5s tokens.
+            if (streamSnapshot.isDue()) {
+              const currentCumulativeThought =
+                accumulatedThoughts.length > 0
+                  ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
+                  : roundThinking;
+              const liveSegments = roundThinking.trim()
+                ? [...thinkingSegments, { round: currentRoundNumber, text: roundThinking.trim() }]
+                : [...thinkingSegments];
+              streamSnapshot.maybeWrite(
+                turnState.accumulatedStreamedTokens,
+                currentCumulativeThought,
+                undefined,
+                { thinkingSegments: liveSegments }
+              );
             }
+            // PERF-P3 / R9: per-token delta only. Complete cumulative `thought`
+            // event is emitted once unconditionally at round completion below.
+            await sendEvent({ type: "thinking", content: chunk.message.thinking });
           }
           if (chunk.message?.content) {
             const nowMs = Date.now();
@@ -1199,16 +1212,18 @@ export async function runChatTurn(
               roundAbortController.abort();
               break;
             }
-            const currentCumulativeThought =
-              accumulatedThoughts.length > 0
-                ? roundThinking
-                  ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
-                  : accumulatedThoughts.join("\n\n")
-                : roundThinking || undefined;
-            streamSnapshot.maybeWrite(
-              turnState.accumulatedStreamedTokens,
-              currentCumulativeThought
-            );
+            if (streamSnapshot.isDue()) {
+              const currentCumulativeThought =
+                accumulatedThoughts.length > 0
+                  ? roundThinking
+                    ? `${accumulatedThoughts.join("\n\n")}\n\n${roundThinking}`
+                    : accumulatedThoughts.join("\n\n")
+                  : roundThinking || undefined;
+              streamSnapshot.maybeWrite(
+                turnState.accumulatedStreamedTokens,
+                currentCumulativeThought
+              );
+            }
             await sendEvent({ type: "token", content: textChunk });
           }
           if (chunk.toolCallProgress) {
@@ -1259,18 +1274,19 @@ export async function runChatTurn(
         accumulatedThoughts.push(trimmedThinking);
         thinkingSegments.push({ round: currentRoundNumber, text: trimmedThinking });
         thinkingEndMs = Date.now();
-        // PERF-P3 round boundary: exactly one cumulative `thought` event per
-        // round. Per-token deltas ride the `thinking` event above; a throttled
-        // snapshot flush may have already carried this round's thought, so the
-        // boundary emission is gated by thoughtEventThisRound.
-        if (!thoughtEventThisRound) {
-          thoughtEventThisRound = true;
-          await sendEvent({
-            type: "thought",
-            thought: accumulatedThoughts.join("\n\n"),
-            thinkingSegments: [...thinkingSegments],
-          });
-        }
+        turnState.inFlightThinking = "";
+        turnState.inFlightThinkingRound = undefined;
+        // PERF-P3 / R9 round boundary: emit the complete cumulative `thought`
+        // event unconditionally once at round completion so earlier snapshot
+        // flushes never suppress full round reasoning.
+        await sendEvent({
+          type: "thought",
+          thought: accumulatedThoughts.join("\n\n"),
+          thinkingSegments: [...thinkingSegments],
+        });
+      } else {
+        turnState.inFlightThinking = "";
+        turnState.inFlightThinkingRound = undefined;
       }
 
       if (roundAbortController.signal.aborted && !turnAbortController.signal.aborted) {
@@ -1306,6 +1322,7 @@ export async function runChatTurn(
           conversationMessages.push({
             role: "user",
             content: ROUND_TIMEOUT_DIRECTIVE,
+            isDirective: true,
           });
           reasoningSpan.end("ok", { roundTimedOut });
           // The retry round must actually be dispatched: lastRoundTools is
@@ -1389,6 +1406,12 @@ export async function runChatTurn(
         return true;
       });
 
+      if (isFinalRound && toolCalls && toolCalls.length > 0) {
+        // R9 guard: even if an engine ignores tool_choice: "none" on the final
+        // round, never execute tools. Break so synthesis/completion runs.
+        break;
+      }
+
       if (!toolCalls || toolCalls.length === 0) {
         const markupEval = evaluateMarkupRound({
           roundContent: fullRoundContent,
@@ -1406,6 +1429,7 @@ export async function runChatTurn(
           conversationMessages.push({
             role: "user",
             content: markupEval.directive!,
+            isDirective: true,
           });
           groundingDirectivePending = true;
           lastRoundTools = [];
@@ -1425,7 +1449,7 @@ export async function runChatTurn(
         if (
           isLiveRealTimeIntent(userPrompt) &&
           webResearchCalls === 0 &&
-          round < TOOL_ROUND_BACKSTOP - 1 &&
+          round < effectiveRoundBackstop - 1 &&
           estimateTokens(conversationMessages) <= CHAT_CONTEXT_BUDGET_TOKENS &&
           !groundingEnforced
         ) {
@@ -1447,7 +1471,7 @@ export async function runChatTurn(
           !turnAbortController.signal.aborted
         ) {
           consecutiveLengthTruncations++;
-          if (consecutiveLengthTruncations >= 2 || round >= TOOL_ROUND_BACKSTOP - 1) {
+          if (consecutiveLengthTruncations >= 2 || round >= effectiveRoundBackstop - 1) {
             honestEndMarker = TURN_TRUNCATION_MARKER;
             // Keep EVERY produced half: the final answer carries the earlier
             // truncated rounds plus this one, never just the last round.
@@ -1467,6 +1491,7 @@ export async function runChatTurn(
           conversationMessages.push({
             role: "user",
             content: LENGTH_CONTINUATION_DIRECTIVE,
+            isDirective: true,
           });
           // Bank this half so the final answer keeps every produced part.
           carriedLengthContent = joinNarrationChunks(carriedLengthContent, fullRoundContent);
@@ -2399,10 +2424,14 @@ export async function runChatTurn(
       const synthSpan = tracer.startSpan("model.synthesis", rootSpan?.spanId, {
         model: turnState.activeModel,
       });
-      conversationMessages.push(currentAssistantMessage);
+      conversationMessages.push({
+        role: "assistant",
+        content: currentAssistantMessage.content || "",
+      });
       conversationMessages.push({
         role: "user",
         content: buildSynthesisDirective(userPrompt, false),
+        isDirective: true,
       });
 
       await sendEvent({
@@ -2430,6 +2459,8 @@ export async function runChatTurn(
         let synthOutputTokens = 0;
         let synthPromptTokens: number | undefined = undefined;
         let synthFinishReason: string | undefined = undefined;
+        turnState.inFlightThinking = "";
+        turnState.inFlightThinkingRound = synthRoundNumber;
         try {
           const result = await executeSynthesisPass({
             llmBaseUrl: getLlmBaseUrl(),
@@ -2459,6 +2490,11 @@ export async function runChatTurn(
                 turnState.turnOutputTokens = turnState.cumulativeOutputTokens;
               }
             },
+            onThinkingChunk: (thinkingSoFar) => {
+              turnState.inFlightThinking = thinkingSoFar;
+              turnState.inFlightThinkingRound = synthRoundNumber;
+            },
+            isSnapshotDue: () => streamSnapshot.isDue(),
             maybeWriteSnapshot: (content, thought) => {
               streamSnapshot.maybeWrite(content, thought, undefined, {
                 outputTokens:
@@ -2509,6 +2545,18 @@ export async function runChatTurn(
         if (synthResult.thinking.trim()) {
           accumulatedThoughts.push(synthResult.thinking.trim());
         }
+        turnState.inFlightThinking = "";
+        turnState.inFlightThinkingRound = undefined;
+        if (synthResult.content.trim()) {
+          conversationMessages.push({
+            role: "assistant",
+            content: synthResult.content,
+          });
+        }
+        appendTrailingDirective(
+          conversationMessages,
+          "[SYNTHESIS CORRECTION]: Your previous synthesis response produced no usable plain-prose answer (it was empty or emitted tool-call markup/calls). Do NOT call any tools or emit any tool-call XML/markup. Write a clear, plain-prose final answer summarizing the work and results above."
+        );
         await sendEvent({
           type: "status",
           status: "Synthesis returned no text — retrying once...",
@@ -2520,6 +2568,8 @@ export async function runChatTurn(
       if (synthResult.thinking.trim()) {
         accumulatedThoughts.push(synthResult.thinking.trim());
       }
+      turnState.inFlightThinking = "";
+      turnState.inFlightThinkingRound = undefined;
 
       const finalMarkupEval = evaluateMarkupRound({
         roundContent: synthResult.content,
@@ -2568,7 +2618,7 @@ export async function runChatTurn(
         : toolLoopStopReason === "web-research-cap"
           ? `⚠️ [Turn paused: Tool execution limit reached (${webResearchCalls} web research calls / ${round} rounds).]`
           : toolLoopStopReason === "backstop"
-            ? `⚠️ [Turn paused: Tool execution limit reached (${TOOL_ROUND_BACKSTOP} rounds).]`
+            ? `⚠️ [Turn paused: Tool execution limit reached (${effectiveRoundBackstop} rounds).]`
             : "";
 
     if (!cleanedContent) {
@@ -2837,11 +2887,14 @@ export async function runChatTurn(
           ? `${turnState.accumulatedStreamedTokens}\n\n⚠️ [Turn error: ${friendlyMessage}]`
           : `⚠️ [Turn error: ${friendlyMessage}]`;
 
+        const errorThoughts = turnState.inFlightThinking?.trim()
+          ? [...accumulatedThoughts, turnState.inFlightThinking.trim()]
+          : accumulatedThoughts;
         const errorMsg = {
           id: assistantMessageId,
           role: "assistant" as const,
           content: errorContent,
-          thought: accumulatedThoughts.length > 0 ? accumulatedThoughts.join("\n\n") : undefined,
+          thought: errorThoughts.length > 0 ? errorThoughts.join("\n\n") : undefined,
           traces:
             traces.length > 0
               ? (traces as unknown as Parameters<ThreadStore["addMessage"]>[1]["traces"])

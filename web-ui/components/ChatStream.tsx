@@ -1191,7 +1191,7 @@ export function ChatStream({
               upsertAssistant(prev, (msg) => ({
                 ...msg,
                 content: parsed.content,
-                thought: parsed.thought,
+                thought: parsed.thought ?? msg.thought,
                 modelUsed: currentModel,
               }))
             );

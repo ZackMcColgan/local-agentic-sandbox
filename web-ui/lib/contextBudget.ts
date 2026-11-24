@@ -125,6 +125,7 @@ export interface ContextMessage {
   name?: string;
   tool_call_id?: string;
   tool_calls?: ContextToolCall[];
+  isDirective?: boolean;
   [key: string]: unknown;
 }
 
@@ -362,6 +363,7 @@ export function appendTrailingDirective<T extends { role?: string; content?: unk
   messages.push({
     role: "user",
     content: trimmed,
+    isDirective: true,
   } as unknown as T);
   return messages;
 }
@@ -574,7 +576,11 @@ export function fitContextWindow(
   // Detect whether this turn is an artifact-creation request
   let lastUserContent = "";
   for (let j = working.length - 1; j >= 0; j--) {
-    if (working[j]?.role === "user" && typeof working[j]?.content === "string") {
+    if (
+      working[j]?.role === "user" &&
+      !working[j]?.isDirective &&
+      typeof working[j]?.content === "string"
+    ) {
       lastUserContent = working[j].content;
       break;
     }
@@ -628,14 +634,14 @@ export function fitContextWindow(
     if (idx === 0 && arr[0]?.role === "system") {
       return true;
     }
-    // Protect the original user query (first user message) so intent & prompt are never lost
-    const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+    // Protect the original user query (first real user message) so intent & prompt are never lost
+    const firstUserIdx = arr.findIndex((m) => m?.role === "user" && !m?.isDirective);
     if (idx === firstUserIdx && firstUserIdx !== -1) {
       return true;
     }
     let lastUserIdx = -1;
     for (let j = arr.length - 1; j >= 0; j--) {
-      if (arr[j]?.role === "user") {
+      if (arr[j]?.role === "user" && !arr[j]?.isDirective) {
         lastUserIdx = j;
         break;
       }
@@ -1193,14 +1199,14 @@ export function fitConversationToBudget(
   }
 
   // Rung (c): Drop oldest non-system turns if still > budgetTokens
-  // Fix D5 (F8e): protect BOTH the leading user brief AND the latest user message.
+  // Fix D5 (F8e): protect BOTH the leading user brief AND the latest real user message.
   if (measureWorking(workingMessages) > budgetTokens) {
     let anyDropped = false;
     const findProtectedUserIndices = (arr: ContextMessage[]) => {
-      const firstUserIdx = arr.findIndex((m) => m?.role === "user");
+      const firstUserIdx = arr.findIndex((m) => m?.role === "user" && !m?.isDirective);
       let latestUserIdx = -1;
       for (let j = arr.length - 1; j >= 0; j--) {
-        if (arr[j]?.role === "user") {
+        if (arr[j]?.role === "user" && !arr[j]?.isDirective) {
           latestUserIdx = j;
           break;
         }
@@ -1235,7 +1241,7 @@ export function fitConversationToBudget(
   // other truncatable message exists.
   let safetyD = 20;
   while (measureWorking(workingMessages) > budgetTokens && safetyD-- > 0) {
-    const firstUserIdx = workingMessages.findIndex((m) => m?.role === "user");
+    const firstUserIdx = workingMessages.findIndex((m) => m?.role === "user" && !m?.isDirective);
     let longestIdx = -1;
     let maxLen = 0;
     for (let i = 0; i < workingMessages.length; i++) {
