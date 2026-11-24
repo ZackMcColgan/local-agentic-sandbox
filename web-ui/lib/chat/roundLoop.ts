@@ -889,7 +889,7 @@ export async function runChatTurn(
 
     while (true) {
       if (turnAbortController.signal.aborted) break;
-      if (getHostSettings().jobChunkingEnabled) {
+      if (hostSettings.jobChunkingEnabled) {
         const chunkResult = await handleLiveTurnChunkBudget({
           roundsUsed: round,
           elapsedMs: Date.now() - chunkLoopStartMs,

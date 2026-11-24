@@ -170,12 +170,57 @@ export class FlywheelSkillsStore {
     };
   }
 
+  public isStoreClosed(): boolean {
+    return this.isClosed;
+  }
+
   public close(): void {
     if (!this.isClosed) {
       this.isClosed = true;
       this.db.close();
     }
   }
+}
+
+const sharedSkillsStores = new Map<string, FlywheelSkillsStore>();
+
+export function getSharedSkillsStore(
+  dbPath: string = getDefaultSkillsDbPath()
+): FlywheelSkillsStore {
+  const resolvedPath = path.resolve(dbPath);
+  const existing = sharedSkillsStores.get(resolvedPath);
+  if (existing && !existing.isStoreClosed() && fs.existsSync(resolvedPath)) {
+    return existing;
+  }
+  if (existing) {
+    try {
+      existing.close();
+    } catch {}
+    sharedSkillsStores.delete(resolvedPath);
+  }
+  const store = new FlywheelSkillsStore(resolvedPath);
+  sharedSkillsStores.set(resolvedPath, store);
+  return store;
+}
+
+export function closeSharedSkillsStore(dbPath?: string): void {
+  if (dbPath !== undefined) {
+    const resolvedPath = path.resolve(dbPath);
+    const existing = sharedSkillsStores.get(resolvedPath);
+    if (existing) {
+      try {
+        existing.close();
+      } catch {}
+      sharedSkillsStores.delete(resolvedPath);
+    }
+    return;
+  }
+  for (const store of sharedSkillsStores.values()) {
+    try {
+      store.close();
+    } catch {}
+  }
+  sharedSkillsStores.clear();
 }
 
 /**
