@@ -252,10 +252,14 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Gate re-run on the committed diff: `node scripts/test-gate.js --since=HEAD~1` -> PASSED,
   7 pass / 0 fail in 6.2s (<90s budget). `git diff --ignore-cr-at-eol --stat` -> empty (zero
   content drift; the renormalize commit is pure line-ending normalization).
-- CI on PR #252: Unit Tests, Typecheck, Coverage, Playwright shards, Container Build all SUCCESS;
-  `Lint & Format` FAILS on `npx prettier --check .` - pre-existing repo debt (55 unformatted
-  tracked+untracked files incl. `docs/queue-steer-runlog.md`, `failing.ts`, `deploy/k8s/*.yaml`,
-  `argon-cto/ui-recon/*`, untracked `eval/results/*`), NOT introduced by this branch: develop CI
-  was green at 4a96d6b because prettier only sees files present at checkout, and the untracked
-  scratch dirs are local-only. Out of job-auto-1 scope; left for a dedicated formatting sweep.
+- Pitfall (self-inflicted, fixed): appending the runlog entry with a PowerShell double-quoted
+  here-string swallowed backticks and turned `node` into a newline + `ode`, so CI's
+  `Lint & Format` job failed `npx prettier --check .` on `docs/queue-steer-runlog.md` only
+  (run 45361657550; all other jobs green). Repair commit `7492eea` rewrites the block via a
+  single-quoted here-string + `[System.IO.File]::WriteAllText` (UTF8 no BOM, LF);
+  `npx prettier --check docs/queue-steer-runlog.md` -> clean. Rule: never double-quote a
+  here-string containing backticks or `\n` - use `@' ... '@`.
+- CI on PR #252 @ 7492eea: run 45363575448 conclusion SUCCESS (Lint & Format, Typecheck,
+  Unit Tests, Coverage, Playwright shards 1-3, Container Build + Docker Scout all green);
+  mergeStateStatus CLEAN, MERGEABLE, OPEN into develop.
 - Status: COMPLETE. No further work in scope; PR #252 awaits owner-side merge into develop.
