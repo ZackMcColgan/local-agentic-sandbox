@@ -934,21 +934,21 @@ export class LlamaCppProvider implements LLMProvider {
         const finalizedToolCalls = Array.from(toolCallsAccumulator.entries())
           .sort((a, b) => a[0] - b[0])
           .map(([, tc]) => {
-          let args: string | Record<string, unknown> = tc.function.arguments;
-          if (typeof args === "string") {
-            try {
-              args = JSON.parse(args);
-            } catch {}
-          }
-          return {
-            id: tc.id || undefined,
-            type: tc.type || "function",
-            function: {
-              name: tc.function.name,
-              arguments: args,
-            },
-          };
-        });
+            let args: string | Record<string, unknown> = tc.function.arguments;
+            if (typeof args === "string") {
+              try {
+                args = JSON.parse(args);
+              } catch {}
+            }
+            return {
+              id: tc.id || undefined,
+              type: tc.type || "function",
+              function: {
+                name: tc.function.name,
+                arguments: args,
+              },
+            };
+          });
 
         yield {
           message: {

@@ -691,16 +691,28 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
       callTool: async (req: { name: string; arguments: Record<string, unknown> }) => {
         if (req.name === "search_web") {
           return {
-            content: [{ type: "text", text: JSON.stringify({ results: [{ url: "https://example.com", title: "Ex" }] }) }],
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ results: [{ url: "https://example.com", title: "Ex" }] }),
+              },
+            ],
           };
         }
         if (req.name === "workspace_write_file") {
           return {
-            content: [{ type: "text", text: JSON.stringify({ success: true, path: req.arguments.path }) }],
+            content: [
+              { type: "text", text: JSON.stringify({ success: true, path: req.arguments.path }) },
+            ],
           };
         }
         return {
-          content: [{ type: "text", text: JSON.stringify({ content: `1 | ${String(req.arguments.path)}` }) }],
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ content: `1 | ${String(req.arguments.path)}` }),
+            },
+          ],
         };
       },
       close: async () => {},
@@ -761,7 +773,10 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
           };
         } else {
           synthesisMessages = (payload.messages as typeof synthesisMessages).map((m) => ({ ...m }));
-          yield { message: { content: "Saved diagram.svg and summarized." }, finish_reason: "stop" };
+          yield {
+            message: { content: "Saved diagram.svg and summarized." },
+            finish_reason: "stop",
+          };
         }
       },
     });
@@ -791,7 +806,10 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
     assert.equal(synthesisMessages[firstAssistantIdx + 3]?.role, "tool");
     assert.equal(synthesisMessages[firstAssistantIdx + 3]?.tool_call_id, "tc_read_after");
     assert.equal(synthesisMessages[firstAssistantIdx + 4]?.role, "user");
-    assert.match(String(synthesisMessages[firstAssistantIdx + 4]?.content || ""), /\[DELIVERABLE SAVED\]/);
+    assert.match(
+      String(synthesisMessages[firstAssistantIdx + 4]?.content || ""),
+      /\[DELIVERABLE SAVED\]/
+    );
 
     // 3. No duplicate unpaired assistant(tool_calls) before synthesis
     const assistantToolCallMsgs = synthesisMessages.filter(
@@ -807,7 +825,9 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
   it("R4: searchBlocked halting a multi-tool batch emits synthetic skipped tool stubs with tool_call_id and flushes directives after all tool messages", async () => {
     const fakeClient = {
       callTool: async (req: { name: string; arguments: Record<string, unknown> }) => ({
-        content: [{ type: "text", text: JSON.stringify({ content: `1 | ${String(req.arguments.path)}` }) }],
+        content: [
+          { type: "text", text: JSON.stringify({ content: `1 | ${String(req.arguments.path)}` }) },
+        ],
       }),
       close: async () => {},
     } as unknown as Client;
@@ -848,7 +868,10 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
                 {
                   id: "r2",
                   type: "function",
-                  function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "after.ts" }) },
+                  function: {
+                    name: "workspace_read_file",
+                    arguments: JSON.stringify({ path: "after.ts" }),
+                  },
                 },
               ],
             },
@@ -922,7 +945,10 @@ describe("Part 2: roundLoop parallel tool fan-out integration", () => {
           for (const m of payload.messages as typeof round2ToolMsgs) {
             if (m.role === "tool") round2ToolMsgs.push(m);
           }
-          yield { message: { content: "Recovered cleanly from barrier MCP error." }, finish_reason: "stop" };
+          yield {
+            message: { content: "Recovered cleanly from barrier MCP error." },
+            finish_reason: "stop",
+          };
         }
       },
     });

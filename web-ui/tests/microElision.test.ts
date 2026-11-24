@@ -311,12 +311,18 @@ describe("Micro-elision R4: multi-tool batch pairing in findPairedCall", () => {
           {
             id: "call_a",
             type: "function",
-            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/a.ts" }) },
+            function: {
+              name: "workspace_read_file",
+              arguments: JSON.stringify({ path: "src/a.ts" }),
+            },
           },
           {
             id: "call_b",
             type: "function",
-            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/b.ts" }) },
+            function: {
+              name: "workspace_read_file",
+              arguments: JSON.stringify({ path: "src/b.ts" }),
+            },
           },
         ],
       },
@@ -336,7 +342,12 @@ describe("Micro-elision R4: multi-tool batch pairing in findPairedCall", () => {
           },
         ],
       },
-      { role: "tool", name: "workspace_write_file", tool_call_id: "call_edit_a", content: '{"ok":true}' },
+      {
+        role: "tool",
+        name: "workspace_write_file",
+        tool_call_id: "call_edit_a",
+        content: '{"ok":true}',
+      },
     ];
 
     applyMicroElision(messages, 2);
@@ -360,12 +371,18 @@ describe("Micro-elision R4: multi-tool batch pairing in findPairedCall", () => {
           {
             id: "call_a",
             type: "function",
-            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/a.ts" }) },
+            function: {
+              name: "workspace_read_file",
+              arguments: JSON.stringify({ path: "src/a.ts" }),
+            },
           },
           {
             id: "call_b",
             type: "function",
-            function: { name: "workspace_read_file", arguments: JSON.stringify({ path: "src/b.ts" }) },
+            function: {
+              name: "workspace_read_file",
+              arguments: JSON.stringify({ path: "src/b.ts" }),
+            },
           },
         ],
       },

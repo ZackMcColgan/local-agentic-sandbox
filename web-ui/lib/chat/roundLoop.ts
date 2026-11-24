@@ -1801,7 +1801,11 @@ export async function runChatTurn(
                 const { toolName, toolArgs } = entry;
 
                 if (toolName === "workspace_read_file") {
-                  if (!toolArgs.path || typeof toolArgs.path !== "string" || !toolArgs.path.trim()) {
+                  if (
+                    !toolArgs.path ||
+                    typeof toolArgs.path !== "string" ||
+                    !toolArgs.path.trim()
+                  ) {
                     const candidate =
                       toolArgs.file ||
                       toolArgs.filepath ||

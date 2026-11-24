@@ -1133,20 +1133,47 @@ describe("Chat Context-Budget Enforcement Suite", () => {
           role: "assistant",
           content: "",
           tool_calls: [
-            { id: "c0", type: "function", function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' } },
-            { id: "c1", type: "function", function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' } },
+            {
+              id: "c0",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' },
+            },
+            {
+              id: "c1",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' },
+            },
           ],
         },
-        { role: "tool", name: "workspace_read_file", tool_call_id: "c0", content: "A".repeat(16000) },
-        { role: "tool", name: "workspace_read_file", tool_call_id: "c1", content: "B".repeat(16000) },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          tool_call_id: "c0",
+          content: "A".repeat(16000),
+        },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          tool_call_id: "c1",
+          content: "B".repeat(16000),
+        },
         {
           role: "assistant",
           content: "",
           tool_calls: [
-            { id: "c2", type: "function", function: { name: "workspace_read_file", arguments: '{"path":"c.ts"}' } },
+            {
+              id: "c2",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"c.ts"}' },
+            },
           ],
         },
-        { role: "tool", name: "workspace_read_file", tool_call_id: "c2", content: "C".repeat(2000) },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          tool_call_id: "c2",
+          content: "C".repeat(2000),
+        },
         { role: "user", content: "Latest user prompt." },
       ];
 
@@ -1178,8 +1205,16 @@ describe("Chat Context-Budget Enforcement Suite", () => {
           role: "assistant",
           content: "Step 1: " + "X".repeat(250000),
           tool_calls: [
-            { id: "r0_a", type: "function", function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' } },
-            { id: "r0_b", type: "function", function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' } },
+            {
+              id: "r0_a",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' },
+            },
+            {
+              id: "r0_b",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' },
+            },
           ],
         },
         { role: "tool", name: "workspace_read_file", tool_call_id: "r0_a", content: "ok a" },
