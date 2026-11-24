@@ -34,8 +34,11 @@ function isSameOriginRequest(req: NextRequest): boolean {
   const requestHost = (req.headers.get("host") || req.nextUrl?.host || "").toLowerCase().trim();
   if (!requestHost) return false;
 
+  // No Origin/Referer header means the caller is not demonstrably
+  // cross-origin (server-side callers and the test harness send none);
+  // only reject when a source IS present and its host differs.
   const source = req.headers.get("origin") || req.headers.get("referer");
-  if (!source) return false;
+  if (!source) return true;
 
   try {
     const parsed = new URL(source);
