@@ -27,28 +27,7 @@ function sanitizeAllowedHostPaths(raw: unknown): string[] {
   return out;
 }
 
-export function getHostSettingsFilePath(): string {
-  const dir = resolveSettingsDir();
-  return path.join(dir, "host-settings.json");
-}
-
-export function getHostSettings(): HostSettings {
-  try {
-    const filePath = getHostSettingsFilePath();
-    if (fs.existsSync(filePath)) {
-      const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      return {
-        hostAccessEnabled:
-          typeof data?.hostAccessEnabled === "boolean" ? data.hostAccessEnabled : true,
-        allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit),
-        jobChunkingEnabled:
-          typeof data?.jobChunkingEnabled === "boolean" ? data.jobChunkingEnabled : true,
-        fileRestrictionEnabled: Boolean(data?.fileRestrictionEnabled),
-        allowedHostPaths: sanitizeAllowedHostPaths(data?.allowedHostPaths),
-      };
-    }
-  } catch {}
-
+function defaultHostSettings(): HostSettings {
   return {
     hostAccessEnabled: true,
     allowUnattendedHostGit: false,
@@ -56,6 +35,67 @@ export function getHostSettings(): HostSettings {
     fileRestrictionEnabled: false,
     allowedHostPaths: [],
   };
+}
+
+function cloneHostSettings(settings: HostSettings): HostSettings {
+  return {
+    ...settings,
+    allowedHostPaths: [...settings.allowedHostPaths],
+  };
+}
+
+interface HostSettingsCacheEntry {
+  filePath: string;
+  mtimeMs: number;
+  size: number;
+  settings: HostSettings;
+}
+
+let hostSettingsCache: HostSettingsCacheEntry | null = null;
+
+export function resetHostSettingsCache(): void {
+  hostSettingsCache = null;
+}
+
+export function getHostSettingsFilePath(): string {
+  const dir = resolveSettingsDir();
+  return path.join(dir, "host-settings.json");
+}
+
+export function getHostSettings(): HostSettings {
+  try {
+    const resolvedPath = path.resolve(getHostSettingsFilePath());
+    const stat = fs.statSync(resolvedPath);
+    if (
+      hostSettingsCache &&
+      hostSettingsCache.filePath === resolvedPath &&
+      hostSettingsCache.mtimeMs === stat.mtimeMs &&
+      hostSettingsCache.size === stat.size
+    ) {
+      return cloneHostSettings(hostSettingsCache.settings);
+    }
+    const data = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+    const parsed: HostSettings = {
+      hostAccessEnabled:
+        typeof data?.hostAccessEnabled === "boolean" ? data.hostAccessEnabled : true,
+      allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit),
+      jobChunkingEnabled:
+        typeof data?.jobChunkingEnabled === "boolean" ? data.jobChunkingEnabled : true,
+      fileRestrictionEnabled: Boolean(data?.fileRestrictionEnabled),
+      allowedHostPaths: sanitizeAllowedHostPaths(data?.allowedHostPaths),
+    };
+    hostSettingsCache = {
+      filePath: resolvedPath,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      settings: parsed,
+    };
+    return cloneHostSettings(parsed);
+  } catch {
+    hostSettingsCache = null;
+  }
+
+  return defaultHostSettings();
 }
 
 export function setHostSettings(updates: Partial<HostSettings>): HostSettings {
@@ -77,6 +117,7 @@ export function setHostSettings(updates: Partial<HostSettings>): HostSettings {
     fs.writeFileSync(filePath, JSON.stringify(next, null, 2) + "\n", "utf8");
   } catch {}
 
+  resetHostSettingsCache();
   return next;
 }
 

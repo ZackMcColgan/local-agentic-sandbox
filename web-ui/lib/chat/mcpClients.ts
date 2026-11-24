@@ -5,7 +5,10 @@ import { normalizeMcpUrl } from "@/lib/toolParser";
 export interface McpClientLike {
   connect(transport: unknown): Promise<void>;
   listTools(): Promise<{ tools: Array<{ name: string; [key: string]: unknown }> }>;
+  callTool?(params: { name: string; arguments?: Record<string, unknown> }): Promise<unknown>;
   close(): Promise<void>;
+  onclose?: () => void;
+  onerror?: (error: Error) => void;
 }
 
 export interface McpTransportLike {
@@ -17,7 +20,25 @@ export interface McpClientDeps {
   createClient?: (name: string) => McpClientLike;
   log?: (...args: unknown[]) => void;
   warn?: (...args: unknown[]) => void;
+  pooled?: boolean;
 }
+
+export interface McpSession {
+  client: Client;
+  transport: SSEClientTransport;
+  tools: Array<{ name: string; [key: string]: unknown }>;
+}
+
+interface PooledMcpEntry {
+  url: string;
+  session: McpSession;
+  rawClient: Client | McpClientLike;
+  rawTransport: SSEClientTransport | McpTransportLike;
+  evicted: boolean;
+}
+
+const mcpPool = new Map<string, PooledMcpEntry>();
+const mcpInFlight = new Map<string, Promise<McpSession | null>>();
 
 export const getMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
   env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
@@ -25,8 +46,66 @@ export const getMcpUrl = (env: Record<string, string | undefined> = process.env)
 export const getBrowserMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
   env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
 
-export async function connectMcpClient(url: string, name: string, deps: McpClientDeps = {}) {
-  const sseUrl = normalizeMcpUrl(url);
+async function closeRawHandles(
+  rawClient: Client | McpClientLike | null,
+  rawTransport: SSEClientTransport | McpTransportLike | null
+): Promise<void> {
+  if (rawClient) {
+    try {
+      await rawClient.close();
+    } catch {}
+  }
+  if (rawTransport) {
+    try {
+      await rawTransport.close();
+    } catch {}
+  }
+}
+
+async function evictPooledEntry(url: string, targetEntry?: PooledMcpEntry): Promise<void> {
+  const current = mcpPool.get(url);
+  if (!current || (targetEntry && current !== targetEntry)) return;
+  current.evicted = true;
+  mcpPool.delete(url);
+  await closeRawHandles(current.rawClient, current.rawTransport);
+}
+
+function wrapPooledClient(
+  sseUrl: string,
+  rawClient: Client | McpClientLike,
+  entry: PooledMcpEntry
+): Client {
+  return new Proxy(rawClient as Client, {
+    get(target, prop, receiver) {
+      if (prop === "close") {
+        // Pooled client handles stay open across turns; pool eviction/reset closes raw handles.
+        return async () => {};
+      }
+      if (prop === "callTool") {
+        return async (...args: Parameters<Client["callTool"]>) => {
+          try {
+            return await target.callTool(...args);
+          } catch (err) {
+            await evictPooledEntry(sseUrl, entry);
+            throw err;
+          }
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+async function openMcpSession(
+  sseUrl: string,
+  name: string,
+  deps: McpClientDeps
+): Promise<{
+  rawClient: Client | McpClientLike;
+  rawTransport: SSEClientTransport | McpTransportLike;
+  tools: Array<{ name: string; [key: string]: unknown }>;
+} | null> {
   const log = deps.log ?? console.log;
   const warn = deps.warn ?? console.warn;
   let transport: SSEClientTransport | McpTransportLike | null = null;
@@ -44,8 +123,8 @@ export async function connectMcpClient(url: string, name: string, deps: McpClien
       `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
     );
     return {
-      client: client as Client,
-      transport: transport as SSEClientTransport,
+      rawClient: client,
+      rawTransport: transport,
       tools: toolsResult.tools,
     };
   } catch (err: unknown) {
@@ -53,16 +132,85 @@ export async function connectMcpClient(url: string, name: string, deps: McpClien
       `[Orchestrator] Could not connect to MCP at ${sseUrl}:`,
       err instanceof Error ? err.message : String(err)
     );
-    if (client) {
-      try {
-        await client.close();
-      } catch {}
-    }
-    if (transport) {
-      try {
-        await transport.close();
-      } catch {}
-    }
+    await closeRawHandles(client, transport);
     return null;
   }
+}
+
+export async function resetMcpClientPool(): Promise<void> {
+  const entries = Array.from(mcpPool.values());
+  mcpPool.clear();
+  mcpInFlight.clear();
+  await Promise.allSettled(
+    entries.map(async (entry) => {
+      entry.evicted = true;
+      await closeRawHandles(entry.rawClient, entry.rawTransport);
+    })
+  );
+}
+
+export async function connectMcpClient(
+  url: string,
+  name: string,
+  deps: McpClientDeps = {}
+): Promise<McpSession | null> {
+  const sseUrl = normalizeMcpUrl(url);
+  const usePool = deps.pooled ?? (!deps.createTransport && !deps.createClient);
+
+  if (!usePool) {
+    const opened = await openMcpSession(sseUrl, name, deps);
+    if (!opened) return null;
+    return {
+      client: opened.rawClient as Client,
+      transport: opened.rawTransport as SSEClientTransport,
+      tools: opened.tools,
+    };
+  }
+
+  const cached = mcpPool.get(sseUrl);
+  if (cached && !cached.evicted) {
+    return cached.session;
+  }
+
+  const pending = mcpInFlight.get(sseUrl);
+  if (pending) {
+    return pending;
+  }
+
+  const connectPromise = (async (): Promise<McpSession | null> => {
+    const opened = await openMcpSession(sseUrl, name, deps);
+    if (!opened) return null;
+
+    const entry: PooledMcpEntry = {
+      url: sseUrl,
+      rawClient: opened.rawClient,
+      rawTransport: opened.rawTransport,
+      evicted: false,
+      session: {
+        client: opened.rawClient as Client,
+        transport: opened.rawTransport as SSEClientTransport,
+        tools: opened.tools,
+      },
+    };
+    entry.session.client = wrapPooledClient(sseUrl, opened.rawClient, entry);
+
+    const prevOnClose = opened.rawClient.onclose;
+    opened.rawClient.onclose = () => {
+      void evictPooledEntry(sseUrl, entry);
+      if (typeof prevOnClose === "function") prevOnClose();
+    };
+    const prevOnError = opened.rawClient.onerror;
+    opened.rawClient.onerror = (err: Error) => {
+      void evictPooledEntry(sseUrl, entry);
+      if (typeof prevOnError === "function") prevOnError(err);
+    };
+
+    mcpPool.set(sseUrl, entry);
+    return entry.session;
+  })().finally(() => {
+    mcpInFlight.delete(sseUrl);
+  });
+
+  mcpInFlight.set(sseUrl, connectPromise);
+  return connectPromise;
 }

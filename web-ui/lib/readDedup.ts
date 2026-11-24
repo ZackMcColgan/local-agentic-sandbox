@@ -162,6 +162,18 @@ export class ReadDedupRegistry {
   private entries = new Map<string, ReadDedupMeta>();
 
   constructor(priorMessages: DedupMessage[] = []) {
+    const toolCallById = new Map<string, DedupToolCall>();
+    for (let i = 0; i < priorMessages.length; i++) {
+      const msg = priorMessages[i];
+      if (msg?.role === "assistant" && Array.isArray(msg.tool_calls)) {
+        for (const tc of msg.tool_calls) {
+          if (tc?.id && !toolCallById.has(tc.id)) {
+            toolCallById.set(tc.id, tc);
+          }
+        }
+      }
+    }
+
     let assistantCount = 0;
     let toolCount = 0;
     for (let i = 0; i < priorMessages.length; i++) {
@@ -213,7 +225,9 @@ export class ReadDedupRegistry {
 
       const pairedCall = Array.isArray(msg.tool_calls)
         ? msg.tool_calls[0]
-        : this.findPairedCall(priorMessages, msg.tool_call_id);
+        : msg.tool_call_id
+          ? toolCallById.get(msg.tool_call_id)
+          : undefined;
       const path = extractReadPath(this.parseArgs(pairedCall));
       if (!path) continue;
       const content = extractReadContent(rawContent);
@@ -342,20 +356,6 @@ export class ReadDedupRegistry {
       }
     }
     if (raw && typeof raw === "object") return raw as Record<string, unknown>;
-    return undefined;
-  }
-
-  private findPairedCall(
-    messages: DedupMessage[],
-    toolCallId: string | undefined
-  ): DedupToolCall | undefined {
-    if (!toolCallId) return undefined;
-    for (const msg of messages) {
-      if (msg?.role === "assistant" && Array.isArray(msg.tool_calls)) {
-        const call = msg.tool_calls.find((tc) => tc?.id === toolCallId);
-        if (call) return call;
-      }
-    }
     return undefined;
   }
 }

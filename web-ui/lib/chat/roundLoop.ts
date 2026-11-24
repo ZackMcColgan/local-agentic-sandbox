@@ -742,7 +742,7 @@ export async function runChatTurn(
 
     while (true) {
       if (turnAbortController.signal.aborted) break;
-      if (getHostSettings().jobChunkingEnabled) {
+      if (hostSettings.jobChunkingEnabled) {
         const chunkResult = await handleLiveTurnChunkBudget({
           roundsUsed: round,
           elapsedMs: Date.now() - chunkLoopStartMs,
@@ -2201,10 +2201,19 @@ export async function runChatTurn(
               }
             }
           } else if (target.client) {
-            result = await target.client.callTool({
-              name: toolName,
-              arguments: toolArgs,
-            });
+            try {
+              result = await target.client.callTool({
+                name: toolName,
+                arguments: toolArgs,
+              });
+            } catch (mcpErr: unknown) {
+              const mcpMsg = mcpErr instanceof Error ? mcpErr.message : undefined;
+              result = {
+                success: false,
+                error: mcpMsg || "Tool execution error",
+                isError: true,
+              };
+            }
           }
           const durationMs = Math.round(performance.now() - startTime);
           const isExecutionError = classifyExecutionError(result);

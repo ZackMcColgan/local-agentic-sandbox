@@ -1718,6 +1718,19 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("heartbeatWrites.test.ts"),
     tests: ["tests/heartbeatWrites.test.ts"],
   },
+  {
+    match: (p) =>
+      p.includes("app/page.tsx") ||
+      p.includes("app/api/skills/route") ||
+      p.includes("lib/flywheel/skillsStore") ||
+      p.includes("lib/hostMode") ||
+      p.includes("lib/hostSettings") ||
+      p.includes("lib/chat/mcpClients") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/readDedup") ||
+      p.includes("backgroundLoadPerf.test.ts"),
+    tests: ["tests/backgroundLoadPerf.test.ts"],
+  },
 ];
 
 /**

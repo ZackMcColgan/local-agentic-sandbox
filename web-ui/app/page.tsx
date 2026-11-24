@@ -235,6 +235,7 @@ export default function Home() {
   }, []);
 
   // Fetch sandbox & service status
+  const BACKGROUND_STATUS_POLL_INTERVAL_MS = 45_000;
   const fetchStatus = async () => {
     try {
       const res = await fetch("/api/sandbox-status");
@@ -261,20 +262,6 @@ export default function Home() {
       // Best-effort status refresh
     }
   };
-
-  useEffect(() => {
-    fetchStatus();
-    fetchSkills();
-    fetchDeployStatus();
-    fetchProjects();
-    const interval = setInterval(() => {
-      fetchStatus();
-      fetchSkills();
-      fetchDeployStatus();
-      fetchProjects();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchProjects = async () => {
     try {
@@ -308,6 +295,74 @@ export default function Home() {
       }
     } catch {}
   };
+
+  // Visibility-gated engine/sandbox status poll (45s) + initial badge hydration
+  useEffect(() => {
+    let didInitialAuxHydration = false;
+    const refreshStatus = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchStatus();
+      if (!didInitialAuxHydration) {
+        didInitialAuxHydration = true;
+        fetchSkills();
+        fetchDeployStatus();
+      }
+    };
+    refreshStatus();
+    const interval = setInterval(refreshStatus, BACKGROUND_STATUS_POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        refreshStatus();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+    };
+  }, []);
+
+  // View-gated background polling for skills / builds(deploy) / projects
+  useEffect(() => {
+    if (
+      activeNavView !== "skills" &&
+      activeNavView !== "builds" &&
+      activeNavView !== "settings" &&
+      activeNavView !== "projects"
+    ) {
+      return;
+    }
+    const refreshActiveView = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (activeNavView === "skills") {
+        fetchSkills();
+      } else if (activeNavView === "builds" || activeNavView === "settings") {
+        fetchDeployStatus();
+      } else if (activeNavView === "projects") {
+        fetchProjects();
+      }
+    };
+    refreshActiveView();
+    const interval = setInterval(refreshActiveView, BACKGROUND_STATUS_POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        refreshActiveView();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+    };
+  }, [activeNavView]);
 
   const handleToggleSelfDeploy = async () => {
     try {

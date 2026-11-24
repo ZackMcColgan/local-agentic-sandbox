@@ -8,10 +8,9 @@ import {
   listActiveSkills,
   SkillCandidate,
 } from "@/lib/subagents/skillGate";
-import { FlywheelSkillsStore } from "@/lib/flywheel/skillsStore";
+import { getSharedSkillsStore } from "@/lib/flywheel/skillsStore";
 
 export async function GET(_req: NextRequest) {
-  let flywheelStore: FlywheelSkillsStore | null = null;
   try {
     const queue = loadPendingQueue();
     const allCandidates = Object.values(queue.candidates || {});
@@ -22,7 +21,7 @@ export async function GET(_req: NextRequest) {
 
     let flywheelSkills: unknown[] = [];
     try {
-      flywheelStore = new FlywheelSkillsStore();
+      const flywheelStore = getSharedSkillsStore();
       flywheelSkills = flywheelStore.listSkills();
     } catch {}
 
@@ -38,12 +37,6 @@ export async function GET(_req: NextRequest) {
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
-  } finally {
-    if (flywheelStore) {
-      try {
-        flywheelStore.close();
-      } catch {}
-    }
   }
 }
 
