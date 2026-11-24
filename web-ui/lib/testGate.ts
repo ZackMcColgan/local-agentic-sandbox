@@ -1824,6 +1824,20 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("renderMemoization.test.ts"),
     tests: ["tests/renderMemoization.test.ts"],
   },
+  {
+    match: (p) =>
+      p.includes("app/api/files/route") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("app/api/threads/") ||
+      p.includes("lib/subagents/skillGate") ||
+      p.includes("app/api/skills/route") ||
+      p.includes("app/api/projects/browse/route") ||
+      p.includes("app/api/deploy/route") ||
+      p.includes("lib/deploy/selfDeploy") ||
+      p.includes("lib/projects/projectGit") ||
+      p.includes("apiPathGuards.test.ts"),
+    tests: ["tests/apiPathGuards.test.ts"],
+  },
 ];
 
 /**

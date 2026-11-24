@@ -7,6 +7,7 @@ import {
   getFileReviews,
   setFileReviewStatus,
 } from "./projectStore";
+import { validateGitRef } from "../securityHardening";
 
 export interface ProjectTreeNode {
   name: string;
@@ -211,7 +212,7 @@ export function getProjectDiffSummary(
   baseSha?: string
 ): ProjectDiffSummary {
   assertAllowedProjectPath(project, ".");
-  const base = baseSha || project.base_branch || "HEAD~1";
+  const base = validateGitRef(baseSha || project.base_branch || "HEAD~1", "baseSha");
 
   const reviews = getFileReviews(taskId) as Array<{
     file_path: string;
@@ -219,7 +220,7 @@ export function getProjectDiffSummary(
   }>;
   const reviewMap = new Map(reviews.map((r) => [r.file_path, r.status]));
 
-  const rawDiff = runGit(project, ["diff", "--name-status", base]);
+  const rawDiff = runGit(project, ["diff", "--name-status", base, "--"]);
   const lines = rawDiff
     .split("\n")
     .map((l) => l.trim())
@@ -292,19 +293,20 @@ export function revertProjectFile(
   filePath: string,
   baseSha: string
 ): ProjectFileReviewRecord {
+  const safeBase = validateGitRef(baseSha, "baseSha");
   const targetPath = assertAllowedProjectPath(project, filePath);
 
   let existedAtBase = false;
   try {
-    runGit(project, ["cat-file", "-e", `${baseSha}:${filePath}`]);
+    runGit(project, ["cat-file", "-e", `${safeBase}:${filePath}`]);
     existedAtBase = true;
   } catch {
     existedAtBase = false;
   }
 
   if (existedAtBase) {
-    runGit(project, ["checkout", baseSha, "--", filePath]);
-    runGit(project, ["add", filePath]);
+    runGit(project, ["checkout", safeBase, "--", filePath]);
+    runGit(project, ["add", "--", filePath]);
   } else {
     try {
       fs.rmSync(targetPath, { force: true });
@@ -314,7 +316,7 @@ export function revertProjectFile(
     } catch {}
   }
 
-  runGit(project, ["commit", "-m", `revert: restore ${filePath} from ${baseSha}`]);
+  runGit(project, ["commit", "-m", `revert: restore ${filePath} from ${safeBase}`]);
 
   return setFileReviewStatus(taskId, filePath, "reverted");
 }

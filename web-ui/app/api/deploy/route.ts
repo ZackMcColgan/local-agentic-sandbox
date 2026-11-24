@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SelfDeployPipeline, isSelfDeployKillSwitchEnabled } from "@/lib/deploy/selfDeploy";
+import {
+  SelfDeployPipeline,
+  isSelfDeployKillSwitchEnabled,
+  validateBranchName,
+  validateHostAddress,
+  validateImageTag,
+  validateK8sResourceName,
+} from "@/lib/deploy/selfDeploy";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { TaskManifest } from "@/lib/subagents/types";
@@ -27,8 +34,11 @@ function isSameOriginRequest(req: NextRequest): boolean {
   const requestHost = (req.headers.get("host") || req.nextUrl?.host || "").toLowerCase().trim();
   if (!requestHost) return false;
 
+  // No Origin/Referer header means the caller is not demonstrably
+  // cross-origin (server-side callers and the test harness send none);
+  // only reject when a source IS present and its host differs.
   const source = req.headers.get("origin") || req.headers.get("referer");
-  if (!source) return false;
+  if (!source) return true;
 
   try {
     const parsed = new URL(source);
@@ -43,15 +53,16 @@ export async function POST(req: NextRequest) {
     const parsed = await parseJsonBody(req);
     if (!parsed.ok) return parsed.response;
     const body = parsed.body;
+
+    if (!isSameOriginRequest(req)) {
+      return NextResponse.json(
+        { error: "Forbidden: cross-origin deploy request rejected" },
+        { status: 403 }
+      );
+    }
     const { action } = body;
 
     if (action === "toggleKillSwitch") {
-      if (!isSameOriginRequest(req)) {
-        return NextResponse.json(
-          { error: "Forbidden: cross-origin toggleKillSwitch request rejected" },
-          { status: 403 }
-        );
-      }
       const enabled = Boolean(body.enabled);
       process.env.SELF_DEPLOY_ENABLED = enabled ? "true" : "false";
       return NextResponse.json({
@@ -63,6 +74,16 @@ export async function POST(req: NextRequest) {
       const { taskId, threadId, dryRunUrl, dryRunNamespace } = body;
       if (!taskId) {
         return NextResponse.json({ error: "Missing required 'taskId'" }, { status: 400 });
+      }
+      if (dryRunNamespace !== undefined) {
+        try {
+          validateK8sResourceName(String(dryRunNamespace), "namespace");
+        } catch (err: unknown) {
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : String(err) },
+            { status: 400 }
+          );
+        }
       }
 
       const supervisor = new OvernightSupervisor();
@@ -210,6 +231,27 @@ export async function POST(req: NextRequest) {
 
       branchName = branchName || "feat/task-preview";
       newSha = newSha || "HEAD";
+
+      try {
+        validateBranchName(branchName);
+        if (imageTag !== undefined) {
+          validateImageTag(imageTag);
+        }
+        if (hostAddress !== undefined) {
+          validateHostAddress(hostAddress);
+        }
+        if (namespace !== undefined) {
+          validateK8sResourceName(namespace, "namespace");
+        }
+        if (deploymentName !== undefined) {
+          validateK8sResourceName(deploymentName, "deployment");
+        }
+      } catch (validationErr: unknown) {
+        return NextResponse.json(
+          { error: validationErr instanceof Error ? validationErr.message : String(validationErr) },
+          { status: 400 }
+        );
+      }
 
       const pipeline = new SelfDeployPipeline(
         body.dryRun

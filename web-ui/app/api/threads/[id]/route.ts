@@ -24,6 +24,7 @@ import { unloadAllModels } from "@/lib/subagents/residency";
 import { getSharedRunLedger } from "@/lib/ledger/runLedger";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import { getSharedSlotScheduler } from "@/lib/slotScheduler";
+import { isValidSafeId } from "@/lib/securityHardening";
 import { parseJsonBody } from "@/lib/apiJson";
 
 // Store is created per request so a runtime THREADS_DIR change (tests, container env
@@ -284,9 +285,11 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
   try {
     const supervisor = getSupervisor();
     const { id } = await context.params;
+    if (!isValidSafeId(id)) {
+      return NextResponse.json({ error: "Invalid thread ID" }, { status: 400 });
+    }
     const url = new URL(req.url);
     const omitHeavyTraceResults = url.searchParams.get("omitHeavyTraceResults") === "1";
-
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
       // CHAT-PRESENCE: a turn may have just started before the thread file lands.
@@ -355,6 +358,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const body = parsed.body;
     const supervisor = getSupervisor();
     const { id } = await context.params;
+    if (!isValidSafeId(id)) {
+      return NextResponse.json({ error: "Invalid thread ID" }, { status: 400 });
+    }
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
@@ -544,6 +550,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
+    if (!isValidSafeId(id)) {
+      return NextResponse.json({ error: "Invalid thread ID" }, { status: 400 });
+    }
     const thread = await getThreadStore().getThread(id);
     if (thread?.taskId) {
       cancelTask(thread.taskId);

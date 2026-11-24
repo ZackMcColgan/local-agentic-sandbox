@@ -10,6 +10,7 @@ import {
   SkillCandidate,
 } from "@/lib/subagents/skillGate";
 import { getSharedSkillsStore } from "@/lib/flywheel/skillsStore";
+import { isValidSafeId } from "@/lib/securityHardening";
 import { parseJsonBody } from "@/lib/apiJson";
 export async function GET(_req: NextRequest) {
   try {
@@ -64,6 +65,10 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    if (!isValidSafeId(id)) {
+      return NextResponse.json({ error: "Invalid skill candidate identifier" }, { status: 400 });
     }
 
     if (action === "propose") {
