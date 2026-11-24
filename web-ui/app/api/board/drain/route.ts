@@ -3,6 +3,8 @@ import {
   getLastDrainReport,
   MAX_DRAIN_DURATION_MS,
   MAX_DRAIN_ITEMS,
+  runBoardDrainWithMutex,
+  type DrainReport,
 } from "@/lib/board/boardOrchestrator";
 import { isDrainAllowed, readBoardControlState } from "@/lib/board/boardControl";
 import { createProductionBoardOrchestrator } from "@/lib/board/productionDrain";
@@ -59,19 +61,24 @@ export async function POST(req: NextRequest) {
         : MAX_DRAIN_DURATION_MS;
 
     const dryRun = body.dryRun === true;
-    const threadStore = dryRun ? null : new ThreadStore();
-    const orchestrator = createProductionBoardOrchestrator({
-      threadStore,
-      dryRun,
-      maxItems,
-      maxDurationMs,
+    const { result: report, deduplicated } = await runBoardDrainWithMutex(async () => {
+      const threadStore = dryRun ? null : new ThreadStore();
+      const orchestrator = createProductionBoardOrchestrator({
+        threadStore,
+        dryRun,
+        maxItems,
+        maxDurationMs,
+      });
+      return orchestrator.drain();
     });
+    const isDrainReport =
+      Boolean(report) && typeof report === "object" && "drainId" in (report as object);
 
-    const report = await orchestrator.drain();
     return NextResponse.json({
       control: readBoardControlState(),
       report,
-      markdown: formatDrainReportMarkdown(report),
+      markdown: isDrainReport ? formatDrainReportMarkdown(report as DrainReport) : null,
+      deduplicated,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to run board drain";

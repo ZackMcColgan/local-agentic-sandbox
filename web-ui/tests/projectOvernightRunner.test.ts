@@ -10,6 +10,8 @@ import {
   getProject,
   getProjectTask,
   listProjectTasks,
+  createProjectTask,
+  initProjectStore,
 } from "../lib/projects/projectStore";
 import { runGit } from "../lib/projects/projectGit";
 import {
@@ -231,5 +233,76 @@ describe("PHASE 2: Project Task Object, Engine Gate & Overnight Runner", () => {
     // Verify files exist inside rootPath
     assert.ok(fs.existsSync(path.join(testRepoDir, "auth.ts")));
     assert.ok(fs.existsSync(path.join(testRepoDir, "db.ts")));
+  });
+
+  it("Item 7: Fresh store open reconciles orphaned running project task to parked and clears active_task_id", async () => {
+    const project = registerProject({
+      name: "Orphaned Task Recovery Project",
+      rootPath: testRepoDir,
+      baseBranch: "develop",
+    });
+
+    const baseSha = runGit(project, ["rev-parse", "HEAD"]);
+    const orphanedTask = createProjectTask({
+      projectId: project.project_id,
+      prompt: "Task interrupted by pod crash",
+      baseSha,
+      branch: "feat/task-orphaned",
+    });
+
+    assert.equal(orphanedTask.status, "running");
+    assert.equal(getProject(project.project_id)!.active_task_id, orphanedTask.task_id);
+
+    // Simulate process restart: close shared ledger so in-memory DB handle is recreated on next open
+    closeSharedRunLedger();
+
+    // Fresh store open must reconcile orphaned running row to parked and clear active_task_id
+    initProjectStore();
+
+    const reconciledProj = getProject(project.project_id)!;
+    assert.equal(
+      reconciledProj.active_task_id,
+      null,
+      "projects.active_task_id must be cleared after crash reconciliation"
+    );
+
+    const reconciledTask = getProjectTask(orphanedTask.task_id)!;
+    assert.equal(
+      reconciledTask.status,
+      "parked",
+      "Orphaned running task must be marked parked on startup reconciliation"
+    );
+
+    // Subsequent task start must succeed rather than failing with 409 Conflict
+    const nextTask = await startProjectTask({
+      projectId: project.project_id,
+      prompt: "Post-recovery task",
+      executeInline: false,
+    });
+    assert.equal(nextTask.status, "running");
+    assert.equal(getProject(project.project_id)!.active_task_id, nextTask.task_id);
+  });
+
+  it("Item 8: Startup reconciliation respects live active in-memory runners", async () => {
+    const project = registerProject({
+      name: "Active Runner Guard Project",
+      rootPath: testRepoDir,
+      baseBranch: "develop",
+    });
+
+    const liveTask = await startProjectTask({
+      projectId: project.project_id,
+      prompt: "Live in-memory task",
+      executeInline: false,
+    });
+
+    // Re-running initProjectStore while liveTask is in activeRunners must NOT park it
+    initProjectStore();
+
+    const projAfter = getProject(project.project_id)!;
+    assert.equal(projAfter.active_task_id, liveTask.task_id);
+
+    const taskAfter = getProjectTask(liveTask.task_id)!;
+    assert.equal(taskAfter.status, "running");
   });
 });

@@ -1,6 +1,6 @@
 # Queue Steer Runlog
 
-## job-auto-1 (auto-resume attempt 1/2) — retryAfter parser
+## job-auto-1 (auto-resume attempt 1/2) â€” retryAfter parser
 
 - Banked state found on resume: sandbox branch `feat/task-179482628980` held an
   uncommitted `retryAfter.mjs` rewrite plus untracked `tests/retryAfter.test.mjs`.
@@ -64,12 +64,12 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
   verification was run in the host checkout instead. No code change required; job
   remains COMPLETE and nothing further to bank for this job.
 
-## Board #54 — eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
+## Board #54 â€” eval/run.mjs tool-discipline misgrading, timeout/fault isolation, --out, fabricated slotMetrics
 
 - Worktree: `C:\Users\zackm\Desktop\repos\ls-worktree-54`, branch `feature/eval-run-tool-discipline-and-fault-isolation` (off origin/develop @ 8579193).
 - Test-first: added `web-ui/tests/evalRunnerEndpointDiscipline.test.ts` (6 tests) covering all three ACs before implementation.
 - Fixes in `eval/run.mjs`:
-  - `callEndpoint` now records `toolCallsExecuted` from `finish_reason: 'tool_calls'` (was hardcoded 0, which failed compliant models — run 2026-11-20T17-10-01-179Z) and simulates the injected stall round: injects a `role: "tool"` stall message and asks for a follow-up, so tool-discipline grades stall honesty instead of penalizing valid tool_calls.
+  - `callEndpoint` now records `toolCallsExecuted` from `finish_reason: 'tool_calls'` (was hardcoded 0, which failed compliant models â€” run 2026-11-20T17-10-01-179Z) and simulates the injected stall round: injects a `role: "tool"` stall message and asks for a follow-up, so tool-discipline grades stall honesty instead of penalizing valid tool_calls.
   - Every endpoint request carries `AbortSignal.timeout(DEFAULT_TASK_TIMEOUT_MS)` (600s > Node's 300s headers default); `--timeout=` overrides per-task budget.
   - `runEvalTasks` wraps each task in try/catch: a failing task is recorded as `passed: false` with `evidence.error` + `<task>.error.json`, remaining tasks still run, scorecard.json/md always written. Reproduces the UND_ERR_HEADERS_TIMEOUT kill (run 2026-11-20T17-04-44-625Z).
   - `--out` honored: outputs go to `path.resolve(args.out)` instead of hardcoded `eval/results`.
@@ -92,7 +92,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
   - deploy/k8s/network-policies.yaml: comments state port-only host egress semantics; README documents the boundary (AC route: accurate documentation; ipBlock tightening left off to avoid risking prod web-ui under docker-desktop CNI).
 - Verification: docsIntegrity 11/11 green; engineToggle + settingsView green; `npm run test:gate` via bridge.
 
-## Board Item #59 — Single-emerald accent + dark-mode contrast floor (BoardView, ChatStream, SettingsView)
+## Board Item #59 â€” Single-emerald accent + dark-mode contrast floor (BoardView, ChatStream, SettingsView)
 
 - Worktree: `C:\Users\zackm\Desktop\repos\board59-wt`, branch `feature/emerald-accent-contrast-floor` (off develop).
 - Test-first: `web-ui/tests/accentContrastAudit.test.ts` (banned cyan/sky scan on BoardView + ChatStream; rose-400 heading floor check; disabled-control floor check) and `web-ui/tests/e2e/settingsMobile.spec.ts` (412px dark Playwright render audit: zero banned accent classes across Settings/Board/Chat, Danger Zone heading and disabled Start button clear the zinc-400-on-#000 floor of 8.2). Both red before the fix.
@@ -106,7 +106,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Verification: accentContrastAudit 4/4, darkTextFloor 2/2, settingsView 8/8, parityChatSurfaces 11/11, paritySidebarDrawer 11/11, uirHeaderActivity 20/20, gateManifestCompleteness 1/1 green; `npm run test:gate` PASSED: 687 unit tests + 128 Playwright specs (incl. settingsMobile 5/5 across all 4 projects), 0 failed.
 - Note: `transition-all` on engine buttons animates the disabled-state background; the e2e floor check waits 400ms for the transition to settle before measuring computed contrast.
 
-## Board item #63 � skip unused per-chat worktree creation
+## Board item #63 ï¿½ skip unused per-chat worktree creation
 
 - Worktree: C:\Users\zackm\Desktop\repos\lsb-job63, branch feature/chat-turn-worktree-skip (off develop).
 - Evidence: web-ui/app/api/chat/route.ts passed repoRoot: resolveJobRepoRoot() to serializeTurn, which created+deleted a git worktree per chat turn; the handle was only consumed by chunkWorkspaceRoot (web-ui/lib/chat/roundLoop.ts:663) for the runlog path. MCP workspace tools execute via target.client.callTool against the container shared /workspace (roundLoop.ts:1613) - never _worktree.path. So the worktree was pure git churn, no isolation.
@@ -114,6 +114,16 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Test-first: web-ui/tests/jobQueueRoute.test.ts - new test asserts chat route source has no repoRoot: resolveJobRepoRoot()/createJobWorktree, and serializeTurn without repoRoot runs runTurn with null worktree and creates no .git/worktrees dir. Red before fix.
 - Patch: web-ui/app/api/chat/route.ts - dropped repoRoot from serializeTurn options, renamed chatTurnWorktreeSeq -> chatTurnSeq, updated comment to record the #63 rationale.
 - Verification: jobQueueRoute.test.ts 11 pass / 0 fail; npm run test:gate PASSED: 370 tests, 0 failed (budget 240s, took ~48s).
+
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24) â€” retryAfter scope closed; EOL renormalize follow-up for PR #222
+
+- Banked state on resume: job-auto-1 scope (`parseRetryAfter`, AC-2-1/2-2/2-3) is DONE and merged â€” PR #217 MERGED 2026-11-22T23:24:59Z; `web-ui/lib/retryAfter.mjs` and `web-ui/tests/retryAfter.test.ts` present on origin/develop (blobs 5c39409 / 104866c). No restart needed; scope verified by presence, not re-implementation.
+- Repo-standards work (Board #120) also already banked: PR #222 MERGED 2026-11-23T01:23:19Z (`feature/repo-standards-sweep` @ b074983: community files, dependabot, `.nvmrc`, `.gitattributes`, `repoStandards.test.ts`, gate wiring).
+- Real residual on resume: working tree showed a phantom 140-line diff on `web-ui/Dockerfile` + 2-line diff on `.gitignore`. Root cause: PR #222 added `.gitattributes` (`* text=auto eol=lf`, explicit `Dockerfile text eol=lf`, `.gitignore text eol=lf`), but blobs committed before that attribute carry CRLF, so git reports a content-identical line-ending change. Confirmed with `git diff --ignore-cr-at-eol --stat` -> empty (pure EOL change, zero content drift).
+- Fix: `git add --renormalize .` sweep. On the develop tree the sweep lands exactly one file (`web-ui/Dockerfile`, 70/70 lines); `.gitignore` was already LF. Committed on `feature/eol-renormalize` (off origin/develop @ 4a96d6b) as `1271b44 chore(repo): renormalize CRLF blobs to LF per .gitattributes eol=lf`.
+- Gate: `node scripts/test-gate.js --since=HEAD~1` -> PASSED, 7 pass / 0 fail in 11.9s (<90s budget). Targeted `repoStandards.test.ts` -> 9 pass / 0 fail (5.3s).
+- Pitfall reconfirmed (blocking, not a regression): `node scripts/test-gate.js --since=origin/develop` from this checkout counts the 8 untracked `eval/results/*` scratch dirs as changed files (124 files inspected, 0 suites selected) and then rejects with ZERO TEST COVERAGE on unrelated develop-side modules (`web-ui/lib/hostPathRestriction.ts`, `web-ui/lib/streamPollGate.ts`). Scope the gate with `--since=HEAD~1` (committed diff only) or clean the scratch dirs first. Scratch dirs left untouched (eval artifacts, not this job's scope).
+- Status: job-auto-1 scope COMPLETE (merged). EOL renormalize follow-up committed on `feature/eol-renormalize`, PR into develop.
 
 ## Board #125 (Perf P2) - enable parallel tool calls for read-only fanout
 
@@ -211,7 +221,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Assumption logged: restriction scopes host FILE tools + host_run_powershell cwd only;
   unattended git tools carry no path args and stay unrestricted (matches brief: "host file tools").
 
-## Board #131 — Security: bind bridge approval tokens to exact tool + payload (PR #236)
+## Board #131 â€” Security: bind bridge approval tokens to exact tool + payload (PR #236)
 
 - Defect: the bridge only checked the approval-ID format + single-use, so any holder of the shared secret could approve ANY destructive payload with any valid-format ID.
 - Fix: host-bridge/approvalToken.ts mints HMAC-SHA256 tokens bound to tool + payload hash (canonical sorted-key JSON), nonce, issuedAt, expiresAt; TTL hard-capped at 5 min (mint throws over the ceiling). verifyApprovalToken constant-time signature check + expiry/over-TTL/malformed rejection. server.ts (/execute + /execute-async) verifies the token against the exact tool+args before execution and consumes by nonce (409 on replay). hostMode.ts mints the bound token from the secret over the final post-dialect-guard args.
@@ -230,3 +240,45 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - testGate.ts MAPPING_RULES: additive lines only.
 - Suites: targeted board/reviewer suites 20/20; gate --since=origin/develop 99 pass / 0 fail; npx tsc --noEmit clean.
 - Assumption: gh-level head resolution accepts any non-empty string (preserves existing pollChecks behavior); strict 40-char hex enforced at verdict-recording.
+
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24 re-verification) - nothing left to do
+
+- Banked state on resume: scope (`parseRetryAfter`, AC-2-1/2-2/2-3) already MERGED via PR #217
+  (mergedAt 2026-11-22T23:24:59Z); `web-ui/lib/retryAfter.mjs` and `web-ui/tests/retryAfter.test.ts`
+  confirmed present on origin/develop via `git cat-file -e`. No restart, no re-implementation.
+- Follow-up (EOL renormalize) already banked: branch `feature/eol-renormalize` @ 1271b44 pushed;
+  PR #252 OPEN, MERGEABLE, base develop. Working tree clean apart from 8 untracked
+  `eval/results/*` scratch dirs (eval artifacts, out of scope - left untouched).
+- Gate re-run on the committed diff: `node scripts/test-gate.js --since=HEAD~1` -> PASSED,
+  7 pass / 0 fail in 6.2s (<90s budget). `git diff --ignore-cr-at-eol --stat` -> empty (zero
+  content drift; the renormalize commit is pure line-ending normalization).
+- Pitfall (self-inflicted, fixed): appending the runlog entry with a PowerShell double-quoted
+  here-string swallowed backticks and turned `node` into a newline + `ode`, so CI's
+  `Lint & Format` job failed `npx prettier --check .` on `docs/queue-steer-runlog.md` only
+  (run 45361657550; all other jobs green). Repair commit `7492eea` rewrites the block via a
+  single-quoted here-string + `[System.IO.File]::WriteAllText` (UTF8 no BOM, LF);
+  `npx prettier --check docs/queue-steer-runlog.md` -> clean. Rule: never double-quote a
+  here-string containing backticks or `\n` - use `@' ... '@`.
+- CI on PR #252 @ 7492eea: run 45363575448 conclusion SUCCESS (Lint & Format, Typecheck,
+  Unit Tests, Coverage, Playwright shards 1-3, Container Build + Docker Scout all green);
+  mergeStateStatus CLEAN, MERGEABLE, OPEN into develop.
+- Status: COMPLETE. No further work in scope; PR #252 awaits owner-side merge into develop.
+
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24 re-verification #2) - scope merged, PR #252 green
+
+- Banked state on resume: scope (`parseRetryAfter`, AC-2-1/2-2/2-3) MERGED via PR #217
+  (merge commit `5130bb3` on develop); `web-ui/lib/retryAfter.mjs` and
+  `web-ui/tests/retryAfter.test.ts` confirmed present on `origin/develop` via
+  `git cat-file -e`. No restart, no re-implementation.
+- Follow-up branch `feature/eol-renormalize` @ `f066908` pushed; PR #252 OPEN,
+  `mergeStateStatus` CLEAN into develop. CI run 45365584894 conclusion SUCCESS across
+  all 8 checks (Lint & Format, Typecheck, Unit Tests & Static Analysis, Coverage,
+  Playwright shards 1-3, Container Build + Docker Scout).
+- Targeted gate `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` ->
+  PASSED, 14 pass / 0 fail in 5.1s (<90s budget). `npx prettier --check
+docs/queue-steer-runlog.md` -> clean. `git diff --ignore-cr-at-eol --stat` -> empty
+  (zero content drift; renormalize commit is pure line-ending normalization).
+- Working tree clean apart from 8 untracked `eval/results/*` scratch dirs (eval artifacts,
+  out of scope - left untouched). develop tip advanced to `ed91eb0` (PR #254 MCP Streamable
+  HTTP merged); does not affect this scope.
+- Status: COMPLETE. Nothing left in scope; PR #252 awaits owner-side merge into develop.

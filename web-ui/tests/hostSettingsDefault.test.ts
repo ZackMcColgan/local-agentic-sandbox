@@ -116,7 +116,7 @@ describe("Defect #0: Host Mode Global Settings Default Suite", () => {
         );
         return;
       }
-      if (url.includes("/sse")) {
+      if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
         // MCP endpoints unreachable: route falls back gracefully.
         res.writeHead(404);
         res.end("no mcp");

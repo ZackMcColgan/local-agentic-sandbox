@@ -117,6 +117,9 @@ export function composeDispatcherBrief(
     if (h.openQuestions && h.openQuestions.length > 0) {
       sections.push(`Open questions:\n- ${h.openQuestions.join("\n- ")}`);
     }
+    if (item.brief && item.brief.trim()) {
+      sections.push(`Original brief:\n${item.brief}`);
+    }
   } else {
     const deps = item.dependencies.length > 0 ? item.dependencies.join(", ") : "none";
     sections.push(

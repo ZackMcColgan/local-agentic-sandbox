@@ -54,21 +54,28 @@ export function ThreadsSidebar({
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/threads?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/threads?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && Array.isArray(data.threads)) {
           setServerSearchResults(data.threads);
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
         // Fallback to local filter on network error
       }
-    }, 150);
+    }, 300);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      controller.abort();
     };
   }, [searchQuery]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -275,20 +282,20 @@ export function ThreadsSidebar({
       {isSearchOpen && (
         <div className="px-4 py-2.5 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 animate-in fade-in duration-100">
           <div className="relative flex items-center bg-white dark:bg-[#18181b] rounded-[11px] px-3.5 py-2 border border-slate-200 dark:border-zinc-800">
-            <Search className="h-4 w-4 text-slate-400 shrink-0 mr-2" />
+            <Search className="h-4 w-4 text-slate-600 dark:text-zinc-400 shrink-0 mr-2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search sessions..."
               autoFocus
-              className="w-full text-xs text-slate-900 dark:text-zinc-100 placeholder-slate-400 bg-transparent focus:outline-none"
+              className="w-full text-xs text-slate-900 dark:text-zinc-100 placeholder-slate-500 dark:placeholder-zinc-400 bg-transparent focus:outline-none"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                className="p-1 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -297,7 +304,7 @@ export function ThreadsSidebar({
         </div>
       )}
 
-      <div className="px-4 sm:px-5 pt-3 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-slate-400 dark:text-zinc-400">
+      <div className="px-4 sm:px-5 pt-3 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-slate-600 dark:text-zinc-400">
         RECENTS
       </div>
 
@@ -317,7 +324,7 @@ export function ThreadsSidebar({
             ))}
           </div>
         ) : filteredThreads.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400 dark:text-zinc-400">
+          <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">
             {searchQuery ? "No matching sessions" : "No sessions yet. Tap + to start one."}
           </div>
         ) : (
@@ -358,7 +365,7 @@ export function ThreadsSidebar({
               if (isRunning)
                 return {
                   label: "● RUNNING",
-                  classes: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300",
+                  classes: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
                 };
               if (statusLabel === "Completed")
                 return {
@@ -378,7 +385,7 @@ export function ThreadsSidebar({
               if (statusLabel === "Parked")
                 return {
                   label: "⏸ PARKED",
-                  classes: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+                  classes: "bg-zinc-500/15 text-zinc-800 dark:text-zinc-300",
                 };
               if (statusLabel === "Needs Input")
                 return {
@@ -424,7 +431,7 @@ export function ThreadsSidebar({
                 }}
                 className={`group relative overflow-hidden rounded-2xl px-[14px] py-[13px] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 surface-card ${
                   isRunning
-                    ? "bg-white dark:bg-[#15151b] border border-cyan-500/40 shadow-[inset_3px_0_0_#22d3ee]"
+                    ? "bg-white dark:bg-[#15151b] border border-emerald-500/40 shadow-[inset_3px_0_0_#10b981]"
                     : isSelected
                       ? "bg-white dark:bg-[#15151b] ring-2 ring-emerald-500 shadow-md border border-transparent"
                       : "bg-white dark:bg-[#15151b] hover:shadow-md shadow-xs border border-stone-200/90 dark:border-white/[0.09]"
@@ -466,7 +473,7 @@ export function ThreadsSidebar({
                             setActionSheetThread(thread);
                           }
                         }}
-                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-full text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
                         title="Session actions"
                       >
                         <MoreHorizontal className="h-4 w-4" />
@@ -643,7 +650,7 @@ export function ThreadsSidebar({
                   setActionSheetThread(null);
                   lastActiveElementRef.current?.focus();
                 }}
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1 rounded-full text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
                 aria-label="Close action sheet"
               >
                 <X className="h-4 w-4" />
@@ -658,7 +665,7 @@ export function ThreadsSidebar({
                   setActionSheetThread(null);
                   onSelectThread(target.id);
                 }}
-                className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/20 transition-colors"
+                className="w-full min-h-[44px] flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold text-sm hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
               >
                 <MessageSquare className="h-4 w-4" />
                 <span>Open session</span>

@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import NextImage from "next/image";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
-import type { SupervisorBadgeInput } from "./supervisorBadgeState";
+import { deriveSupervisorBadgeState, type SupervisorBadgeInput } from "./supervisorBadgeState";
 import {
   Send,
   Sparkles,
@@ -52,7 +52,7 @@ import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
-import type { ActiveTurnInfo } from "../lib/threads/types";
+import type { ActiveTurnInfo, ThreadCompactionBoundary } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
 import {
   parseSimulateCommand,
@@ -203,6 +203,8 @@ interface ChatStreamProps {
    * active-view signal (activeNavView === "sessions" && viewMode === "unified").
    */
   isActiveView?: boolean;
+  onLocalSseOpenChange?: (open: boolean) => void;
+  threadCompaction?: ThreadCompactionBoundary | null;
   initialSimulation?: {
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -248,6 +250,8 @@ export function ChatStream({
   defaultComposerMode,
   onOpenProjects,
   isActiveView = true,
+  onLocalSseOpenChange,
+  threadCompaction: propThreadCompaction,
   initialSimulation,
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
@@ -446,10 +450,23 @@ export function ChatStream({
     };
   }, [threadId]);
 
-  // Rehydration of thread compaction boundary on thread switch
+  const onLocalSseOpenChangeRef = useRef(onLocalSseOpenChange);
+  onLocalSseOpenChangeRef.current = onLocalSseOpenChange;
+
+  useEffect(() => {
+    return () => {
+      onLocalSseOpenChangeRef.current?.(false);
+    };
+  }, []);
+
+  // Rehydration of thread compaction boundary on thread switch (skipped when parent already fetched the thread)
   useEffect(() => {
     if (!threadId) {
       setThreadCompaction(null);
+      return;
+    }
+    if (propThreadCompaction !== undefined) {
+      setThreadCompaction(propThreadCompaction);
       return;
     }
     let active = true;
@@ -463,7 +480,7 @@ export function ChatStream({
     return () => {
       active = false;
     };
-  }, [threadId]);
+  }, [threadId, propThreadCompaction]);
 
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
@@ -1048,116 +1065,117 @@ export function ChatStream({
       throw new Error("No readable stream received from server");
     }
 
-    const decoder = new TextDecoder();
-    let streamBuffer = "";
-    let accumulatedRawContent = "";
-    let currentTraces: ExecutionTraceItem[] = [];
-    let currentModel = activeModel;
-    let compactedThisTurn = false;
-    let tokensBeforeCompaction: number | undefined = undefined;
-    let tokensAfterCompaction: number | undefined = undefined;
+    onLocalSseOpenChangeRef.current?.(true);
+    try {
+      const decoder = new TextDecoder();
+      let streamBuffer = "";
+      let accumulatedRawContent = "";
+      let currentTraces: ExecutionTraceItem[] = [];
+      let currentModel = activeModel;
+      let compactedThisTurn = false;
+      let tokensBeforeCompaction: number | undefined = undefined;
+      let tokensAfterCompaction: number | undefined = undefined;
 
-    const upsertAssistant = (
-      prev: ChatMessage[],
-      patch: (existing: ChatMessage) => ChatMessage
-    ): ChatMessage[] => {
-      const exists = prev.some((msg) => msg.id === assistantMsgId);
-      const base: ChatMessage = {
-        id: assistantMsgId,
-        role: "assistant",
-        content: "",
-        thought: "",
-        traces: [],
-        modelUsed: currentModel,
-        selectedModel: activeModel,
+      const upsertAssistant = (
+        prev: ChatMessage[],
+        patch: (existing: ChatMessage) => ChatMessage
+      ): ChatMessage[] => {
+        const exists = prev.some((msg) => msg.id === assistantMsgId);
+        const base: ChatMessage = {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          thought: "",
+          traces: [],
+          modelUsed: currentModel,
+          selectedModel: activeModel,
+        };
+        if (!exists) {
+          return [...prev, patch(base)];
+        }
+        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
       };
-      if (!exists) {
-        return [...prev, patch(base)];
-      }
-      return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
-    };
 
-    let pendingThinkingDelta = "";
-    let pendingTokenCommit = false;
-    let pendingActivityTs: number | null = null;
+      let pendingThinkingDelta = "";
+      let pendingTokenCommit = false;
+      let pendingActivityTs: number | null = null;
 
-    const cancelScheduledStreamRaf = () => {
-      streamRafCancelRef.current?.();
-      streamRafCancelRef.current = null;
-    };
+      const cancelScheduledStreamRaf = () => {
+        streamRafCancelRef.current?.();
+        streamRafCancelRef.current = null;
+      };
 
-    const flushBufferedStreamUpdates = () => {
-      cancelScheduledStreamRaf();
-      if (!isMountedRef.current) return;
-      if (!pendingThinkingDelta && !pendingTokenCommit && pendingActivityTs === null) return;
+      const flushBufferedStreamUpdates = () => {
+        cancelScheduledStreamRaf();
+        if (!isMountedRef.current) return;
+        if (!pendingThinkingDelta && !pendingTokenCommit && pendingActivityTs === null) return;
 
-      const thinkingDelta = pendingThinkingDelta;
-      const shouldCommitToken = pendingTokenCommit;
-      const activityTs = pendingActivityTs;
-      pendingThinkingDelta = "";
-      pendingTokenCommit = false;
-      pendingActivityTs = null;
+        const thinkingDelta = pendingThinkingDelta;
+        const shouldCommitToken = pendingTokenCommit;
+        const activityTs = pendingActivityTs;
+        pendingThinkingDelta = "";
+        pendingTokenCommit = false;
+        pendingActivityTs = null;
 
-      if (activityTs !== null) {
-        setLastActivityAtMs(activityTs);
-      }
+        if (activityTs !== null) {
+          setLastActivityAtMs(activityTs);
+        }
 
-      if (thinkingDelta || shouldCommitToken) {
-        const parsed = shouldCommitToken ? parseThinkingAndContent(accumulatedRawContent) : null;
-        setMessages((prev) =>
-          upsertAssistant(prev, (msg) => {
-            const nextThought = thinkingDelta
-              ? msg.thought
-                ? msg.thought + thinkingDelta
-                : thinkingDelta
-              : msg.thought;
-            if (parsed) {
+        if (thinkingDelta || shouldCommitToken) {
+          const parsed = shouldCommitToken ? parseThinkingAndContent(accumulatedRawContent) : null;
+          setMessages((prev) =>
+            upsertAssistant(prev, (msg) => {
+              const nextThought = thinkingDelta
+                ? msg.thought
+                  ? msg.thought + thinkingDelta
+                  : thinkingDelta
+                : msg.thought;
+              if (parsed) {
+                return {
+                  ...msg,
+                  content: parsed.content,
+                  thought: parsed.thought,
+                  modelUsed: currentModel,
+                };
+              }
               return {
                 ...msg,
-                content: parsed.content,
-                thought: parsed.thought,
-                modelUsed: currentModel,
+                thought: nextThought,
               };
-            }
-            return {
-              ...msg,
-              thought: nextThought,
-            };
-          })
-        );
-      }
-    };
-
-    const scheduleBufferedStreamFlush = () => {
-      if (streamRafCancelRef.current) return;
-      const rafFn =
-        typeof globalThis.requestAnimationFrame === "function"
-          ? globalThis.requestAnimationFrame.bind(globalThis)
-          : typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
-            ? window.requestAnimationFrame.bind(window)
-            : null;
-      const cancelRafFn =
-        typeof globalThis.cancelAnimationFrame === "function"
-          ? globalThis.cancelAnimationFrame.bind(globalThis)
-          : typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
-            ? window.cancelAnimationFrame.bind(window)
-            : null;
-
-      if (!rafFn) {
-        flushBufferedStreamUpdates();
-        return;
-      }
-
-      const rafId = rafFn(() => {
-        streamRafCancelRef.current = null;
-        flushBufferedStreamUpdates();
-      });
-      streamRafCancelRef.current = () => {
-        cancelRafFn?.(rafId);
+            })
+          );
+        }
       };
-    };
 
-    try {
+      const scheduleBufferedStreamFlush = () => {
+        if (streamRafCancelRef.current) return;
+        const rafFn =
+          typeof globalThis.requestAnimationFrame === "function"
+            ? globalThis.requestAnimationFrame.bind(globalThis)
+            : typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+              ? window.requestAnimationFrame.bind(window)
+              : null;
+        const cancelRafFn =
+          typeof globalThis.cancelAnimationFrame === "function"
+            ? globalThis.cancelAnimationFrame.bind(globalThis)
+            : typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+              ? window.cancelAnimationFrame.bind(window)
+              : null;
+
+        if (!rafFn) {
+          flushBufferedStreamUpdates();
+          return;
+        }
+
+        const rafId = rafFn(() => {
+          streamRafCancelRef.current = null;
+          flushBufferedStreamUpdates();
+        });
+        streamRafCancelRef.current = () => {
+          cancelRafFn?.(rafId);
+        };
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -1455,6 +1473,7 @@ export function ChatStream({
       flushBufferedStreamUpdates();
     } finally {
       cancelScheduledStreamRaf();
+      onLocalSseOpenChangeRef.current?.(false);
     }
   };
 
@@ -2100,7 +2119,7 @@ export function ChatStream({
                   <button
                     type="button"
                     onClick={() => setShowCompactionModal(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                    className="p-1 rounded-lg text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -2155,7 +2174,7 @@ export function ChatStream({
                 />
                 <button
                   onClick={() => setPreviewModalImage(null)}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/90 text-white hover:bg-slate-800 border border-white/20"
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-zinc-900/90 text-white hover:bg-zinc-800 border border-white/20"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -2245,53 +2264,9 @@ export function ChatStream({
               >
                 {threadTitle || "New session"}
               </h1>
-              {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-              {/* Simulation Mode Badge */}
-              {activeSimulation && (
-                <div
-                  data-testid="simulation-badge"
-                  className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
-                  title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
-                  <span className="sr-only sm:not-sr-only">SIMULATION</span>
-                  <span aria-hidden="true" className="sm:hidden">
-                    SIM
-                  </span>
-                  <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
-                    (${activeSimulation.scenarioKey})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeSimTaskCancelRef.current) {
-                        activeSimTaskCancelRef.current();
-                        activeSimTaskCancelRef.current = null;
-                      }
-                      setActiveSimulation(null);
-                    }}
-                    className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
-                    title="Exit simulation mode"
-                    aria-label="Exit simulation mode"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Scope Badge if available */}
-              {(threadScope || activeTask?.scope) && (
-                <span
-                  className="hidden xl:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
-                  title={`Task Scope: ${threadScope || activeTask?.scope}`}
-                >
-                  {threadScope || activeTask?.scope}
-                </span>
-              )}
-
               {/* Context Meter Pill - visible on both mobile and desktop */}
               <div
                 data-testid="context-meter-pill"
@@ -2303,7 +2278,7 @@ export function ChatStream({
                     <span className="font-normal text-slate-700 dark:text-zinc-100">
                       {formatContextK(displayContextTokens)}
                     </span>{" "}
-                    <span className="font-normal text-zinc-400">
+                    <span className="font-normal text-slate-600 dark:text-zinc-400">
                       / {Math.round(contextStats.budgetTokens / 1000)}K
                     </span>
                   </span>
@@ -2327,39 +2302,7 @@ export function ChatStream({
                     />
                   </div>
                 </div>
-                {threadCompaction ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowCompactionModal(true)}
-                    className="min-h-[40px] min-w-[40px] -my-1.5 ml-0.5 px-2 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
-                    title="View compaction summary and restore options"
-                  >
-                    Compacted
-                  </button>
-                ) : null}
               </div>
-
-              {/* uir-0 header diet: Engine + Host pills moved to Settings. The only
-              guest allowed in the freed slot is the host disconnect alert chip,
-              rendered ONLY while the host runner is down. */}
-              {!activeSimulation &&
-                hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
-                  <button
-                    type="button"
-                    data-testid="host-disconnect-chip"
-                    onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-dashed border-zinc-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
-                    title={runnerReason || "Host runner is unreachable — open Settings"}
-                    aria-label="Host disconnected — open Settings"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
-                    <span className="hidden min-[420px]:inline">
-                      HOST DISCONNECTED · OPEN SETTINGS
-                    </span>
-                    <span className="min-[420px]:hidden">DISCONNECTED</span>
-                    <span className="sr-only">HOST DISCONNECTED</span>
-                  </button>
-                )}
 
               {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
               <div className="flex items-center gap-1">
@@ -2500,6 +2443,100 @@ export function ChatStream({
             </div>
           </header>
 
+          {/* U-F6: Status chips relocated out of <header> into clean sub-header banner strip */}
+          {(() => {
+            const hasSupervisorBadge = Boolean(
+              supervisorState && deriveSupervisorBadgeState(supervisorState)
+            );
+            const hasScopeBadge = Boolean(threadScope || activeTask?.scope);
+            const showDisconnectChip = Boolean(
+              !activeSimulation &&
+              hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable })
+            );
+            const hasStripItems = Boolean(
+              hasSupervisorBadge ||
+              activeSimulation ||
+              hasScopeBadge ||
+              threadCompaction ||
+              showDisconnectChip
+            );
+            if (!hasStripItems) return null;
+            return (
+              <div
+                data-testid="chat-subheader-strip"
+                className="flex flex-wrap items-center gap-1.5 px-2 sm:px-4 py-1.5 border-b border-stone-200/80 dark:border-white/[0.08] bg-stone-50/80 dark:bg-black/80 shrink-0"
+              >
+                {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
+                {activeSimulation && (
+                  <div
+                    data-testid="simulation-badge"
+                    className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
+                    title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
+                    <span className="sr-only sm:not-sr-only">SIMULATION</span>
+                    <span aria-hidden="true" className="sm:hidden">
+                      SIM
+                    </span>
+                    <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
+                      (${activeSimulation.scenarioKey})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeSimTaskCancelRef.current) {
+                          activeSimTaskCancelRef.current();
+                          activeSimTaskCancelRef.current = null;
+                        }
+                        setActiveSimulation(null);
+                      }}
+                      className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
+                      title="Exit simulation mode"
+                      aria-label="Exit simulation mode"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                {hasScopeBadge && (
+                  <span
+                    className="inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
+                    title={`Task Scope: ${threadScope || activeTask?.scope}`}
+                  >
+                    {threadScope || activeTask?.scope}
+                  </span>
+                )}
+                {threadCompaction ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompactionModal(true)}
+                    className="min-h-[32px] px-2.5 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                    title="View compaction summary and restore options"
+                  >
+                    Compacted
+                  </button>
+                ) : null}
+                {showDisconnectChip && (
+                  <button
+                    type="button"
+                    data-testid="host-disconnect-chip"
+                    onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
+                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-dashed border-amber-400/70 dark:border-amber-700/70 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[32px]"
+                    title={runnerReason || "Host runner is unreachable — open Settings"}
+                    aria-label="Host disconnected — open Settings"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+                    <span className="hidden min-[420px]:inline">
+                      HOST DISCONNECTED · OPEN SETTINGS
+                    </span>
+                    <span className="min-[420px]:hidden">DISCONNECTED</span>
+                    <span className="sr-only">HOST DISCONNECTED</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
           {(() => {
             const hasRunTurn = Boolean(isTurnLive || lastRunAssistant);
             const activeTraces =
@@ -2618,7 +2655,7 @@ export function ChatStream({
             <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
               {deduplicatedMessages.length === 0 && !activeTask && (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
+                  <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-600 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
                     <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
@@ -2817,11 +2854,11 @@ export function ChatStream({
                 type="button"
                 data-testid="live-follow-pill"
                 onClick={() => scrollToBottom("smooth")}
-                className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-white dark:bg-black border border-emerald-600/70 dark:border-emerald-500/70 text-emerald-700 dark:text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-500 dark:hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Jump to bottom"
                 aria-label="Jump to bottom"
               >
-                <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
+                <ArrowDown className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                 <span>{isTurnLive ? "Live" : "Latest"}</span>
               </button>
             </div>
@@ -2952,14 +2989,14 @@ export function ChatStream({
                       <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
                         {att.name}
                       </span>
-                      <span className="text-[9px] text-slate-400 font-mono">
+                      <span className="text-[9px] text-slate-600 dark:text-zinc-400 font-mono">
                         {formatFileSize(att.size)}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(att.id)}
-                      className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
+                      className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors ml-1"
                       title="Remove file"
                     >
                       <X className="h-3.5 w-3.5" />
