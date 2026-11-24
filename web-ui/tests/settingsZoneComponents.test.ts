@@ -179,6 +179,8 @@ describe("Settings zone components — Step 2 (Middle zones)", () => {
           hostAccessEnabled: true,
           allowUnattendedHostGit: false,
           jobChunkingEnabled: true,
+          fileRestrictionEnabled: false,
+          allowedHostPaths: [],
           runnerAvailable: true,
           recentActivity: [],
         },
@@ -187,6 +189,8 @@ describe("Settings zone components — Step 2 (Middle zones)", () => {
         onToggleHostAccess: () => {},
         onToggleJobChunking: () => {},
         onToggleUnattendedGit: () => {},
+        onToggleFileRestriction: () => {},
+        onAllowedPathsChange: () => {},
         onToggleGitActivityExpanded: () => {},
       })
     );

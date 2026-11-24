@@ -12,6 +12,8 @@ export async function GET() {
       hostAccessEnabled: settings.hostAccessEnabled,
       allowUnattendedHostGit: settings.allowUnattendedHostGit,
       jobChunkingEnabled: settings.jobChunkingEnabled,
+      fileRestrictionEnabled: settings.fileRestrictionEnabled,
+      allowedHostPaths: settings.allowedHostPaths,
       runnerAvailable: runnerStatus.runnerAvailable,
       runnerState: runnerStatus.runnerState,
       runnerReason: runnerStatus.reason,
@@ -32,6 +34,8 @@ export async function POST(req: Request) {
       hostAccessEnabled?: boolean;
       allowUnattendedHostGit?: boolean;
       jobChunkingEnabled?: boolean;
+      fileRestrictionEnabled?: boolean;
+      allowedHostPaths?: string[];
     } = {};
 
     if (typeof body.hostAccessEnabled === "boolean") {
@@ -43,6 +47,12 @@ export async function POST(req: Request) {
     if (typeof body.jobChunkingEnabled === "boolean") {
       updates.jobChunkingEnabled = body.jobChunkingEnabled;
     }
+    if (typeof body.fileRestrictionEnabled === "boolean") {
+      updates.fileRestrictionEnabled = body.fileRestrictionEnabled;
+    }
+    if (Array.isArray(body.allowedHostPaths)) {
+      updates.allowedHostPaths = body.allowedHostPaths.filter((p) => typeof p === "string");
+    }
 
     if (Object.keys(updates).length > 0) {
       const next = setHostSettings(updates);
@@ -51,13 +61,15 @@ export async function POST(req: Request) {
         hostAccessEnabled: next.hostAccessEnabled,
         allowUnattendedHostGit: next.allowUnattendedHostGit,
         jobChunkingEnabled: next.jobChunkingEnabled,
+        fileRestrictionEnabled: next.fileRestrictionEnabled,
+        allowedHostPaths: next.allowedHostPaths,
       });
     }
 
     return NextResponse.json(
       {
         error:
-          "Invalid payload: hostAccessEnabled, allowUnattendedHostGit, or jobChunkingEnabled boolean required",
+          "Invalid payload: hostAccessEnabled, allowUnattendedHostGit, jobChunkingEnabled, fileRestrictionEnabled boolean, or allowedHostPaths array required",
       },
       { status: 400 }
     );

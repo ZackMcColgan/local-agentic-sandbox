@@ -180,3 +180,33 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Provider n_keep only estimates the system-message string (not a full-history array scan), so it is not part of the repeated scans; behavior unchanged there.
 - Verification: estimateScanPerRound 2/0; golden suites contextEconomics, prefixReusePreservation, chatContextBudget, chatRoundBudget, chatWebResearchCap, conversationCompaction, hybridCompaction, llmProvider, microElision all UNMODIFIED and green (154 pass / 1 pre-existing skip); npx tsc --noEmit clean; npm run test:gate PASSED 363/0 (<90s budget).
 - Assumption: the brief's "at most 2 (one raw, one effective)" bound is enforced on the standard round path (no compaction/elision/directive mutations); mutation rungs re-scan once per mutation via the dirty flag, which is the intended behavior-preserving cost.
+
+## job-132 host-file-restriction-setting (auto-resume attempt 1/2, continued)
+
+- Banked state on resume: worktree D:/AI/orchestrator-scratch/wt-sec-file-restriction on
+  feature/sec-file-restriction-setting at origin/develop tip (b64022a), clean tree. Prior
+  attempt only created the worktree; no implementation commits existed.
+- Worktree had no node_modules; junction-linked repo-root node_modules (web-ui deps live at
+  repo root) so tsx tests resolve.
+- Test-first: web-ui/tests/hostFileRestriction.test.ts (9 assertions) written before impl;
+  confirmed red (MODULE_NOT_FOUND on lib/hostPathRestriction), then green.
+- Implementation:
+  - web-ui/lib/hostPathRestriction.ts: pure opt-in gate (isPathWithinAllowedFolders via
+    path.relative containment - no naive prefix leak; collectPathArguments; evaluateFileRestriction).
+  - web-ui/lib/hostSettings.ts: fileRestrictionEnabled (default false) + allowedHostPaths
+    (sanitized: trim, dedupe, drop blanks), persisted server-side in host-settings.json.
+  - web-ui/lib/hostMode.ts executeHostTool: gate enforced ONLY when toggle ON; blocked calls
+    never reach the runner; owner bypass = toggle OFF mid-session stops enforcement instantly.
+  - web-ui/app/api/settings/host/route.ts: GET/POST carry the two new fields.
+  - web-ui/components/settings/HostZone.tsx: "Host file restriction" switch (aria-checked
+    default false) + editable allowed-folders textarea (data-testid host-allowed-paths-editor,
+    saves on blur); honest copy "Default is OFF - opt-in, never a mandate".
+  - web-ui/components/SettingsView.tsx: handleToggleFileRestriction + handleSaveAllowedPaths
+    wired through /api/settings/host.
+  - web-ui/lib/testGate.ts: host rule matches hostPathRestriction; manifest includes
+    tests/hostFileRestriction.test.ts.
+  - web-ui/tests/settingsZoneComponents.test.ts: HostZone props updated for new fields/handlers.
+- Targeted gate run: hostFileRestriction + hostSettingsDefault + settingsZoneComponents +
+  settingsZones + chunkingSettingsUi + gateManifestCompleteness = 37 pass / 0 fail.
+- Assumption logged: restriction scopes host FILE tools + host_run_powershell cwd only;
+  unattended git tools carry no path args and stay unrestricted (matches brief: "host file tools").

@@ -603,6 +603,7 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) =>
       p.includes("hostMode") ||
       p.includes("hostSettings") ||
+      p.includes("hostPathRestriction") ||
       p.includes("settings/host") ||
       p.includes("host/approvals") ||
       p.includes("host/status") ||
@@ -615,6 +616,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: [
       "tests/hostMode.test.ts",
       "tests/hostSettingsDefault.test.ts",
+      "tests/hostFileRestriction.test.ts",
       "tests/chunkingSettings.test.ts",
       "tests/chunkingRouteGate.test.ts",
       "tests/chunkingSettingsUi.test.ts",
