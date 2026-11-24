@@ -10,6 +10,7 @@ import { OvernightSupervisor, createProductionStepExecutor, type StepExecutor } 
 import { generatePlanSpec, type PlanSpec, type PlanSpecInput } from "./planner";
 import { WorkerPool } from "./workerPool";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
+import { atomicWriteFileSync } from "../fsAtomic";
 
 export type ScheduleId = string;
 
@@ -153,7 +154,7 @@ export class UnattendedScheduler {
 
   saveSchedules(schedules: Schedule[]) {
     try {
-      fs.writeFileSync(this.storageFile, JSON.stringify(schedules, null, 2), "utf8");
+      atomicWriteFileSync(this.storageFile, JSON.stringify(schedules, null, 2), 0o660);
     } catch (err: unknown) {
       console.warn(
         "[Scheduler] Could not save schedules:",
@@ -161,6 +162,27 @@ export class UnattendedScheduler {
       );
       throw err;
     }
+  }
+
+  private updateScheduleMetadata(scheduleId: string, updater: (sched: Schedule) => void): void {
+    const freshSchedules = this.loadSchedules();
+    const freshSched = freshSchedules.find((s) => s.id === scheduleId);
+    if (!freshSched) {
+      return;
+    }
+    updater(freshSched);
+    this.saveSchedules(freshSchedules);
+  }
+
+  private recordScheduleFailure(scheduleId: string): void {
+    this.updateScheduleMetadata(scheduleId, (fresh) => {
+      fresh.failureCount = (fresh.failureCount || 0) + 1;
+      const backoffIdx = Math.min(fresh.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
+      fresh.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
+      if (fresh.failureCount >= 5) {
+        fresh.enabled = false;
+      }
+    });
   }
 
   async scheduleTask(cronExpr: string, taskDesc: string): Promise<ScheduleId> {
@@ -490,11 +512,12 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         });
       }
       if (result.status === "completed") {
-        sched.lastRun = new Date().toISOString();
-        sched.nextRun = calculateNextRun(sched.cronExpression).toISOString();
-        sched.failureCount = 0;
-        delete sched.backoffUntil;
-        this.saveSchedules(schedules);
+        this.updateScheduleMetadata(sched.id, (fresh) => {
+          fresh.lastRun = new Date().toISOString();
+          fresh.nextRun = calculateNextRun(fresh.cronExpression).toISOString();
+          fresh.failureCount = 0;
+          delete fresh.backoffUntil;
+        });
 
         // Trigger morning report
         await this.triggerMorningReport(runId, result);
@@ -503,13 +526,7 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
         return result;
       } else {
         // Run failed or parked (refusing to fake completion; surface failure loudly)
-        sched.failureCount = (sched.failureCount || 0) + 1;
-        const backoffIdx = Math.min(sched.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
-        sched.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
-        if (sched.failureCount >= 5) {
-          sched.enabled = false;
-        }
-        this.saveSchedules(schedules);
+        this.recordScheduleFailure(sched.id);
 
         await this.triggerMorningReport(runId, result);
         this.clearHeartbeat();
@@ -520,14 +537,8 @@ ${manifest?.parkedReason ? `\n**Parked Reason**: ${manifest.parkedReason}` : ""}
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      sched.failureCount = (sched.failureCount || 0) + 1;
-      const backoffIdx = Math.min(sched.failureCount - 1, BACKOFF_INTERVALS_MS.length - 1);
-      sched.backoffUntil = new Date(Date.now() + BACKOFF_INTERVALS_MS[backoffIdx]).toISOString();
-      if (sched.failureCount >= 5) {
-        sched.enabled = false;
-      }
       try {
-        this.saveSchedules(schedules);
+        this.recordScheduleFailure(sched.id);
       } catch (saveErr: unknown) {
         console.warn(
           "[Scheduler] Could not save schedules during crash handler:",

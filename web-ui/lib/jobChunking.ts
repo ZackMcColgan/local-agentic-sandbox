@@ -447,3 +447,27 @@ export function resolveChunkHandoffTarget(input: ChunkHandoffTargetInput): Chunk
     handoffPath: path.join(checkpointDir, `${jobId}.handoff.json`),
   };
 }
+
+/**
+ * Resolves the chunk runlog path. Isolated per-turn worktrees keep their
+ * repo-local runlog; unisolated runs (`worktreePath` null) write under the
+ * persistent PVC checkpoint directory rather than ephemeral container `/app`.
+ */
+export function resolveChunkRunlogPath(opts: {
+  worktreePath?: string | null;
+  jobId: string;
+  checkpointDir?: string;
+}): string {
+  if (opts.worktreePath) {
+    return path.join(opts.worktreePath, "docs/internal/queue-steer-runlog.md");
+  }
+  const pvcDir =
+    process.env.AGENT_CHECKPOINT_DIR ||
+    opts.checkpointDir ||
+    (process.env.WORKSPACE_DIR
+      ? path.join(process.env.WORKSPACE_DIR, ".agent", "checkpoints")
+      : fs.existsSync("/workspace")
+        ? path.join("/workspace", ".agent", "checkpoints")
+        : getCanonicalCheckpointDir());
+  return path.join(pvcDir, `${opts.jobId}.runlog.md`);
+}

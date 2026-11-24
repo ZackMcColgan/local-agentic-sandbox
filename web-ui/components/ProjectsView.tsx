@@ -564,7 +564,7 @@ export function ProjectsView({
                 <span className="text-base font-bold text-slate-900 dark:text-zinc-100">
                   {activeProject.name}
                 </span>
-                <span className="text-xs font-mono text-slate-400 dark:text-zinc-400">
+                <span className="text-xs font-mono text-slate-600 dark:text-zinc-400">
                   ({activeProject.base_branch})
                 </span>
               </div>
@@ -734,7 +734,7 @@ export function ProjectsView({
                 <button
                   type="button"
                   onClick={() => setIsRegisterModalOpen(false)}
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                   title="Close modal"
                   aria-label="Close modal"
                 >
@@ -821,11 +821,11 @@ export function ProjectsView({
                   {/* Directory Listing */}
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
                     {isBrowserLoading ? (
-                      <div className="p-8 text-center text-xs text-slate-400">
+                      <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">
                         Scanning filesystem...
                       </div>
                     ) : browserItems.length === 0 ? (
-                      <div className="p-8 text-center text-xs text-slate-400">
+                      <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">
                         No subdirectories found
                       </div>
                     ) : (
@@ -865,11 +865,11 @@ export function ProjectsView({
                                       branch: {item.defaultBranch}
                                     </span>
                                   ) : (
-                                    <span className="text-[10px] text-zinc-400 font-semibold">
+                                    <span className="text-[10px] text-zinc-600 dark:text-zinc-400 font-semibold">
                                       non-git folder
                                     </span>
                                   )}
-                                  <span className="text-[10px] font-mono text-slate-400">
+                                  <span className="text-[10px] font-mono text-slate-600 dark:text-zinc-400">
                                     {item.toolchain}
                                   </span>
                                 </div>
@@ -882,7 +882,7 @@ export function ProjectsView({
                                 e.stopPropagation();
                                 setBrowserSubpath(item.relPath);
                               }}
-                              className="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-400 hover:text-slate-700 text-[11px] shrink-0 font-semibold"
+                              className="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 text-[11px] shrink-0 font-semibold"
                               title="Explore into directory"
                             >
                               Open →
@@ -967,7 +967,7 @@ export function ProjectsView({
                       placeholder="e.g. auth-service"
                       className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 text-sm focus:outline-emerald-500"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1 font-mono">
+                    <p className="text-[11px] text-slate-600 dark:text-zinc-400 mt-1 font-mono">
                       Location: ./workspace/projects/
                       {greenfieldName.toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "<slug>"}
                     </p>

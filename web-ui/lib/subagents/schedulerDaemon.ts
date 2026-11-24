@@ -2,14 +2,15 @@ import fs from "fs";
 import path from "path";
 import { UnattendedScheduler, Schedule } from "./scheduler";
 import { isDrainAllowed, readBoardControlState } from "../board/boardControl";
+import { isBoardDrainInFlight, runBoardDrainWithMutex } from "../board/boardOrchestrator";
+import { BoardStore } from "../board/boardStore";
 import { createProductionBoardOrchestrator } from "../board/productionDrain";
 import { ThreadStore } from "../threads/threadStore";
-
-let boardDrainInFlight = false;
 
 export interface BoardDrainDuty {
   isRunning: () => boolean;
   drain: () => Promise<unknown>;
+  reconcile?: () => Promise<unknown>;
 }
 
 export interface DaemonHeartbeat {
@@ -251,21 +252,33 @@ export class SchedulerDaemon {
       }
     }
 
-    if (!this.shutdownRequested && this.boardDrain && this.boardDrain.isRunning()) {
-      if (boardDrainInFlight) {
-        this.log("INFO", "Board drain already in flight; skipping this tick.");
-      } else {
-        boardDrainInFlight = true;
-        try {
-          this.log("INFO", "Board control is running; starting board drain.");
-          await this.boardDrain.drain();
-        } catch (err: unknown) {
-          this.log(
-            "ERROR",
-            `Board drain failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-        } finally {
-          boardDrainInFlight = false;
+    if (!this.shutdownRequested && this.boardDrain) {
+      if (this.boardDrain.isRunning()) {
+        if (isBoardDrainInFlight()) {
+          this.log("INFO", "Board drain already in flight; skipping this tick.");
+        } else {
+          try {
+            this.log("INFO", "Board control is running; starting board drain.");
+            await runBoardDrainWithMutex(() => this.boardDrain!.drain());
+          } catch (err: unknown) {
+            this.log(
+              "ERROR",
+              `Board drain failed: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+      } else if (this.boardDrain.reconcile) {
+        if (isBoardDrainInFlight()) {
+          this.log("INFO", "Board drain already in flight; skipping reconciliation this tick.");
+        } else {
+          try {
+            await runBoardDrainWithMutex(() => this.boardDrain!.reconcile!());
+          } catch (err: unknown) {
+            this.log(
+              "ERROR",
+              `Board working-item reconciliation failed: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
       }
     }
@@ -347,13 +360,20 @@ export class SchedulerDaemon {
 }
 
 export function createDefaultBoardDrainDuty(): BoardDrainDuty {
+  const runOrchestratorDrain = async () => {
+    const orchestrator = createProductionBoardOrchestrator({
+      threadStore: new ThreadStore(),
+    });
+    return orchestrator.drain();
+  };
   return {
     isRunning: () => isDrainAllowed(readBoardControlState()),
-    drain: async () => {
-      const orchestrator = createProductionBoardOrchestrator({
-        threadStore: new ThreadStore(),
-      });
-      return orchestrator.drain();
+    drain: runOrchestratorDrain,
+    reconcile: async () => {
+      if (!new BoardStore().list().some((item) => item.status === "working")) {
+        return null;
+      }
+      return runOrchestratorDrain();
     },
   };
 }

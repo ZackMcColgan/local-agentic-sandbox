@@ -279,4 +279,27 @@ describe("Sprint 12 Phase 7 — Flywheel Skills Spike (flywheelSkills.test.ts)",
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("getDefaultSkillsDbPath prefers WORKSPACE_DIR/.agent/runs.db when RUN_LEDGER_DB_PATH is unset", async () => {
+    const origDbPath = process.env.RUN_LEDGER_DB_PATH;
+    const origWorkspace = process.env.WORKSPACE_DIR;
+    const tmpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), "skills-ws-test-"));
+
+    try {
+      delete process.env.RUN_LEDGER_DB_PATH;
+      process.env.WORKSPACE_DIR = tmpWorkspace;
+
+      const { getDefaultSkillsDbPath } = await import("../lib/flywheel/skillsStore.js");
+      assert.equal(
+        getDefaultSkillsDbPath(),
+        path.join(path.resolve(tmpWorkspace), ".agent", "runs.db")
+      );
+    } finally {
+      if (origDbPath !== undefined) process.env.RUN_LEDGER_DB_PATH = origDbPath;
+      else delete process.env.RUN_LEDGER_DB_PATH;
+      if (origWorkspace !== undefined) process.env.WORKSPACE_DIR = origWorkspace;
+      else delete process.env.WORKSPACE_DIR;
+      fs.rmSync(tmpWorkspace, { recursive: true, force: true });
+    }
+  });
 });

@@ -68,9 +68,9 @@ export function DiffViewer({
           className="flex items-center gap-2 text-left group min-w-0 flex-1"
         >
           {isOpen ? (
-            <ChevronDown className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
+            <ChevronDown className="h-4 w-4 text-slate-600 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-zinc-300 transition-colors" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-slate-400 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors" />
+            <ChevronRight className="h-4 w-4 text-slate-600 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-zinc-300 transition-colors" />
           )}
           <GitBranch className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="font-mono text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate min-w-0">
@@ -95,7 +95,7 @@ export function DiffViewer({
             <button
               type="button"
               onClick={() => setShowDiagram(!showDiagram)}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/50 border border-cyan-300 dark:border-cyan-500/30 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/30 transition-colors"
             >
               <Eye className="h-3 w-3" />
               <span>Diagram</span>
@@ -152,7 +152,7 @@ export function DiffViewer({
           {/* Modified Files Pills */}
           {modifiedFiles.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-              <span className="text-slate-400 dark:text-zinc-400">Files:</span>
+              <span className="text-slate-600 dark:text-zinc-400">Files:</span>
               {modifiedFiles.map((file, idx) => (
                 <span
                   key={idx}
@@ -166,8 +166,8 @@ export function DiffViewer({
 
           {/* Inline Diagram Preview */}
           {showDiagram && diagramSvg && (
-            <div className="p-3 rounded-lg border border-cyan-200 dark:border-cyan-900 bg-cyan-50/30 dark:bg-cyan-950/20">
-              <div className="text-[11px] font-semibold text-cyan-800 dark:text-cyan-300 mb-2 flex items-center gap-1.5">
+            <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30">
+              <div className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
                 <FileCode className="h-3.5 w-3.5" />
                 <span>Architecture Diagram Preview (.drawio.svg)</span>
               </div>
@@ -180,21 +180,21 @@ export function DiffViewer({
 
           {/* Unified Diff Box */}
           {diff ? (
-            <div className="rounded-lg bg-slate-950 dark:bg-black p-3 font-mono text-[11px] leading-relaxed overflow-x-auto max-h-96 border border-slate-800">
+            <div className="rounded-lg bg-zinc-50 dark:bg-black p-3 font-mono text-[11px] leading-relaxed overflow-x-auto max-h-96 border border-zinc-200 dark:border-zinc-800">
               {lines.map((line, idx) => {
-                let colorClass = "text-slate-400";
+                let colorClass = "text-zinc-600 dark:text-zinc-400";
                 let bgClass = "";
 
                 if (line.startsWith("+") && !line.startsWith("+++")) {
-                  colorClass = "text-emerald-400 font-medium";
-                  bgClass = "bg-emerald-950/40 px-1 rounded-xs";
+                  colorClass = "text-emerald-700 dark:text-emerald-400 font-medium";
+                  bgClass = "bg-emerald-50 dark:bg-emerald-950/40 px-1 rounded-xs";
                 } else if (line.startsWith("-") && !line.startsWith("---")) {
-                  colorClass = "text-rose-400 font-medium";
-                  bgClass = "bg-rose-950/40 px-1 rounded-xs";
+                  colorClass = "text-rose-700 dark:text-rose-400 font-medium";
+                  bgClass = "bg-rose-50 dark:bg-rose-950/40 px-1 rounded-xs";
                 } else if (line.startsWith("@@")) {
-                  colorClass = "text-cyan-400 font-semibold";
+                  colorClass = "text-zinc-700 dark:text-zinc-300 font-semibold";
                 } else if (line.startsWith("diff --git") || line.startsWith("index ")) {
-                  colorClass = "text-purple-400 font-bold";
+                  colorClass = "text-zinc-900 dark:text-zinc-200 font-bold";
                 }
 
                 return (

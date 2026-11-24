@@ -477,4 +477,33 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
       teardown();
     }
   });
+
+  it("R8: Board drain duty invokes reconcile (without drain) when control is paused/stopped", async () => {
+    setup();
+    try {
+      const scheduler = new UnattendedScheduler({ workspaceDir: testWorkspace });
+      let drainCalls = 0;
+      let reconcileCalls = 0;
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+        boardDrain: {
+          isRunning: () => false,
+          drain: async () => {
+            drainCalls += 1;
+          },
+          reconcile: async () => {
+            reconcileCalls += 1;
+          },
+        },
+      });
+
+      await daemon.tick();
+      assert.equal(drainCalls, 0);
+      assert.equal(reconcileCalls, 1);
+    } finally {
+      teardown();
+    }
+  });
 });
