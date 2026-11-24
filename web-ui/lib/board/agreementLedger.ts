@@ -156,6 +156,7 @@ export class AgreementLedgerStore {
     prNumber: number;
     headSha: string;
     reviewerVerdict: GateVerdict;
+    reason?: string;
   }): PersistentAgreementLedger {
     const current = this.read();
     const nowIso = new Date().toISOString();
@@ -172,6 +173,7 @@ export class AgreementLedgerStore {
         reviewerVerdict: input.reviewerVerdict,
         driverVerdict,
         agreed: driverVerdict === null ? null : input.reviewerVerdict === driverVerdict,
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
         updatedAt: nowIso,
       };
     } else {
@@ -181,6 +183,7 @@ export class AgreementLedgerStore {
         reviewerVerdict: input.reviewerVerdict,
         driverVerdict: null,
         agreed: null,
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
         recordedAt: nowIso,
         updatedAt: nowIso,
       });
