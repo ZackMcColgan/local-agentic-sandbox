@@ -1291,6 +1291,14 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("components/BoardView") ||
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("components/ChatStream") ||
+      p.includes("uiPolishBatch8.test.ts"),
+    tests: ["tests/uiPolishBatch8.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("scripts/build-import-image") ||
       p.includes("scripts/rollout-deploy") ||
       p.includes("scripts/deploy-cluster") ||

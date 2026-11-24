@@ -310,7 +310,7 @@ export function ThreadsSidebar({
 
       {/* Elevated Cards Session List matching Mockup media_1791044464191.webp */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-[11px]"
+        className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 pb-20 sm:pb-6 space-y-[11px]"
         role="list"
         aria-label="Sessions list"
       >

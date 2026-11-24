@@ -41,7 +41,6 @@ import {
   streamBannerKind,
 } from "../lib/liveActivity";
 import { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock } from "./ArtifactRenderers";
-// CodeBlock handles long files with max-h-[400px] overflow-y-auto bg-gradient-to-t isExpanded Expand Collapse lines.length copyText(code)
 export { CodeBlock, CodeBlockWithCopy, SvgRendererBlock, MermaidBlock };
 import { AgentMode } from "../config/models";
 import { getInitialWelcomeMessage, clearChatHistory } from "../lib/chatHistory";

@@ -303,20 +303,12 @@ export function BoardView({
                   {expandedBriefIds[item.id] ? "Brief ⌄" : "Brief ›"}
                 </button>
               )}
-              {item.threadLink && (
-                <a
-                  href={item.threadLink}
-                  className="rounded-full border border-emerald-500/35 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
-                >
-                  Thread ›
-                </a>
-              )}
             </>
           )}
           {item.threadLink && (
             <a
               href={item.threadLink}
-              className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+              className="rounded-full border border-emerald-500/35 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
             >
               Thread ›
             </a>
@@ -325,7 +317,7 @@ export function BoardView({
             type="button"
             data-testid={`board-edit-${item.id}`}
             onClick={() => openEditModal(item)}
-            className="rounded-full border border-white/[0.12] px-2 py-0.5 text-[10.5px] text-zinc-300 hover:text-zinc-50 hover:border-white/[0.22] transition-colors"
+            className="rounded-full border border-zinc-300 dark:border-white/[0.12] px-2 py-0.5 text-[10.5px] text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-50 hover:border-zinc-400 dark:hover:border-white/[0.22] transition-colors"
           >
             Edit
           </button>
@@ -334,7 +326,7 @@ export function BoardView({
             data-testid={`board-delete-${item.id}`}
             disabled={deletingId === item.id}
             onClick={() => void handleDeleteItem(item)}
-            className="rounded-full border border-rose-500/35 bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
+            className="rounded-full border border-rose-500/35 bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
           >
             {deletingId === item.id ? "Deleting…" : "Delete"}
           </button>
@@ -465,7 +457,7 @@ export function BoardView({
           type="button"
           onClick={() => setIsSchedulesOpen(true)}
           data-testid="board-schedules-btn"
-          className="min-h-[36px] rounded-xl border border-white/[0.14] px-3 py-1.5 text-[12px] font-semibold text-zinc-200 hover:bg-[#1f1f28] transition-colors inline-flex items-center"
+          className="min-h-[36px] rounded-xl border border-zinc-300 dark:border-white/[0.14] px-3 py-1.5 text-[12px] font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-[#1f1f28] transition-colors inline-flex items-center"
         >
           Schedules
         </button>
@@ -539,7 +531,7 @@ export function BoardView({
           </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto touch-pan-y overscroll-contain px-4 pt-3 pb-24">
+        <div className="flex-1 overflow-y-auto touch-pan-y overscroll-contain px-4 pt-3 pb-28">
           {byStatus[activeCol.status].map(renderCard)}
           {activeCol.status === "working" && (
             <div className="mt-3.5 rounded-[14px] border-[1.5px] border-dashed border-zinc-300 dark:border-[#26262b] p-4 text-center text-[12.5px] leading-relaxed text-zinc-600 dark:text-zinc-400">
@@ -621,7 +613,9 @@ export function BoardView({
             className="w-full max-w-md rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-zinc-900 dark:text-zinc-100 space-y-3"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-zinc-100">Edit {editingItem.key}</h2>
+              <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                Edit {editingItem.key}
+              </h2>
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
@@ -636,7 +630,7 @@ export function BoardView({
               onChange={(e) => setEditTitle(e.target.value)}
               placeholder="Title"
               aria-label="Edit item title"
-              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-black px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:border-emerald-500 focus:outline-none"
             />
             <textarea
               value={editBrief}
@@ -644,13 +638,13 @@ export function BoardView({
               rows={4}
               placeholder="Brief"
               aria-label="Edit item brief"
-              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-black px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:border-emerald-500 focus:outline-none"
             />
             <select
               value={editStatus}
               onChange={(e) => setEditStatus(e.target.value as BoardStatus)}
               aria-label="Edit item status"
-              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-black px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:border-emerald-500 focus:outline-none"
             >
               <option value="queued">Queued</option>
               <option value="working">Working</option>
@@ -666,7 +660,7 @@ export function BoardView({
                 onChange={(e) => setEditParkedReason(e.target.value)}
                 placeholder="Parked reason"
                 aria-label="Parked reason"
-                className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-black px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 focus:border-emerald-500 focus:outline-none"
               />
             )}
             {editError && <p className="text-xs text-rose-600 dark:text-rose-400">{editError}</p>}
@@ -674,7 +668,7 @@ export function BoardView({
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="rounded-xl border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300"
+                className="rounded-xl border border-zinc-300 dark:border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 Cancel
               </button>
@@ -702,7 +696,7 @@ export function BoardView({
               <button
                 type="button"
                 onClick={() => setIsSchedulesOpen(false)}
-                className="rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800"
+                className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 Close
               </button>

@@ -186,37 +186,32 @@ describe("Chat Reasoning, Progress & Live Run Formatting", () => {
       assert.ok(src.includes("overflow-x-auto"), "Must support horizontal scroll for long lines");
     });
 
-    it("CodeBlock handles long files (e.g. 200 lines) with max-h-400px, overflow-y-auto, bottom gradient fade, expand toggle, and full copy", () => {
-      const src = fs.readFileSync(path.resolve(__dirname, "../components/ChatStream.tsx"), "utf8");
-      assert.ok(
-        src.includes("max-h-[400px]") && src.includes("overflow-y-auto"),
-        "Must constrain long blocks to max-height with vertical scroll"
-      );
-      assert.ok(
-        src.includes("bg-gradient-to-t"),
-        "Must have bottom fade gradient shadow when content overflows"
-      );
-      assert.ok(
-        src.includes("isExpanded") && src.includes("Expand") && src.includes("Collapse"),
-        "Must support expand/collapse toggle"
-      );
-      assert.ok(src.includes("lines.length"), "Must detect long line counts");
-      // Check copy behavior passes raw full code
-      assert.ok(
-        src.includes("copyText(code)"),
-        "Must copy the full raw code rather than truncated DOM slice"
-      );
+    it("CodeBlock renders long files (e.g. 200 lines) with max-h-400px, overflow-y-auto, bottom gradient fade, and expand toggle", async () => {
+      const React = await import("react");
+      const { renderToStaticMarkup } = await import("react-dom/server");
+      const { CodeBlock } = await import("../components/ArtifactRenderers");
 
-      // Verify simulated 200-line file behavior
       const sample200Lines = Array.from(
         { length: 200 },
         (_, i) => `console.log("Line number ${i + 1}");`
       ).join("\n");
-      assert.equal(sample200Lines.split("\n").length, 200);
-      assert.ok(
-        sample200Lines.split("\n").length > 20,
-        "200-line file triggers long code block behavior"
+      const html = renderToStaticMarkup(
+        React.createElement(CodeBlock, { language: "typescript", code: sample200Lines })
       );
+
+      assert.ok(
+        html.includes("max-h-[400px]") && html.includes("overflow-y-auto"),
+        "Rendered long CodeBlock must constrain height with vertical scroll"
+      );
+      assert.ok(
+        html.includes("bg-gradient-to-t"),
+        "Rendered long CodeBlock must include bottom fade gradient when collapsed"
+      );
+      assert.ok(
+        html.includes("Expand") && html.includes("200"),
+        "Rendered long CodeBlock must expose Expand toggle with line count"
+      );
+      assert.ok(html.includes("Copy"), "Rendered CodeBlock must include Copy action");
     });
   });
 
