@@ -45,6 +45,7 @@ export interface StreamingSnapshotSink {
 
 export class ThrottledStreamSnapshot {
   private lastWriteMs = -Infinity;
+  private lastContent = "";
   private lastRoundPromptTokens: number[] | undefined;
   private lastRoundGenerationMs: number[] | undefined;
   private lastOutputTokens: number | undefined;
@@ -116,15 +117,20 @@ export class ThrottledStreamSnapshot {
       this.lastRoundNarrations = [...roundNarrations];
     }
     const hasContent = Boolean(content && content.trim());
+    if (hasContent) {
+      this.lastContent = content;
+    }
+    const effectiveContent = hasContent ? content : this.lastContent;
+    const hasEffectiveContent = Boolean(effectiveContent && effectiveContent.trim());
     const hasThought = Boolean(thought && thought.trim());
     const hasTraces = Array.isArray(traces) && traces.length > 0;
     const hasNarrations = Boolean(this.lastRoundNarrations && this.lastRoundNarrations.length > 0);
-    if (!hasContent && !hasThought && !hasTraces && !hasNarrations) return false;
+    if (!hasEffectiveContent && !hasThought && !hasTraces && !hasNarrations) return false;
     this.lastWriteMs = now;
     this.sink.addMessage(this.threadId, {
       id: this.messageId,
       role: "assistant",
-      content: content || "",
+      content: effectiveContent || "",
       thought: hasThought ? thought : undefined,
       thinkingSegments: this.lastThinkingSegments,
       roundNarrations: this.lastRoundNarrations,

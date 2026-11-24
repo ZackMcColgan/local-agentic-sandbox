@@ -82,7 +82,7 @@ export function serializeTurn(
   const queuePosition = queued ? (snap.running !== null ? idx + 1 : idx) : 0;
   if (queuePosition > 0) opts.onQueued?.(queuePosition);
 
-  const settled = queue.drain(async (j) => {
+  void queue.drain(async (j) => {
     let worktree: WorktreeHandle | null = null;
     if (opts.repoRoot) {
       try {
@@ -117,6 +117,7 @@ export function serializeTurn(
     }
   });
 
+  const settled = queue.waitForJob(job.id);
   settled.then(() => opts.onSettled?.(job.status === "failed" ? "failed" : "done"));
   return { job, queuePosition, settled };
 }
