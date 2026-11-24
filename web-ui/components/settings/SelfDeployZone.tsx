@@ -83,7 +83,7 @@ export function SelfDeployZone({
         {deployHistory.length > 0 && (
           <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-2.5">
             <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-              <History className="h-3.5 w-3.5 text-slate-500" />
+              <History className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Recent Self-Deploy History</span>
             </div>
 

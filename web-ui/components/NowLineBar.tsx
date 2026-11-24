@@ -21,7 +21,7 @@ export function NowLineBar(props: NowLineBarProps) {
   if (!state.visible) return null;
 
   const dotClass = state.stallLabel
-    ? "bg-amber-500"
+    ? "bg-rose-500"
     : state.isStreaming
       ? "bg-emerald-500 animate-pulse"
       : state.outcomeTone === "error"
@@ -51,7 +51,7 @@ export function NowLineBar(props: NowLineBarProps) {
             <span className="text-zinc-600 dark:text-zinc-400 shrink-0">·</span>
             <span
               data-testid="now-line-stalled"
-              className="text-amber-700 dark:text-amber-400 font-semibold shrink-0"
+              className="text-rose-700 dark:text-rose-400 font-semibold shrink-0"
             >
               {state.stallLabel}
             </span>

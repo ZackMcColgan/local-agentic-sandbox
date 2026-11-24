@@ -66,7 +66,7 @@ export function ProjectTaskList({
         />
 
         <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-          <div className="text-[11px] text-slate-400">
+          <div className="text-[11px] text-slate-600 dark:text-zinc-400">
             Target branch: <code className="font-mono">{baseBranch}</code> · Engine:{" "}
             <code className="font-mono">Flash-Next</code>
           </div>
@@ -77,7 +77,7 @@ export function ProjectTaskList({
               onClick={() => handleAction("schedule")}
               className="min-h-[44px] px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-semibold text-xs flex items-center gap-1.5 transition-colors"
             >
-              <Calendar className="h-3.5 w-3.5 text-slate-500" />
+              <Calendar className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Schedule 2:00 AM</span>
             </button>
 
