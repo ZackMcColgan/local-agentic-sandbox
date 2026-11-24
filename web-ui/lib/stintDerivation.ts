@@ -45,15 +45,19 @@ function stringifyTraceResult(result: unknown): string {
   if (typeof result === "string") return result;
   if (result && typeof result === "object") {
     const obj = result as Record<string, unknown>;
-    const parts = [obj.stdout, obj.stderr, obj.output, obj.message, obj.text].filter(
-      (v): v is string => typeof v === "string"
-    );
+    const parts = [
+      obj.stdout,
+      obj.stderr,
+      obj.output,
+      obj.message,
+      obj.text,
+      obj.url,
+      obj.prUrl,
+      obj.html_url,
+      obj.error,
+      obj.summary,
+    ].filter((v): v is string => typeof v === "string");
     if (parts.length > 0) return parts.join("\n");
-    try {
-      return JSON.stringify(result);
-    } catch {
-      return "";
-    }
   }
   return "";
 }

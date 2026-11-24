@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import NextImage from "next/image";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
 import { deriveSupervisorBadgeState, type SupervisorBadgeInput } from "./supervisorBadgeState";
@@ -80,6 +80,8 @@ import {
   type AttachedFileItem,
 } from "../lib/chat/attachments";
 export { formatFileSize, fileToBase64, type AttachedFileItem };
+
+const EMPTY_LIVE_TRACES: ExecutionTraceItem[] = [];
 
 export interface ChatMessage {
   id: string;
@@ -305,6 +307,16 @@ export function ChatStream({
   // uir-1 / U2: turn start, last observed stream activity, live measured tok/s,
   // recovery timestamp, and the just-completed turn whose DONE chip renders.
   const turnStartedAtRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  const streamRafCancelRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      streamRafCancelRef.current?.();
+      streamRafCancelRef.current = null;
+    };
+  }, []);
   const [lastActivityAtMs, setLastActivityAtMs] = useState<number>(() => Date.now());
   const [liveTokPerSec, setLiveTokPerSec] = useState<number | null>(null);
   const [recoveredAtMs, setRecoveredAtMs] = useState<number | null>(null);
@@ -818,21 +830,25 @@ export function ChatStream({
     isUserScrolledUp,
   ]);
 
-  const toggleProof = (proofKey: string) => {
+  const toggleProof = useCallback((proofKey: string) => {
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
-  };
+  }, []);
 
-  const toggleTraces = (msgId: string) => {
+  const toggleTraces = useCallback((msgId: string) => {
     setExpandedTraces((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
-  };
+  }, []);
 
-  const copyToClipboard = async (text: string, msgId: string) => {
+  const copyToClipboard = useCallback(async (text: string, msgId: string) => {
     const ok = await copyText(text);
     if (ok) {
       setCopiedMessageId(msgId);
       setTimeout(() => setCopiedMessageId(null), 2000);
     }
-  };
+  }, []);
+
+  const handleOpenCanvasDiff = useCallback((diff: TimelineWriteDiff, all: TimelineWriteDiff[]) => {
+    setActiveCanvasDiff({ current: diff, all });
+  }, []);
 
   // Auto-expanding textarea: min 46px on mobile, grows smoothly with content, never truncates
   useEffect(() => {
@@ -991,8 +1007,15 @@ export function ChatStream({
     }
   };
 
-  const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
-    const currentThreadId = activeThreadId || threadId;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const threadIdRef = useRef(threadId);
+  threadIdRef.current = threadId;
+  const onTaskUpdatedRef = useRef(onTaskUpdated);
+  onTaskUpdatedRef.current = onTaskUpdated;
+
+  const handleRunControlAction = useCallback(async (action: "pause" | "resume" | "restart") => {
+    const currentThreadId = activeThreadIdRef.current || threadIdRef.current;
     if (!currentThreadId) return;
     try {
       const res = await fetch(`/api/threads/${currentThreadId}`, {
@@ -1002,14 +1025,14 @@ export function ChatStream({
       });
       if (res.ok) {
         const data = await res.json();
-        if (onTaskUpdated) {
-          onTaskUpdated(data.task, data.thread);
+        if (onTaskUpdatedRef.current) {
+          onTaskUpdatedRef.current(data.task, data.thread);
         }
       }
     } catch {
       // Non-fatal
     }
-  };
+  }, []);
 
   const readStreamResponse = async (
     res: Response,
@@ -1043,36 +1066,116 @@ export function ChatStream({
     }
 
     onLocalSseOpenChangeRef.current?.(true);
-    try {
-      const decoder = new TextDecoder();
-      let streamBuffer = "";
-      let accumulatedRawContent = "";
-      let currentTraces: ExecutionTraceItem[] = [];
-      let currentModel = activeModel;
-      let compactedThisTurn = false;
-      let tokensBeforeCompaction: number | undefined = undefined;
-      let tokensAfterCompaction: number | undefined = undefined;
+    const decoder = new TextDecoder();
+    let streamBuffer = "";
+    let accumulatedRawContent = "";
+    let currentTraces: ExecutionTraceItem[] = [];
+    let currentModel = activeModel;
+    let compactedThisTurn = false;
+    let tokensBeforeCompaction: number | undefined = undefined;
+    let tokensAfterCompaction: number | undefined = undefined;
 
-      const upsertAssistant = (
-        prev: ChatMessage[],
-        patch: (existing: ChatMessage) => ChatMessage
-      ): ChatMessage[] => {
-        const exists = prev.some((msg) => msg.id === assistantMsgId);
-        const base: ChatMessage = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          thought: "",
-          traces: [],
-          modelUsed: currentModel,
-          selectedModel: activeModel,
-        };
-        if (!exists) {
-          return [...prev, patch(base)];
-        }
-        return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+    const upsertAssistant = (
+      prev: ChatMessage[],
+      patch: (existing: ChatMessage) => ChatMessage
+    ): ChatMessage[] => {
+      const exists = prev.some((msg) => msg.id === assistantMsgId);
+      const base: ChatMessage = {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
+        thought: "",
+        traces: [],
+        modelUsed: currentModel,
+        selectedModel: activeModel,
       };
+      if (!exists) {
+        return [...prev, patch(base)];
+      }
+      return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
+    };
 
+    let pendingThinkingDelta = "";
+    let pendingTokenCommit = false;
+    let pendingActivityTs: number | null = null;
+
+    const cancelScheduledStreamRaf = () => {
+      streamRafCancelRef.current?.();
+      streamRafCancelRef.current = null;
+    };
+
+    const flushBufferedStreamUpdates = () => {
+      cancelScheduledStreamRaf();
+      if (!isMountedRef.current) return;
+      if (!pendingThinkingDelta && !pendingTokenCommit && pendingActivityTs === null) return;
+
+      const thinkingDelta = pendingThinkingDelta;
+      const shouldCommitToken = pendingTokenCommit;
+      const activityTs = pendingActivityTs;
+      pendingThinkingDelta = "";
+      pendingTokenCommit = false;
+      pendingActivityTs = null;
+
+      if (activityTs !== null) {
+        setLastActivityAtMs(activityTs);
+      }
+
+      if (thinkingDelta || shouldCommitToken) {
+        const parsed = shouldCommitToken ? parseThinkingAndContent(accumulatedRawContent) : null;
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => {
+            const nextThought = thinkingDelta
+              ? msg.thought
+                ? msg.thought + thinkingDelta
+                : thinkingDelta
+              : msg.thought;
+            if (parsed) {
+              return {
+                ...msg,
+                content: parsed.content,
+                thought: parsed.thought,
+                modelUsed: currentModel,
+              };
+            }
+            return {
+              ...msg,
+              thought: nextThought,
+            };
+          })
+        );
+      }
+    };
+
+    const scheduleBufferedStreamFlush = () => {
+      if (streamRafCancelRef.current) return;
+      const rafFn =
+        typeof globalThis.requestAnimationFrame === "function"
+          ? globalThis.requestAnimationFrame.bind(globalThis)
+          : typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+            ? window.requestAnimationFrame.bind(window)
+            : null;
+      const cancelRafFn =
+        typeof globalThis.cancelAnimationFrame === "function"
+          ? globalThis.cancelAnimationFrame.bind(globalThis)
+          : typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+            ? window.cancelAnimationFrame.bind(window)
+            : null;
+
+      if (!rafFn) {
+        flushBufferedStreamUpdates();
+        return;
+      }
+
+      const rafId = rafFn(() => {
+        streamRafCancelRef.current = null;
+        flushBufferedStreamUpdates();
+      });
+      streamRafCancelRef.current = () => {
+        cancelRafFn?.(rafId);
+      };
+    };
+
+    try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -1094,11 +1197,32 @@ export function ChatStream({
 
           try {
             const event = JSON.parse(jsonStr);
-            setLastActivityAtMs(typeof event.ts === "number" ? event.ts : Date.now());
+            const eventActivityTs = typeof event.ts === "number" ? event.ts : Date.now();
 
             if (event.type === "ping") {
+              setLastActivityAtMs(eventActivityTs);
               continue;
-            } else if (event.type === "metrics") {
+            } else if (event.type === "thinking") {
+              pendingThinkingDelta += event.content || "";
+              pendingActivityTs = eventActivityTs;
+              scheduleBufferedStreamFlush();
+              continue;
+            } else if (event.type === "token") {
+              accumulatedRawContent = appendNarrationChunk(
+                accumulatedRawContent,
+                event.content || ""
+              );
+              pendingTokenCommit = true;
+              pendingActivityTs = eventActivityTs;
+              scheduleBufferedStreamFlush();
+              continue;
+            }
+
+            // Flush any buffered rAF token/thinking deltas before non-delta events
+            flushBufferedStreamUpdates();
+            setLastActivityAtMs(eventActivityTs);
+
+            if (event.type === "metrics") {
               if (
                 typeof event.roundOutputTokens === "number" &&
                 typeof event.roundElapsedMs === "number"
@@ -1191,27 +1315,6 @@ export function ChatStream({
                   thinkingSegments: Array.isArray(event.thinkingSegments)
                     ? event.thinkingSegments
                     : msg.thinkingSegments,
-                }))
-              );
-            } else if (event.type === "thinking") {
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  thought: msg.thought ? msg.thought + (event.content || "") : event.content || "",
-                }))
-              );
-            } else if (event.type === "token") {
-              accumulatedRawContent = appendNarrationChunk(
-                accumulatedRawContent,
-                event.content || ""
-              );
-              const parsed = parseThinkingAndContent(accumulatedRawContent);
-              setMessages((prev) =>
-                upsertAssistant(prev, (msg) => ({
-                  ...msg,
-                  content: parsed.content,
-                  thought: parsed.thought,
-                  modelUsed: currentModel,
                 }))
               );
             } else if (event.type === "trace") {
@@ -1367,7 +1470,9 @@ export function ChatStream({
           }
         }
       }
+      flushBufferedStreamUpdates();
     } finally {
+      cancelScheduledStreamRaf();
       onLocalSseOpenChangeRef.current?.(false);
     }
   };
@@ -1921,12 +2026,12 @@ export function ChatStream({
     }
   };
 
-  const handleRetry = () => {
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const handleRetry = useCallback(() => {
+    const lastUserMsg = [...messagesRef.current].reverse().find((m) => m.role === "user");
     if (!lastUserMsg) return;
     setErrorMsg(null);
-    handleSend(lastUserMsg.content);
-  };
+    handleSendRef.current?.(lastUserMsg.content);
+  }, []);
 
   handleSendRef.current = handleSend;
 
@@ -1955,13 +2060,13 @@ export function ChatStream({
                 ? "Gemma-4"
                 : modelSafe.split(":")[0];
 
-  const deduplicatedMessages = deduplicateStreamMessages(messages);
+  const deduplicatedMessages = useMemo(() => deduplicateStreamMessages(messages), [messages]);
 
   // Anchor for the reconciled detached-turn notification: the last assistant message,
   // not the literal tail, so a steer bubble appended after reconciliation does not hide it.
-  const lastAssistantIndex = deduplicatedMessages.reduce(
-    (last, m, i) => (m.role === "assistant" ? i : last),
-    -1
+  const lastAssistantIndex = useMemo(
+    () => deduplicatedMessages.reduce((last, m, i) => (m.role === "assistant" ? i : last), -1),
+    [deduplicatedMessages]
   );
 
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
@@ -2563,39 +2668,43 @@ export function ChatStream({
                 </div>
               )}
 
-              {deduplicatedMessages.map((m, idx) => (
-                <ChatMessageItem
-                  key={m.id}
-                  message={m}
-                  idx={idx}
-                  copiedMessageId={copiedMessageId}
-                  lastLinkedTaskMsgIndex={lastLinkedTaskMsgIndex}
-                  lastAssistantIndex={lastAssistantIndex}
-                  activeTask={activeTask}
-                  liveTraces={liveTraces}
-                  liveTurnTraces={liveTurnTraces}
-                  isLoading={isLoading}
-                  isStoppingTask={isStoppingTask}
-                  activeAssistantMsgId={activeAssistantMsgIdRef.current}
-                  completedTurnMsgId={completedTurnMsgId}
-                  streamStatus={streamStatus}
-                  turnStartedAtMs={turnStartedAtRef.current}
-                  lastActivityAtMs={lastActivityAtMs}
-                  expandedTraces={expandedTraces}
-                  expandedProofs={expandedProofs}
-                  hasResolvedDetachedTurn={hasResolvedDetachedTurn}
-                  activeModel={activeModel}
-                  onPreviewImage={setPreviewModalImage}
-                  onCopyToClipboard={copyToClipboard}
-                  onRetry={handleRetry}
-                  onToggleProof={toggleProof}
-                  onToggleTraces={toggleTraces}
-                  onStopTask={onStopTask}
-                  onRunControlAction={handleRunControlAction}
-                  onDeployRun={onDeployRun}
-                  onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
-                />
-              ))}
+              {deduplicatedMessages.map((m, idx) => {
+                const isStreamingMsg = Boolean(
+                  m.status === "streaming" ||
+                  (isLoading && m.id === activeAssistantMsgIdRef.current)
+                );
+                const isTaskHost = idx === lastLinkedTaskMsgIndex;
+                return (
+                  <ChatMessageItem
+                    key={m.id}
+                    message={m}
+                    idx={idx}
+                    copiedMessageId={copiedMessageId === m.id ? m.id : null}
+                    lastLinkedTaskMsgIndex={lastLinkedTaskMsgIndex}
+                    lastAssistantIndex={lastAssistantIndex}
+                    activeTask={isTaskHost ? activeTask : null}
+                    liveTraces={isTaskHost ? liveTraces : EMPTY_LIVE_TRACES}
+                    liveTurnTraces={isStreamingMsg ? liveTurnTraces : EMPTY_LIVE_TRACES}
+                    isLoading={isLoading}
+                    isStoppingTask={isTaskHost ? isStoppingTask : false}
+                    activeAssistantMsgId={activeAssistantMsgIdRef.current}
+                    completedTurnMsgId={completedTurnMsgId === m.id ? m.id : null}
+                    expandedTraces={expandedTraces}
+                    expandedProofs={expandedProofs}
+                    hasResolvedDetachedTurn={hasResolvedDetachedTurn && idx === lastAssistantIndex}
+                    activeModel={activeModel}
+                    onPreviewImage={setPreviewModalImage}
+                    onCopyToClipboard={copyToClipboard}
+                    onRetry={handleRetry}
+                    onToggleProof={toggleProof}
+                    onToggleTraces={toggleTraces}
+                    onStopTask={onStopTask}
+                    onRunControlAction={handleRunControlAction}
+                    onDeployRun={onDeployRun}
+                    onOpenCanvasDiff={handleOpenCanvasDiff}
+                  />
+                );
+              })}
 
               {/* Single timeline fallback when liveTurnTraces arrived before an assistant
                   message exists in messages (e.g. severed stream before assistant row lands).
@@ -2610,7 +2719,7 @@ export function ChatStream({
                     <ActivityTimeline
                       traces={liveTurnTraces}
                       isStreaming={isTurnLive}
-                      onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
+                      onOpenCanvasDiff={handleOpenCanvasDiff}
                     />
                   </div>
                 )}
