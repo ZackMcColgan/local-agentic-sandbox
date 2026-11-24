@@ -301,7 +301,12 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
 
       // Existing target must NOT be overwritten on subsequent load
       const secondTarget = path.join(tmpRoot, "existing", "user_profile.json");
-      recordProfileEntry("preferred_name", "ExistingTargetUser", { sessionId: "s-target" }, secondTarget);
+      recordProfileEntry(
+        "preferred_name",
+        "ExistingTargetUser",
+        { sessionId: "s-target" },
+        secondTarget
+      );
       process.env.USER_PROFILE_PATH = secondTarget;
 
       const loadedExisting = loadUserProfile();

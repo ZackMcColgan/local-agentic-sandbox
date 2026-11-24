@@ -316,9 +316,18 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
       const migratedLedger = new RunLedger();
       try {
         assert.ok(fs.existsSync(targetDbPath), "Target runs.db must be created by migration");
-        assert.ok(fs.existsSync(`${targetDbPath}-wal`), "Target runs.db-wal sidecar must be copied");
-        assert.ok(fs.existsSync(`${targetDbPath}-shm`), "Target runs.db-shm sidecar must be copied");
-        assert.ok(fs.existsSync(legacyDbPath), "Legacy source runs.db must remain non-destructively");
+        assert.ok(
+          fs.existsSync(`${targetDbPath}-wal`),
+          "Target runs.db-wal sidecar must be copied"
+        );
+        assert.ok(
+          fs.existsSync(`${targetDbPath}-shm`),
+          "Target runs.db-shm sidecar must be copied"
+        );
+        assert.ok(
+          fs.existsSync(legacyDbPath),
+          "Legacy source runs.db must remain non-destructively"
+        );
 
         const migratedRun = migratedLedger.getRun("legacy-run-1");
         assert.ok(migratedRun, "Legacy run record must exist in migrated target database");
@@ -331,7 +340,10 @@ describe("Sprint 12 Phase 4 — Run Ledger (ledger.test.ts)", () => {
       process.env.RUN_LEDGER_DB_PATH = secondTarget;
       const reopenedLedger = new RunLedger();
       try {
-        assert.ok(reopenedLedger.getRun("target-only-run"), "Existing target run must be preserved");
+        assert.ok(
+          reopenedLedger.getRun("target-only-run"),
+          "Existing target run must be preserved"
+        );
         assert.equal(
           reopenedLedger.getRun("legacy-run-1"),
           null,

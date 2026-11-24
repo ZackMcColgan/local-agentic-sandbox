@@ -137,9 +137,7 @@ type SqliteDb = ReturnType<ReturnType<typeof getSharedRunLedger>["getDatabase"]>
 const reconciledDatabases = new WeakSet<object>();
 let activeTaskIdsProvider: (() => Iterable<string>) | null = null;
 
-export function setActiveProjectTaskIdsProvider(
-  provider: (() => Iterable<string>) | null
-): void {
+export function setActiveProjectTaskIdsProvider(provider: (() => Iterable<string>) | null): void {
   activeTaskIdsProvider = provider;
 }
 
@@ -194,10 +192,9 @@ export function reconcileOrphanedProjectTasks(
       .prepare("SELECT status FROM project_tasks WHERE task_id = ?")
       .get(proj.active_task_id) as { status: string } | undefined;
     if (!taskRow || (taskRow.status !== "running" && taskRow.status !== "in_progress")) {
-      db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ?").run(
-        now,
-        proj.project_id
-      );
+      db.prepare(
+        "UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ?"
+      ).run(now, proj.project_id);
       clearedProjectIds.add(proj.project_id);
     }
   }

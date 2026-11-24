@@ -83,8 +83,7 @@ export function migrateLegacyFileIfNeeded(options: {
 
   if (
     resolvedSource === resolvedTarget ||
-    (process.platform === "win32" &&
-      resolvedSource.toLowerCase() === resolvedTarget.toLowerCase())
+    (process.platform === "win32" && resolvedSource.toLowerCase() === resolvedTarget.toLowerCase())
   ) {
     return false;
   }
