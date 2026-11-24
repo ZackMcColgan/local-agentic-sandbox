@@ -219,3 +219,15 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Updated existing approval-gate tests to mint bound tokens: hostDaemon.test.ts (dual-layer gate, recursive-delete), hostAsyncJobs.test.ts (async START gate + replay). hostRunnerScript.test.ts manifest digest regenerated for the new host-bridge source file.
 - Verification: approvalTokenBinding 8/0; hostDaemon+hostMode+hostAsyncJobs+chatApprovals green; npx tsc --noEmit clean; npm run test:gate --since=origin/develop PASSED 209/0 (<90s budget).
 - Assumption: the brief's referenced spec file (BRIEF-BATCH11-SECURITY-HARDENING-2026-11-20.md) was not present on disk; implemented from the brief's stated goal. Reuse test replays the SAME payload to hit the consumed-nonce 409 path (a replay against a different payload is rejected 403 by signature, which is also correct). Classifier patterns/verdicts untouched; no existing rejection or approval check weakened.
+
+## board #134 Stage 0: reviewer-gate measurement pipeline (PR #245)
+
+- Branch feature/stage0-reviewer-measurement from fresh origin/develop (worktree .worktrees/stage0-reviewer-measurement).
+- Test-first: reviewerVerdictParser.test.ts (6), reviewerAuditEvaluate.test.ts (3), orchestratorShadowStages.test.ts +2 - all failed for the stated reasons before fixes.
+- Defect 1: parseReviewerVerdictContent strips heading markers (#-######) and bold markers before matching; fail-closed default kept.
+- Defect 2: resolveHeadSha (gh pr view --json headRefOid) added to stage deps + orchestrator deps; shadow verdict records 40-char SHA, placeholder recorded with a log note when resolution fails.
+- Defect 3: reviewer-audit route POST action 'evaluate' ({pr, brief, allowlist?}) dispatches reviewer thread like issueReviewerThread and records shadow verdict via recordShadowVerdict; returns once recorded (synchronous in-process dispatch, same shape as drain). No merge authority; Stage 3 OFF; isMergeAuthorized unchanged.
+- testGate.ts MAPPING_RULES: additive lines only.
+- Suites: targeted board/reviewer suites 20/20; gate --since=origin/develop 99 pass / 0 fail; npx tsc --noEmit clean.
+- Assumption: gh-level head resolution accepts any non-empty string (preserves existing pollChecks behavior); strict 40-char hex enforced at verdict-recording.
+
