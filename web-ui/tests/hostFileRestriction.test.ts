@@ -14,7 +14,6 @@ import {
 } from "../lib/hostPathRestriction";
 import { executeHostTool } from "../lib/hostMode";
 import { HostZone } from "../components/settings/HostZone";
-import { SettingsView } from "../components/SettingsView";
 
 /**
  * Board #132 - Host file restriction as an OPT-IN Settings toggle (default OFF).
@@ -23,7 +22,6 @@ import { SettingsView } from "../components/SettingsView";
  */
 describe("Board #132: Host File Restriction Opt-In Setting", () => {
   let settingsFile: string;
-  let originalContent: string | null = null;
   let prevRunnerUrl: string | undefined;
   let prevSettingsDir: string | undefined;
   let isolatedDir: string;
@@ -35,7 +33,6 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
     prevSettingsDir = process.env.SETTINGS_DIR;
     process.env.SETTINGS_DIR = isolatedDir;
     settingsFile = getHostSettingsFilePath();
-    originalContent = null;
     prevRunnerUrl = process.env.HOST_RUNNER_URL;
   });
 

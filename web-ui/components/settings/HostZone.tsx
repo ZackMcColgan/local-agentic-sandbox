@@ -274,7 +274,7 @@ export function HostZone({
               placeholder="C:\Users\you\Desktop\repos"
               className="mt-1 w-full rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-850/60 p-2.5 text-xs font-mono text-slate-800 dark:text-zinc-200 min-h-24 resize-y"
             />
-            <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1">
+            <p className="text-[11px] text-slate-400 dark:text-zinc-400 mt-1">
               Saved on blur. Only enforced while the toggle above is ON.
             </p>
           </div>
