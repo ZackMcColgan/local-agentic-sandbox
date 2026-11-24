@@ -1158,6 +1158,15 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/shakeoutFixes.test.ts",
     ],
   },
+  {
+    match: (p) =>
+      p.includes("host-bridge/manifest") ||
+      p.includes("host-bridge/replaceString") ||
+      p.includes("host-bridge/dialectGuard") ||
+      p.includes("host-bridge/multiRead") ||
+      p.includes("hostBridgePureModules.test.ts"),
+    tests: ["tests/hostBridgePureModules.test.ts"],
+  },
   // Tasks API route
   {
     match: (p) => p.includes("app/api/tasks/route"),
