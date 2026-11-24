@@ -263,3 +263,22 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
   Unit Tests, Coverage, Playwright shards 1-3, Container Build + Docker Scout all green);
   mergeStateStatus CLEAN, MERGEABLE, OPEN into develop.
 - Status: COMPLETE. No further work in scope; PR #252 awaits owner-side merge into develop.
+
+## job-auto-1 (auto-resume attempt 1/2, 2026-11-24 re-verification #2) - scope merged, PR #252 green
+
+- Banked state on resume: scope (`parseRetryAfter`, AC-2-1/2-2/2-3) MERGED via PR #217
+  (merge commit `5130bb3` on develop); `web-ui/lib/retryAfter.mjs` and
+  `web-ui/tests/retryAfter.test.ts` confirmed present on `origin/develop` via
+  `git cat-file -e`. No restart, no re-implementation.
+- Follow-up branch `feature/eol-renormalize` @ `f066908` pushed; PR #252 OPEN,
+  `mergeStateStatus` CLEAN into develop. CI run 45365584894 conclusion SUCCESS across
+  all 8 checks (Lint & Format, Typecheck, Unit Tests & Static Analysis, Coverage,
+  Playwright shards 1-3, Container Build + Docker Scout).
+- Targeted gate `node scripts/test-gate.js --files=web-ui/tests/retryAfter.test.ts` ->
+  PASSED, 14 pass / 0 fail in 5.1s (<90s budget). `npx prettier --check
+docs/queue-steer-runlog.md` -> clean. `git diff --ignore-cr-at-eol --stat` -> empty
+  (zero content drift; renormalize commit is pure line-ending normalization).
+- Working tree clean apart from 8 untracked `eval/results/*` scratch dirs (eval artifacts,
+  out of scope - left untouched). develop tip advanced to `ed91eb0` (PR #254 MCP Streamable
+  HTTP merged); does not affect this scope.
+- Status: COMPLETE. Nothing left in scope; PR #252 awaits owner-side merge into develop.
