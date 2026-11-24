@@ -246,4 +246,80 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
     assert.ok(formatted.includes("Always address the user as 'Zack'"));
     assert.ok(formatted.includes("preferred_language: typescript"));
   });
+
+  it("getUserProfilePath prefers WORKSPACE_DIR/.agent/settings/user_profile.json when USER_PROFILE_PATH is unset", () => {
+    const origProfilePath = process.env.USER_PROFILE_PATH;
+    const origWorkspace = process.env.WORKSPACE_DIR;
+    const tmpWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), "profile-ws-test-"));
+
+    try {
+      delete process.env.USER_PROFILE_PATH;
+      process.env.WORKSPACE_DIR = tmpWorkspace;
+
+      assert.equal(
+        getUserProfilePath(),
+        path.join(path.resolve(tmpWorkspace), ".agent", "settings", "user_profile.json")
+      );
+    } finally {
+      if (origProfilePath !== undefined) process.env.USER_PROFILE_PATH = origProfilePath;
+      else delete process.env.USER_PROFILE_PATH;
+      if (origWorkspace !== undefined) process.env.WORKSPACE_DIR = origWorkspace;
+      else delete process.env.WORKSPACE_DIR;
+      fs.rmSync(tmpWorkspace, { recursive: true, force: true });
+    }
+  });
+
+  it("startup migration copies legacy user_profile.json to persistent target when missing, and does not overwrite existing target", () => {
+    const origProfilePath = process.env.USER_PROFILE_PATH;
+    const origWorkspace = process.env.WORKSPACE_DIR;
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "profile-migrate-test-"));
+    const fakeHome = path.join(tmpRoot, "home");
+    const fakeWorkspace = path.join(tmpRoot, "workspace");
+    const legacyDir = path.join(fakeHome, ".local-agentic-sandbox");
+    const legacyPath = path.join(legacyDir, "user_profile.json");
+    const targetPath = path.join(fakeWorkspace, ".agent", "settings", "user_profile.json");
+
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.mkdirSync(fakeWorkspace, { recursive: true });
+
+    try {
+      recordProfileEntry("preferred_name", "LegacyUser", { sessionId: "s-legacy" }, legacyPath);
+
+      delete process.env.USER_PROFILE_PATH;
+      process.env.WORKSPACE_DIR = fakeWorkspace;
+      process.env.HOME = fakeHome;
+      process.env.USERPROFILE = fakeHome;
+
+      // Target does not exist yet: loadUserProfile must migrate legacy file to persistent target
+      const migrated = loadUserProfile();
+      assert.ok(fs.existsSync(targetPath), "Target user_profile.json must be created by migration");
+      assert.ok(fs.existsSync(legacyPath), "Legacy source user_profile.json must remain");
+      assert.equal(migrated.entries["preferred_name"]?.value, "LegacyUser");
+
+      // Existing target must NOT be overwritten on subsequent load
+      const secondTarget = path.join(tmpRoot, "existing", "user_profile.json");
+      recordProfileEntry("preferred_name", "ExistingTargetUser", { sessionId: "s-target" }, secondTarget);
+      process.env.USER_PROFILE_PATH = secondTarget;
+
+      const loadedExisting = loadUserProfile();
+      assert.equal(
+        loadedExisting.entries["preferred_name"]?.value,
+        "ExistingTargetUser",
+        "Migration must NOT overwrite an already-existing target user_profile.json"
+      );
+    } finally {
+      if (origProfilePath !== undefined) process.env.USER_PROFILE_PATH = origProfilePath;
+      else delete process.env.USER_PROFILE_PATH;
+      if (origWorkspace !== undefined) process.env.WORKSPACE_DIR = origWorkspace;
+      else delete process.env.WORKSPACE_DIR;
+      if (origHome !== undefined) process.env.HOME = origHome;
+      else delete process.env.HOME;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile;
+      else delete process.env.USERPROFILE;
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

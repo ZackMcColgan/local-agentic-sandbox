@@ -9,6 +9,7 @@ import {
   completeProjectTask,
   parkProjectTask,
   getProjectTask,
+  setActiveProjectTaskIdsProvider,
 } from "./projectStore";
 import { runGit } from "./projectGit";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
@@ -66,6 +67,7 @@ interface ActiveRunner {
 }
 
 const activeRunners = new Map<string, ActiveRunner>();
+setActiveProjectTaskIdsProvider(() => activeRunners.keys());
 
 export interface StartProjectTaskInput {
   projectId: string;

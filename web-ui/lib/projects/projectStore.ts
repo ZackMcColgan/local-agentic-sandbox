@@ -134,6 +134,77 @@ export function validateProjectPath(rawPath: string): {
 
 type SqliteDb = ReturnType<ReturnType<typeof getSharedRunLedger>["getDatabase"]>;
 
+const reconciledDatabases = new WeakSet<object>();
+let activeTaskIdsProvider: (() => Iterable<string>) | null = null;
+
+export function setActiveProjectTaskIdsProvider(
+  provider: (() => Iterable<string>) | null
+): void {
+  activeTaskIdsProvider = provider;
+}
+
+export function reconcileOrphanedProjectTasks(
+  dbOverride?: SqliteDb,
+  activeTaskIds?: Iterable<string>
+): { parkedTaskIds: string[]; clearedProjectIds: string[] } {
+  const db = dbOverride || getSharedRunLedger().getDatabase();
+  const activeSet = new Set<string>(
+    activeTaskIds ?? (activeTaskIdsProvider ? activeTaskIdsProvider() : [])
+  );
+  const now = new Date().toISOString();
+
+  const runningRows = db
+    .prepare(
+      "SELECT task_id, project_id FROM project_tasks WHERE status IN ('running', 'in_progress')"
+    )
+    .all() as unknown as Array<{ task_id: string; project_id: string }>;
+
+  const parkedTaskIds: string[] = [];
+  const clearedProjectIds = new Set<string>();
+
+  for (const row of runningRows) {
+    if (activeSet.has(row.task_id)) {
+      continue;
+    }
+    db.prepare("UPDATE project_tasks SET status = 'parked', updated_at = ? WHERE task_id = ?").run(
+      now,
+      row.task_id
+    );
+    parkedTaskIds.push(row.task_id);
+
+    const res = db
+      .prepare(
+        "UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ? AND active_task_id = ?"
+      )
+      .run(now, row.project_id, row.task_id);
+    if (res.changes > 0) {
+      clearedProjectIds.add(row.project_id);
+    }
+  }
+
+  const activeProjectRows = db
+    .prepare("SELECT project_id, active_task_id FROM projects WHERE active_task_id IS NOT NULL")
+    .all() as unknown as Array<{ project_id: string; active_task_id: string }>;
+
+  for (const proj of activeProjectRows) {
+    if (activeSet.has(proj.active_task_id)) {
+      continue;
+    }
+    const taskRow = db
+      .prepare("SELECT status FROM project_tasks WHERE task_id = ?")
+      .get(proj.active_task_id) as { status: string } | undefined;
+    if (!taskRow || (taskRow.status !== "running" && taskRow.status !== "in_progress")) {
+      db.prepare("UPDATE projects SET active_task_id = NULL, updated_at = ? WHERE project_id = ?").run(
+        now,
+        proj.project_id
+      );
+      clearedProjectIds.add(proj.project_id);
+    }
+  }
+
+  return { parkedTaskIds, clearedProjectIds: Array.from(clearedProjectIds) };
+}
+
 function getDb(dbOverride?: SqliteDb) {
   const db = dbOverride || getSharedRunLedger().getDatabase();
   initProjectStore(db);
@@ -182,6 +253,11 @@ export function initProjectStore(dbOverride?: SqliteDb): void {
       UNIQUE(task_id, file_path)
     );
   `);
+
+  if (!reconciledDatabases.has(db)) {
+    reconciledDatabases.add(db);
+    reconcileOrphanedProjectTasks(db);
+  }
 }
 
 export function registerProject(input: RegisterProjectInput, dbOverride?: SqliteDb): ProjectRecord {
