@@ -11,11 +11,19 @@ export interface TurnGateRequest {
   id: string;
   threadId: string;
   prompt: string;
+  /** Optional workspace/checkout key; turns sharing the same key will not overlap. */
+  workspaceKey?: string;
+  /** True when the turn uses an unisolated shared workspace. */
+  sharedWorkspace?: boolean;
 }
 
 export interface TurnGateOptions {
   /** Host checkout root. When provided, the turn runs against its OWN git worktree. */
   repoRoot?: string;
+  /** Optional workspace/checkout key override (ignored when repoRoot provides isolated worktrees). */
+  workspaceKey?: string;
+  /** Marks the turn as using an unisolated shared workspace (ignored when repoRoot is provided). */
+  sharedWorkspace?: boolean;
   /** The turn body: the orchestrator pipeline for this job. */
   runTurn: (job: QueuedJob, worktree: WorktreeHandle | null, lease?: SlotLease) => Promise<void>;
   /** Priority for the shared single-slot arbiter (defaults to P0_OWNER). */
@@ -48,9 +56,18 @@ export function serializeTurn(
   req: TurnGateRequest,
   opts: TurnGateOptions
 ): TurnGateHandle {
+  const effectiveWorkspaceKey = opts.repoRoot ? undefined : (opts.workspaceKey ?? req.workspaceKey);
+  const effectiveSharedWorkspace = opts.repoRoot
+    ? undefined
+    : (opts.sharedWorkspace ?? req.sharedWorkspace);
+
   const job = queue.enqueue({
     ...req,
     ...(opts.priority !== undefined ? { priority: opts.priority } : {}),
+    ...(effectiveWorkspaceKey !== undefined ? { workspaceKey: effectiveWorkspaceKey } : {}),
+    ...(effectiveSharedWorkspace !== undefined
+      ? { sharedWorkspace: effectiveSharedWorkspace }
+      : {}),
   });
 
   // Decide queue position BEFORE draining: a turn is "queued" only when

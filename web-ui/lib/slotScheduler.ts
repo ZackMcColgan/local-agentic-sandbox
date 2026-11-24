@@ -117,11 +117,25 @@ export class PrioritySlotScheduler {
   private preemptionsCount = 0;
   private completedJobs = 0;
   private readonly ownerWaitSamplesMs: number[] = [];
-  /** Per-lease release listeners: the chat queue overlap seam (#129 P5-B). */
-  private readonly releaseListeners = new Map<string, Set<() => void>>();
+  /** Per-lease wait release & reacquire listeners: the chat queue overlap seam (#129 P5-B). */
+  private readonly waitReleaseListeners = new Map<string, Set<() => void>>();
+  private readonly waitReacquireListeners = new Map<string, Set<() => void>>();
 
   constructor(options: SlotSchedulerOptions = {}) {
     this.now = options.now ?? (() => Date.now());
+  }
+
+  private registerWaitListeners(id: string, options: AcquireSlotOptions): void {
+    if (options.onWaitRelease) {
+      const listeners = this.waitReleaseListeners.get(id) ?? new Set<() => void>();
+      listeners.add(options.onWaitRelease);
+      this.waitReleaseListeners.set(id, listeners);
+    }
+    if (options.onWaitReacquire) {
+      const listeners = this.waitReacquireListeners.get(id) ?? new Set<() => void>();
+      listeners.add(options.onWaitReacquire);
+      this.waitReacquireListeners.set(id, listeners);
+    }
   }
 
   /**
@@ -140,12 +154,7 @@ export class PrioritySlotScheduler {
     };
 
     await this.acquireState(state, options.onQueued);
-    if (options.onWaitRelease || options.onWaitReacquire) {
-      const listeners = this.releaseListeners.get(id) ?? new Set<() => void>();
-      if (options.onWaitRelease) listeners.add(options.onWaitRelease);
-      if (options.onWaitReacquire) listeners.add(options.onWaitReacquire);
-      this.releaseListeners.set(id, listeners);
-    }
+    this.registerWaitListeners(id, options);
     return this.createLease(state);
   }
 
@@ -177,12 +186,7 @@ export class PrioritySlotScheduler {
         acquiredAt: ts,
       };
       this.activeHolder = state;
-      if (options.onWaitRelease || options.onWaitReacquire) {
-        const listeners = this.releaseListeners.get(id) ?? new Set<() => void>();
-        if (options.onWaitRelease) listeners.add(options.onWaitRelease);
-        if (options.onWaitReacquire) listeners.add(options.onWaitReacquire);
-        this.releaseListeners.set(id, listeners);
-      }
+      this.registerWaitListeners(id, options);
       const lease = this.createLease(state);
       try {
         return Promise.resolve(leaseStorage.run(lease, () => fn(lease))).finally(() => {
@@ -322,8 +326,16 @@ export class PrioritySlotScheduler {
         } else {
           this.waitingToolMs += waitElapsed;
         }
-        await this.acquireState(state);
-        this.notifyWaitReacquire(state.id);
+        try {
+          await this.acquireState(state);
+        } catch (reacquireErr) {
+          if (hasError) {
+            throw caught;
+          }
+          throw reacquireErr;
+        } finally {
+          this.notifyWaitReacquire(state.id);
+        }
         if (hasError) {
           throw caught;
         }
@@ -427,7 +439,7 @@ export class PrioritySlotScheduler {
   }
 
   private notifyWaitRelease(id: string): void {
-    const listeners = this.releaseListeners.get(id);
+    const listeners = this.waitReleaseListeners.get(id);
     if (!listeners) return;
     for (const listener of listeners) {
       listener();
@@ -435,7 +447,7 @@ export class PrioritySlotScheduler {
   }
 
   private notifyWaitReacquire(id: string): void {
-    const listeners = this.releaseListeners.get(id);
+    const listeners = this.waitReacquireListeners.get(id);
     if (!listeners) return;
     for (const listener of listeners) {
       listener();
@@ -444,7 +456,8 @@ export class PrioritySlotScheduler {
 
   /** Drop per-lease wait listeners once the lease is finished (no leak). */
   private forgetListeners(id: string): void {
-    this.releaseListeners.delete(id);
+    this.waitReleaseListeners.delete(id);
+    this.waitReacquireListeners.delete(id);
   }
 }
 
