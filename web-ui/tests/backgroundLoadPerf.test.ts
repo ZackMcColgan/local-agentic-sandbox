@@ -24,7 +24,8 @@ describe("Rank 15 (P-F5 + P-F7) background load & per-turn overhead", () => {
           close: () => void;
         })
       | undefined;
-    const closeSharedSkillsStore = mod.closeSharedSkillsStore as ((dbPath?: string) => void) | undefined;
+    const closeSharedSkillsStore = mod.closeSharedSkillsStore as
+      ((dbPath?: string) => void) | undefined;
 
     assert.equal(typeof getSharedSkillsStore, "function", "getSharedSkillsStore must be exported");
     assert.equal(
@@ -297,7 +298,10 @@ describe("Rank 15 (P-F5 + P-F7) background load & per-turn overhead", () => {
     const registry = new ReadDedupRegistry(messages);
     const elapsedMs = performance.now() - start;
 
-    assert.ok(elapsedMs < 50, `Expected < 50ms to index 500 messages, got ${elapsedMs.toFixed(2)}ms`);
+    assert.ok(
+      elapsedMs < 50,
+      `Expected < 50ms to index 500 messages, got ${elapsedMs.toFixed(2)}ms`
+    );
     assert.ok(
       msg0ToolCallsReads <= 2,
       `Expected O(M) single-pass indexing (<= 2 accesses on message 0 tool_calls), got ${msg0ToolCallsReads}`
@@ -405,7 +409,10 @@ describe("Rank 15 (P-F5 + P-F7) background load & per-turn overhead", () => {
       assert.equal(createdClients, 2, "evicted pool entry must reconnect on next call");
 
       await resetMcpClientPool!();
-      assert.ok(rawCloseCount >= 1 && transportCloseCount >= 1, "resetMcpClientPool closes handles");
+      assert.ok(
+        rawCloseCount >= 1 && transportCloseCount >= 1,
+        "resetMcpClientPool closes handles"
+      );
     } finally {
       await resetMcpClientPool?.();
     }
