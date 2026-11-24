@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { spawn, execSync } from "child_process";
 import { checkCommandDialect } from "./dialectGuard";
 import { isDestructiveHostAction } from "./classifier";
+import { verifyApprovalToken } from "./approvalToken";
 import { applyReplaceString } from "./replaceString";
 import { getBridgeManifest } from "./manifest";
 import { readMultipleFiles } from "./multiRead";
@@ -257,13 +258,16 @@ export function createHostServer(options: HostServerOptions = {}) {
         const tool = String(body.tool ?? "");
         const toolArgs = body.args || {};
 
-        // Dual-layer approval gate: verify destructive actions
+        // Dual-layer approval gate: verify destructive actions. The approval
+        // header must carry a bridge-issued token bound to this exact tool +
+        // payload (Board #131): invented, reused, expired, over-TTL, tool-
+        // swapped, or payload-mismatched tokens are rejected.
         const classification = isDestructiveHostAction(tool, toolArgs);
         if (classification.isDestructive) {
           const rawApproval = req.headers["x-host-approval-id"];
-          const approvalId = Array.isArray(rawApproval) ? rawApproval[0] : rawApproval;
+          const approvalToken = Array.isArray(rawApproval) ? rawApproval[0] : rawApproval;
 
-          if (!approvalId || typeof approvalId !== "string" || !approvalId.trim()) {
+          if (!approvalToken || typeof approvalToken !== "string" || !approvalToken.trim()) {
             res.writeHead(403, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
@@ -275,20 +279,40 @@ export function createHostServer(options: HostServerOptions = {}) {
             return;
           }
 
-          pruneOldApprovals();
-          if (consumedApprovals.has(approvalId)) {
-            res.writeHead(409, { "Content-Type": "application/json" });
+          const verification = verifyApprovalToken(sharedSecret, approvalToken, tool, toolArgs);
+          if (!verification.ok) {
+            const detail =
+              verification.reason === "expired"
+                ? "Approval token expired (tokens are valid for at most 5 minutes)"
+                : verification.reason === "over_ttl"
+                  ? "Approval token exceeds the maximum 5-minute TTL"
+                  : verification.reason === "signature"
+                    ? "Approval token does not match this tool + payload"
+                    : "Approval token invalid (malformed or not issued by the bridge)";
+            res.writeHead(403, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
-                error: `Approval ID already consumed: ${approvalId}`,
-                approvalId,
+                error: detail,
+                reason: classification.reason,
               })
             );
             return;
           }
 
-          // Mark consumed immediately
-          consumedApprovals.set(approvalId, Date.now());
+          pruneOldApprovals();
+          if (consumedApprovals.has(verification.nonce)) {
+            res.writeHead(409, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: `Approval ID already consumed: ${verification.nonce}`,
+                approvalId: verification.nonce,
+              })
+            );
+            return;
+          }
+
+          // Mark consumed immediately (single-use, keyed on the token nonce)
+          consumedApprovals.set(verification.nonce, Date.now());
         }
 
         try {
@@ -362,13 +386,15 @@ export function createHostServer(options: HostServerOptions = {}) {
         const toolArgs = body.args || {};
 
         // Destructive classification + approvals UNCHANGED, applied at START
-        // before the job runs. No execution happens without approval.
+        // before the job runs. No execution happens without approval. The
+        // approval header must carry a bridge-issued token bound to this exact
+        // tool + payload (Board #131).
         const classification = isDestructiveHostAction(tool, toolArgs);
         if (classification.isDestructive) {
           const rawApproval = req.headers["x-host-approval-id"];
-          const approvalId = Array.isArray(rawApproval) ? rawApproval[0] : rawApproval;
+          const approvalToken = Array.isArray(rawApproval) ? rawApproval[0] : rawApproval;
 
-          if (!approvalId || typeof approvalId !== "string" || !approvalId.trim()) {
+          if (!approvalToken || typeof approvalToken !== "string" || !approvalToken.trim()) {
             res.writeHead(403, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
@@ -380,19 +406,39 @@ export function createHostServer(options: HostServerOptions = {}) {
             return;
           }
 
-          pruneOldApprovals();
-          if (consumedApprovals.has(approvalId)) {
-            res.writeHead(409, { "Content-Type": "application/json" });
+          const verification = verifyApprovalToken(sharedSecret, approvalToken, tool, toolArgs);
+          if (!verification.ok) {
+            const detail =
+              verification.reason === "expired"
+                ? "Approval token expired (tokens are valid for at most 5 minutes)"
+                : verification.reason === "over_ttl"
+                  ? "Approval token exceeds the maximum 5-minute TTL"
+                  : verification.reason === "signature"
+                    ? "Approval token does not match this tool + payload"
+                    : "Approval token invalid (malformed or not issued by the bridge)";
+            res.writeHead(403, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
-                error: `Approval ID already consumed: ${approvalId}`,
-                approvalId,
+                error: detail,
+                reason: classification.reason,
               })
             );
             return;
           }
 
-          consumedApprovals.set(approvalId, Date.now());
+          pruneOldApprovals();
+          if (consumedApprovals.has(verification.nonce)) {
+            res.writeHead(409, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: `Approval ID already consumed: ${verification.nonce}`,
+                approvalId: verification.nonce,
+              })
+            );
+            return;
+          }
+
+          consumedApprovals.set(verification.nonce, Date.now());
         }
 
         const timeoutMs = resolveAsyncTimeoutSeconds(toolArgs) * 1000;
