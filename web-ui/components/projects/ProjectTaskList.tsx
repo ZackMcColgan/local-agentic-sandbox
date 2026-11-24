@@ -7,6 +7,8 @@ export interface ProjectTaskListProps {
   projectName: string;
   baseBranch: string;
   activeTaskId?: string | null;
+  taskError?: string | null;
+  taskSuccess?: string | null;
   onSubmitTask: (prompt: string, mode: "now" | "schedule") => Promise<void>;
 }
 
@@ -14,18 +16,37 @@ export function ProjectTaskList({
   projectName,
   baseBranch,
   activeTaskId,
+  taskError,
+  taskSuccess,
   onSubmitTask,
 }: ProjectTaskListProps) {
   const handleAction = async (mode: "now" | "schedule") => {
     const el = document.getElementById("project-task-prompt-input") as HTMLTextAreaElement | null;
     const prompt = el?.value || "";
     if (!prompt.trim()) return;
-    await onSubmitTask(prompt, mode);
-    if (el) el.value = "";
+    try {
+      await onSubmitTask(prompt, mode);
+      if (el) el.value = "";
+    } catch {
+      // Error surfaced via taskError state in parent
+    }
   };
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
+      {taskError && (
+        <div
+          role="alert"
+          className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs"
+        >
+          {taskError}
+        </div>
+      )}
+      {taskSuccess && (
+        <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs">
+          {taskSuccess}
+        </div>
+      )}
       {/* Active Task Banner if running */}
       {activeTaskId && (
         <div className="p-4 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-2">

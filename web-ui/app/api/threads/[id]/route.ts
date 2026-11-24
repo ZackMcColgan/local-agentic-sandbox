@@ -269,6 +269,9 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     }
 
     const body = await req.json();
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    }
 
     // 1. Action: Stop / Cancel Run
     if (body.action === "stop" || body.action === "cancel") {
@@ -413,7 +416,27 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       return NextResponse.json({ thread });
     }
 
-    return NextResponse.json({ thread });
+    // 6. Action: Set Model & Reasoning Effort
+    if (body.action === "setModel") {
+      if (typeof body.model === "string" && body.model.trim()) {
+        thread.model = body.model.trim();
+      }
+      if (body.reasoningEffort !== undefined) {
+        if (
+          body.reasoningEffort === "low" ||
+          body.reasoningEffort === "medium" ||
+          body.reasoningEffort === "xhigh"
+        ) {
+          thread.reasoningEffort = body.reasoningEffort;
+        } else {
+          return NextResponse.json({ error: "Invalid reasoningEffort" }, { status: 400 });
+        }
+      }
+      getThreadStore().saveThread(thread);
+      return NextResponse.json({ thread });
+    }
+
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
