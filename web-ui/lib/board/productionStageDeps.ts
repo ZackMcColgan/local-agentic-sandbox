@@ -160,7 +160,21 @@ function extractItemAllowlist(item: DispatcherBoardItem): string[] {
   );
 }
 
-function parseReviewerVerdictContent(threadId: string, content: string): ReviewerVerdict {
+/**
+ * Verdict-line grammar accepted from the reviewer model. The model emits its
+ * verdict as a markdown heading ("## Verdict: **PASS**"), so markdown
+ * decoration (leading heading markers # through ######, bold/italic markers)
+ * is stripped before matching. That tolerates every combination of heading +
+ * bold label + bold token plus the plain forms ("Verdict: PASS", bare "PASS").
+ * Genuinely unparseable output stays fail-closed.
+ */
+const REVIEWER_VERDICT_LINE = /^(?:verdict\s*[:=]?\s*)?(PASS|FAIL)\b[.!?]*$/i;
+
+function normalizeReviewerVerdictLine(line: string): string {
+  return line.replace(/^#{1,6}\s+/, "").replace(/\*/g, "").trim();
+}
+
+export function parseReviewerVerdictContent(threadId: string, content: string): ReviewerVerdict {
   const lines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -170,7 +184,7 @@ function parseReviewerVerdictContent(threadId: string, content: string): Reviewe
   const evidence: string[] = [];
 
   for (const line of lines) {
-    const explicitMatch = /^(?:\*{0,2}verdict\*{0,2}\s*:\s*)?(PASS|FAIL)\b/i.exec(line);
+    const explicitMatch = REVIEWER_VERDICT_LINE.exec(normalizeReviewerVerdictLine(line));
     if (explicitMatch && parsedVerdict === null) {
       const normalized = explicitMatch[1].toUpperCase();
       if (normalized === "PASS" || normalized === "FAIL") {
