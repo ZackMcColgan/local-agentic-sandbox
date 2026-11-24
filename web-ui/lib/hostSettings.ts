@@ -7,6 +7,24 @@ export interface HostSettings {
   hostAccessEnabled: boolean;
   allowUnattendedHostGit: boolean;
   jobChunkingEnabled: boolean;
+  /** Board #132 opt-in host file-folder restriction. Default OFF - never a mandate. */
+  fileRestrictionEnabled: boolean;
+  /** Owner-entered allowed folders; sanitized (trimmed, deduped, blanks dropped). */
+  allowedHostPaths: string[];
+}
+
+function sanitizeAllowedHostPaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 export function getHostSettingsFilePath(): string {
@@ -25,6 +43,8 @@ export function getHostSettings(): HostSettings {
         allowUnattendedHostGit: Boolean(data?.allowUnattendedHostGit),
         jobChunkingEnabled:
           typeof data?.jobChunkingEnabled === "boolean" ? data.jobChunkingEnabled : true,
+        fileRestrictionEnabled: Boolean(data?.fileRestrictionEnabled),
+        allowedHostPaths: sanitizeAllowedHostPaths(data?.allowedHostPaths),
       };
     }
   } catch {}
@@ -33,6 +53,8 @@ export function getHostSettings(): HostSettings {
     hostAccessEnabled: true,
     allowUnattendedHostGit: false,
     jobChunkingEnabled: true,
+    fileRestrictionEnabled: false,
+    allowedHostPaths: [],
   };
 }
 
@@ -42,6 +64,9 @@ export function setHostSettings(updates: Partial<HostSettings>): HostSettings {
     ...current,
     ...updates,
   };
+  if (updates.allowedHostPaths !== undefined) {
+    next.allowedHostPaths = sanitizeAllowedHostPaths(updates.allowedHostPaths);
+  }
 
   try {
     const filePath = getHostSettingsFilePath();

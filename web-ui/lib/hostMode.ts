@@ -10,6 +10,8 @@ import crypto from "crypto";
 import { getBridgeManifest, PROTOCOL_VERSION } from "../../host-bridge/manifest";
 import { issueApprovalToken } from "../../host-bridge/approvalToken";
 import { computeUnifiedFileDiff, TurnFileDiff } from "./chatDiffs";
+import { getHostSettings } from "./hostSettings";
+import { evaluateFileRestriction } from "./hostPathRestriction";
 
 export interface HostApprovalRequest {
   id: string;
@@ -384,6 +386,13 @@ export async function executeHostTool(
   dialectGuard?: { ruleIds: string[]; traceNotes: string[] };
   [key: string]: unknown;
 }> {
+  // Board #132: opt-in host file-folder restriction. Enforced ONLY when the
+  // owner turned the Settings toggle ON; default OFF means no restriction.
+  const restriction = evaluateFileRestriction(getHostSettings(), tool, args);
+  if (!restriction.allowed) {
+    return { ok: false, error: `Blocked by host file restriction: ${restriction.reason}` };
+  }
+
   const secret = process.env.HOST_RUNNER_SHARED_SECRET || "";
   let timeoutMs = 30000;
   let dialectGuard: { ruleIds: string[]; traceNotes: string[] } | undefined;

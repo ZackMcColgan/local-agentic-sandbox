@@ -102,6 +102,8 @@ export function SettingsView({
     hostAccessEnabled: true,
     allowUnattendedHostGit: false,
     jobChunkingEnabled: true,
+    fileRestrictionEnabled: false,
+    allowedHostPaths: [],
     runnerAvailable: false,
     recentActivity: [],
   });
@@ -204,6 +206,55 @@ export function SettingsView({
         setHostSettingsState((prev) => ({
           ...prev,
           allowUnattendedHostGit: json.allowUnattendedHostGit,
+        }));
+      }
+    } catch {
+      fetchHostSettings();
+    }
+  };
+
+  // Board #132: opt-in host file restriction toggle (default OFF; owner can bypass anytime).
+  const handleToggleFileRestriction = async () => {
+    const nextState = !hostSettings.fileRestrictionEnabled;
+    setHostSettingsState((prev) => ({ ...prev, fileRestrictionEnabled: nextState }));
+    try {
+      const res = await fetch("/api/settings/host", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileRestrictionEnabled: nextState }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setHostSettingsState((prev) => ({
+          ...prev,
+          fileRestrictionEnabled: json.fileRestrictionEnabled,
+        }));
+      }
+    } catch {
+      fetchHostSettings();
+    }
+  };
+
+  // Owner-entered allowed folders: one absolute path per line; saved on blur.
+  const handleSaveAllowedPaths = async (rawText: string) => {
+    const parsedLines = rawText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    setHostSettingsState((prev) => ({ ...prev, allowedHostPaths: parsedLines }));
+    try {
+      const res = await fetch("/api/settings/host", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowedHostPaths: parsedLines }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setHostSettingsState((prev) => ({
+          ...prev,
+          allowedHostPaths: Array.isArray(json.allowedHostPaths)
+            ? json.allowedHostPaths
+            : parsedLines,
         }));
       }
     } catch {
@@ -446,6 +497,8 @@ export function SettingsView({
             onToggleHostAccess={handleToggleHostAccess}
             onToggleJobChunking={handleToggleJobChunking}
             onToggleUnattendedGit={handleToggleUnattendedGit}
+            onToggleFileRestriction={handleToggleFileRestriction}
+            onAllowedPathsChange={handleSaveAllowedPaths}
             onToggleGitActivityExpanded={() => setGitActivityExpanded(!gitActivityExpanded)}
           />
         </div>

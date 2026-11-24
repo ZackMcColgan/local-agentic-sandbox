@@ -20,6 +20,10 @@ export interface HostSettingsData {
   hostAccessEnabled: boolean;
   allowUnattendedHostGit: boolean;
   jobChunkingEnabled: boolean;
+  /** Board #132 opt-in host file-folder restriction. Default OFF. */
+  fileRestrictionEnabled?: boolean;
+  /** Owner-entered allowed folders (one per line in the editor). */
+  allowedHostPaths?: string[];
   runnerAvailable: boolean;
   runnerState?: HostCardRunnerState;
   runnerReason?: string;
@@ -33,6 +37,8 @@ export interface HostZoneProps {
   onToggleHostAccess: () => void;
   onToggleJobChunking: () => void;
   onToggleUnattendedGit: () => void;
+  onToggleFileRestriction: () => void;
+  onAllowedPathsChange: (rawText: string) => void;
   onToggleGitActivityExpanded: () => void;
 }
 
@@ -43,6 +49,8 @@ export function HostZone({
   onToggleHostAccess,
   onToggleJobChunking,
   onToggleUnattendedGit,
+  onToggleFileRestriction,
+  onAllowedPathsChange,
   onToggleGitActivityExpanded,
 }: HostZoneProps) {
   const gitActivityNewestFirst = [...(hostSettings.recentActivity || [])].slice(-8).reverse();
@@ -212,6 +220,64 @@ export function HostZone({
               }`}
             />
           </button>
+        </div>
+
+        {/* Board #132: Opt-in Host File Restriction (default OFF, owner-controlled) */}
+        <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-2.5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                Host file restriction
+              </div>
+              <p
+                data-testid="file-restriction-status-reason"
+                className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5 max-w-sm"
+              >
+                {hostSettings.fileRestrictionEnabled
+                  ? "ON: host file tools may only touch the folders listed below. Turn it off at any time to bypass."
+                  : "OFF: host file tools are unrestricted. Default is OFF - this is opt-in, never a mandate."}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              data-testid="file-restriction-toggle-btn"
+              aria-checked={Boolean(hostSettings.fileRestrictionEnabled)}
+              onClick={onToggleFileRestriction}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                hostSettings.fileRestrictionEnabled
+                  ? "bg-emerald-600 dark:bg-emerald-500"
+                  : "bg-slate-300 dark:bg-zinc-700"
+              }`}
+              title="Toggle host file restriction switch"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  hostSettings.fileRestrictionEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div>
+            <label
+              htmlFor="host-allowed-paths-editor"
+              className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400"
+            >
+              Allowed folders (one absolute path per line)
+            </label>
+            <textarea
+              id="host-allowed-paths-editor"
+              data-testid="host-allowed-paths-editor"
+              defaultValue={(hostSettings.allowedHostPaths || []).join("\n")}
+              onBlur={(e) => onAllowedPathsChange(e.target.value)}
+              placeholder="C:\Users\you\Desktop\repos"
+              className="mt-1 w-full rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-850/60 p-2.5 text-xs font-mono text-slate-800 dark:text-zinc-200 min-h-24 resize-y"
+            />
+            <p className="text-[11px] text-slate-400 dark:text-zinc-400 mt-1">
+              Saved on blur. Only enforced while the toggle above is ON.
+            </p>
+          </div>
         </div>
 
         {/* Recent Unattended Git Activity (Audit Source: bridge git-ops log) */}
