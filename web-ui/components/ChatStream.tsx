@@ -52,7 +52,7 @@ import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
-import type { ActiveTurnInfo } from "../lib/threads/types";
+import type { ActiveTurnInfo, ThreadCompactionBoundary } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
 import {
   parseSimulateCommand,
@@ -201,6 +201,8 @@ interface ChatStreamProps {
    * active-view signal (activeNavView === "sessions" && viewMode === "unified").
    */
   isActiveView?: boolean;
+  onLocalSseOpenChange?: (open: boolean) => void;
+  threadCompaction?: ThreadCompactionBoundary | null;
   initialSimulation?: {
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -246,6 +248,8 @@ export function ChatStream({
   defaultComposerMode,
   onOpenProjects,
   isActiveView = true,
+  onLocalSseOpenChange,
+  threadCompaction: propThreadCompaction,
   initialSimulation,
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
@@ -434,10 +438,23 @@ export function ChatStream({
     };
   }, [threadId]);
 
-  // Rehydration of thread compaction boundary on thread switch
+  const onLocalSseOpenChangeRef = useRef(onLocalSseOpenChange);
+  onLocalSseOpenChangeRef.current = onLocalSseOpenChange;
+
+  useEffect(() => {
+    return () => {
+      onLocalSseOpenChangeRef.current?.(false);
+    };
+  }, []);
+
+  // Rehydration of thread compaction boundary on thread switch (skipped when parent already fetched the thread)
   useEffect(() => {
     if (!threadId) {
       setThreadCompaction(null);
+      return;
+    }
+    if (propThreadCompaction !== undefined) {
+      setThreadCompaction(propThreadCompaction);
       return;
     }
     let active = true;
@@ -451,7 +468,7 @@ export function ChatStream({
     return () => {
       active = false;
     };
-  }, [threadId]);
+  }, [threadId, propThreadCompaction]);
 
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
@@ -1025,6 +1042,8 @@ export function ChatStream({
       throw new Error("No readable stream received from server");
     }
 
+    onLocalSseOpenChangeRef.current?.(true);
+    try {
     const decoder = new TextDecoder();
     let streamBuffer = "";
     let accumulatedRawContent = "";
@@ -1345,6 +1364,9 @@ export function ChatStream({
           }
         }
       }
+    }
+    } finally {
+      onLocalSseOpenChangeRef.current?.(false);
     }
   };
 

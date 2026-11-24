@@ -54,21 +54,28 @@ export function ThreadsSidebar({
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/threads?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/threads?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && Array.isArray(data.threads)) {
           setServerSearchResults(data.threads);
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
         // Fallback to local filter on network error
       }
-    }, 150);
+    }, 300);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      controller.abort();
     };
   }, [searchQuery]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
