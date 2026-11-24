@@ -1,11 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express, { Request, Response } from "express";
-import cors from "cors";
 import { registerBrowserTools } from "./tools/browser.js";
 
 const app = express();
-app.use(cors());
 
 export function createBrowserMcpServer(): McpServer {
   const mcp = new McpServer({
