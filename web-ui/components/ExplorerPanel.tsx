@@ -157,17 +157,17 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
             aria-expanded={isExpanded}
             data-testid={`explorer-dir-${node.path}`}
             style={{ paddingLeft: `${12 + indentPx}px` }}
-            className="w-full min-h-[44px] pr-3 flex items-center gap-2 text-left text-sm text-zinc-200 hover:bg-zinc-900/80 transition-colors min-w-0"
+            className="w-full min-h-[44px] pr-3 flex items-center gap-2 text-left text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/80 transition-colors min-w-0"
           >
             {isExpanded ? (
-              <ChevronDown className="w-4 h-4 shrink-0 text-zinc-400" />
+              <ChevronDown className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400" />
             ) : (
-              <ChevronRight className="w-4 h-4 shrink-0 text-zinc-400" />
+              <ChevronRight className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400" />
             )}
             {isExpanded ? (
-              <FolderOpen className="w-4 h-4 shrink-0 text-zinc-400" />
+              <FolderOpen className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400" />
             ) : (
-              <Folder className="w-4 h-4 shrink-0 text-zinc-400" />
+              <Folder className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400" />
             )}
             <span className="truncate min-w-0">{node.name}</span>
           </button>
@@ -191,11 +191,15 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
         aria-current={isSelected ? "true" : undefined}
         style={{ paddingLeft: `${12 + indentPx + 20}px` }}
         className={`w-full min-h-[44px] pr-3 flex items-center gap-2 text-left text-sm transition-colors min-w-0 ${
-          isSelected ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-300 hover:bg-zinc-900/80"
+          isSelected
+            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+            : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900/80"
         }`}
       >
         <FileText
-          className={`w-4 h-4 shrink-0 ${isSelected ? "text-emerald-400" : "text-zinc-400"}`}
+          className={`w-4 h-4 shrink-0 ${
+            isSelected ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-600 dark:text-zinc-400"
+          }`}
         />
         <span className="truncate min-w-0">{node.name}</span>
       </button>
@@ -208,36 +212,38 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
     <>
       {/* Mobile backdrop */}
       <div
-        className="fixed inset-0 z-30 bg-black/70 md:hidden"
+        className="fixed inset-0 z-30 bg-black/50 dark:bg-black/70 md:hidden"
         onClick={onClose}
         aria-hidden="true"
       />
       <aside
         data-testid="explorer-panel"
         aria-label="Repository Explorer"
-        className="fixed inset-y-0 right-0 z-40 w-[min(92vw,360px)] md:static md:z-auto md:w-80 lg:w-96 shrink-0 bg-black border-l border-zinc-800 flex flex-col min-w-0 overflow-x-hidden"
+        className="fixed inset-y-0 right-0 z-40 w-[min(92vw,360px)] md:static md:z-auto md:w-80 lg:w-96 shrink-0 bg-white dark:bg-black border-l border-zinc-200 dark:border-zinc-800 flex flex-col min-w-0 overflow-x-hidden"
       >
         {/* Header */}
-        <div className="h-12 px-3 border-b border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+        <div className="h-12 px-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <Folder className="w-4 h-4 shrink-0 text-zinc-400" />
-            <span className="text-sm font-medium text-zinc-100 truncate">{rootName}</span>
+            <Folder className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400" />
+            <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+              {rootName}
+            </span>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close explorer"
             data-testid="explorer-close-btn"
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-100"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Search/Filter */}
-        <div className="p-2 border-b border-zinc-800 shrink-0">
+        <div className="p-2 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
           <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3 pointer-events-none" />
+            <Search className="w-4 h-4 text-zinc-600 dark:text-zinc-400 absolute left-3 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
@@ -245,7 +251,7 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
               placeholder="Filter files..."
               aria-label="Filter files"
               data-testid="explorer-search-input"
-              className="w-full min-h-[44px] pl-9 pr-10 bg-zinc-950 border border-zinc-800 rounded-md text-sm text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500"
+              className="w-full min-h-[44px] pl-9 pr-10 bg-zinc-50 dark:bg-black border border-zinc-300 dark:border-zinc-800 rounded-md text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-400 focus:outline-none focus:border-emerald-500"
             />
             {searchQuery && (
               <button
@@ -253,7 +259,7 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
                 onClick={() => setSearchQuery("")}
                 aria-label="Clear filter"
                 data-testid="explorer-search-clear"
-                className="absolute right-0 min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-100"
+                className="absolute right-0 min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -263,24 +269,31 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
 
         {/* Tree Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
-          {loading && <div className="p-4 text-sm text-zinc-400">Loading repository...</div>}
+          {loading && (
+            <div className="p-4 text-sm text-zinc-600 dark:text-zinc-400">
+              Loading repository...
+            </div>
+          )}
 
           {!loading && revoked && (
             <div
               data-testid="explorer-revoked-state"
-              className="p-4 flex items-start gap-2 text-sm text-zinc-300"
+              className="p-4 flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300"
             >
-              <AlertTriangle className="w-4 h-4 shrink-0 text-zinc-400 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 shrink-0 text-zinc-600 dark:text-zinc-400 mt-0.5" />
               <span>{error || "Project access is currently revoked."}</span>
             </div>
           )}
 
           {!loading && !revoked && error && (
-            <div className="p-4 text-sm text-zinc-400">{error}</div>
+            <div className="p-4 text-sm text-zinc-600 dark:text-zinc-400">{error}</div>
           )}
 
           {!loading && !revoked && !error && !hasChildren && (
-            <div data-testid="explorer-empty-state" className="p-4 text-sm text-zinc-400">
+            <div
+              data-testid="explorer-empty-state"
+              className="p-4 text-sm text-zinc-600 dark:text-zinc-400"
+            >
               {isSearching ? "No matching files." : "This directory is empty."}
             </div>
           )}
@@ -296,10 +309,10 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
         {selectedPath && (
           <div
             data-testid="explorer-preview"
-            className="border-t border-zinc-800 bg-zinc-950 flex flex-col max-h-[45%] min-h-[160px] min-w-0"
+            className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black flex flex-col max-h-[45%] min-h-[160px] min-w-0"
           >
-            <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between gap-2 shrink-0">
-              <span className="text-xs font-mono text-zinc-300 truncate min-w-0">
+            <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-xs font-mono text-zinc-800 dark:text-zinc-300 truncate min-w-0">
                 {selectedPath}
               </span>
               <button
@@ -310,23 +323,25 @@ export function ExplorerPanel({ open, onClose }: ExplorerPanelProps) {
                   setPreviewError(null);
                 }}
                 aria-label="Close preview"
-                className="min-h-[44px] min-w-[44px] -my-2 -mr-2 flex items-center justify-center text-zinc-400 hover:text-zinc-100 shrink-0"
+                className="min-h-[44px] min-w-[44px] -my-2 -mr-2 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 shrink-0"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="flex-1 overflow-auto p-3 min-w-0">
-              {previewLoading && <div className="text-xs text-zinc-400">Loading file...</div>}
+              {previewLoading && (
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Loading file...</div>
+              )}
               {!previewLoading && previewError && (
-                <div className="text-xs text-zinc-400">{previewError}</div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">{previewError}</div>
               )}
               {!previewLoading && !previewError && previewContent !== null && (
                 <>
-                  <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
+                  <pre className="text-xs font-mono text-zinc-800 dark:text-zinc-300 whitespace-pre-wrap break-words">
                     {previewContent}
                   </pre>
                   {previewTruncated && (
-                    <div className="mt-2 text-xs text-zinc-400">
+                    <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                       Preview truncated (file exceeds 256 KB).
                     </div>
                   )}

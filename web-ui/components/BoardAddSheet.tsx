@@ -152,17 +152,19 @@ export function BoardAddSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 md:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 dark:bg-black/75 p-4 md:items-center"
       role="dialog"
       aria-modal="true"
       aria-label="Add to the board"
     >
-      <div className="max-h-[90vh] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-white/[0.11] bg-[#0e0e12] p-5 text-stone-100 shadow-2xl surface-enter">
-        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-white/[0.18]" />
+      <div className="max-h-[90vh] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-zinc-200 dark:border-white/[0.11] bg-white dark:bg-black p-5 text-zinc-900 dark:text-stone-100 shadow-2xl surface-enter">
+        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-zinc-300 dark:bg-white/[0.18]" />
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[19px] font-bold tracking-tight text-stone-50">Add to the board</h1>
-            <p className="pt-1 text-[12.5px] leading-relaxed text-stone-400">
+            <h1 className="text-[19px] font-bold tracking-tight text-zinc-900 dark:text-stone-50">
+              Add to the board
+            </h1>
+            <p className="pt-1 text-[12.5px] leading-relaxed text-zinc-600 dark:text-stone-400">
               New items land in Queued. Nothing reaches the board without you behind it.
             </p>
           </div>
@@ -170,21 +172,21 @@ export function BoardAddSheet({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="rounded-xl px-2 py-1 text-sm text-stone-400 hover:bg-white/[0.08] hover:text-stone-100 transition-colors"
+            className="rounded-xl px-2 py-1 text-sm text-zinc-600 dark:text-stone-400 hover:bg-zinc-100 dark:hover:bg-white/[0.08] hover:text-zinc-900 dark:hover:text-stone-100 transition-colors"
           >
             ✕
           </button>
         </div>
 
         {/* Door 1: Ask the assistant (Monster-Prompt Single-Call Intake) */}
-        <div className="mt-3.5 rounded-2xl border border-emerald-500/60 bg-[#15151b] p-3.5 shadow-[0_0_0_1px_rgba(16,185,129,0.25)_inset]">
-          <h2 className="flex items-center gap-2 text-[14.5px] font-semibold text-stone-50">
+        <div className="mt-3.5 rounded-2xl border border-emerald-500/60 bg-zinc-50 dark:bg-zinc-900 p-3.5 shadow-[0_0_0_1px_rgba(16,185,129,0.2)_inset]">
+          <h2 className="flex items-center gap-2 text-[14.5px] font-semibold text-zinc-900 dark:text-stone-50">
             Ask the assistant
-            <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold tracking-[0.6px] text-black">
+            <span className="rounded-full bg-emerald-600 dark:bg-emerald-500 px-2 py-0.5 text-[9.5px] font-bold tracking-[0.6px] text-white dark:text-black">
               NEW
             </span>
           </h2>
-          <p className="pt-1.5 text-[12.5px] leading-relaxed text-stone-400">
+          <p className="pt-1.5 text-[12.5px] leading-relaxed text-zinc-600 dark:text-stone-400">
             Paste a plain-words request or multi-item spec. Preview the ordered stack first, then
             confirm in one tap.
           </p>
@@ -197,12 +199,12 @@ export function BoardAddSheet({
                 placeholder="Paste a task or multi-item prompt…"
                 rows={4}
                 data-testid="intake-prompt-input"
-                className="mt-2.5 w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2.5 text-[13.5px] text-stone-100 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
+                className="mt-2.5 w-full rounded-xl border border-zinc-300 dark:border-white/[0.12] bg-white dark:bg-black px-3 py-2.5 text-[13.5px] text-zinc-900 dark:text-stone-100 placeholder:text-zinc-500 dark:placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
               />
               {intakeError && (
                 <p
                   data-testid="intake-error"
-                  className="mt-2 rounded-xl border border-rose-500/40 bg-rose-950/40 px-2.5 py-1.5 text-[12px] text-rose-300"
+                  className="mt-2 rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 text-[12px] text-rose-700 dark:text-rose-300"
                 >
                   {intakeError}
                 </p>
@@ -212,7 +214,7 @@ export function BoardAddSheet({
                 onClick={handlePreviewSubmit}
                 disabled={previewLoading}
                 data-testid="intake-preview-btn"
-                className="mt-2.5 w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2.5 text-center text-[14px] font-bold text-black transition disabled:opacity-50"
+                className="mt-2.5 w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400 py-2.5 text-center text-[14px] font-bold text-white dark:text-black transition disabled:opacity-50"
               >
                 {previewLoading ? "Drafting stack…" : "Preview stack"}
               </button>
@@ -220,7 +222,7 @@ export function BoardAddSheet({
           ) : (
             <div className="mt-3 space-y-2.5" data-testid="intake-preview-stack">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-semibold text-stone-200">
+                <span className="text-[12px] font-semibold text-zinc-800 dark:text-stone-200">
                   Staged stack ({stagedItems.length} {stagedItems.length === 1 ? "item" : "items"})
                 </span>
                 <button
@@ -231,7 +233,7 @@ export function BoardAddSheet({
                   }}
                   disabled={confirmLoading}
                   data-testid="intake-discard-btn"
-                  className="text-[12px] font-medium text-stone-400 underline hover:text-stone-100"
+                  className="text-[12px] font-medium text-zinc-600 dark:text-stone-400 underline hover:text-zinc-900 dark:hover:text-stone-100"
                 >
                   Edit prompt
                 </button>
@@ -242,33 +244,35 @@ export function BoardAddSheet({
                   <li
                     key={item.tempKey || idx}
                     data-testid={`intake-staged-item-${idx}`}
-                    className="rounded-xl border border-white/[0.10] bg-black p-2.5"
+                    className="rounded-xl border border-zinc-200 dark:border-white/[0.10] bg-white dark:bg-black p-2.5"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[13px] font-semibold text-stone-100">
+                      <span className="text-[13px] font-semibold text-zinc-900 dark:text-stone-100">
                         {idx + 1}. {item.title}
                       </span>
                       {item.tempKey && (
-                        <span className="shrink-0 rounded bg-[#1f1f28] px-1.5 py-0.5 text-[10px] font-mono text-stone-300">
+                        <span className="shrink-0 rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-mono text-zinc-700 dark:text-stone-300">
                           {item.tempKey}
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-[12px] leading-snug text-stone-300">{item.brief}</p>
+                    <p className="mt-1 text-[12px] leading-snug text-zinc-700 dark:text-stone-300">
+                      {item.brief}
+                    </p>
                     {item.dependencies.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                        <span className="text-[11px] text-stone-400">Deps:</span>
+                        <span className="text-[11px] text-zinc-600 dark:text-stone-400">Deps:</span>
                         {item.dependencies.map((dep) => (
                           <span
                             key={dep}
-                            className="rounded-full border border-emerald-500/45 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] text-emerald-300"
+                            className="rounded-full border border-emerald-500/45 bg-emerald-50 dark:bg-emerald-500/15 px-2 py-0.5 text-[10.5px] text-emerald-800 dark:text-emerald-300"
                           >
                             {dep}
                           </span>
                         ))}
                       </div>
                     )}
-                    <div className="mt-1.5 text-[11px] text-stone-400">
+                    <div className="mt-1.5 text-[11px] text-zinc-600 dark:text-stone-400">
                       {item.fileAllowlist.length} file
                       {item.fileAllowlist.length === 1 ? "" : "s"} ·{" "}
                       {item.acceptanceCriteria.length} acceptance check
@@ -281,7 +285,7 @@ export function BoardAddSheet({
               {intakeError && (
                 <p
                   data-testid="intake-error"
-                  className="rounded-xl border border-rose-500/40 bg-rose-950/40 px-2.5 py-1.5 text-[12px] text-rose-300"
+                  className="rounded-xl border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 text-[12px] text-rose-700 dark:text-rose-300"
                 >
                   {intakeError}
                 </p>
@@ -293,7 +297,7 @@ export function BoardAddSheet({
                   onClick={() => handleConfirmStack(false)}
                   disabled={confirmLoading}
                   data-testid="intake-confirm-queued-btn"
-                  className="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2.5 text-center text-[13.5px] font-bold text-black transition disabled:opacity-50"
+                  className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400 py-2.5 text-center text-[13.5px] font-bold text-white dark:text-black transition disabled:opacity-50"
                 >
                   {confirmLoading ? "Filing…" : "Confirm & File to Queued"}
                 </button>
@@ -302,7 +306,7 @@ export function BoardAddSheet({
                   onClick={() => handleConfirmStack(true)}
                   disabled={confirmLoading}
                   data-testid="intake-confirm-drain-btn"
-                  className="w-full rounded-xl border border-emerald-500/60 bg-emerald-500/15 py-2.5 text-center text-[13.5px] font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50"
+                  className="w-full rounded-xl border border-emerald-600/60 dark:border-emerald-500/60 bg-emerald-50 dark:bg-emerald-500/15 py-2.5 text-center text-[13.5px] font-bold text-emerald-800 dark:text-emerald-300 transition hover:bg-emerald-100 dark:hover:bg-emerald-500/25 disabled:opacity-50"
                 >
                   {confirmLoading ? "Filing…" : "Confirm & Start Drain"}
                 </button>
@@ -312,9 +316,11 @@ export function BoardAddSheet({
         </div>
 
         {/* Door 2: Write it myself */}
-        <div className="mt-3.5 rounded-2xl border border-white/[0.10] bg-[#15151b] p-3.5">
-          <h2 className="text-[14.5px] font-semibold text-stone-100">Write it myself</h2>
-          <p className="pt-1.5 text-[12.5px] leading-relaxed text-stone-400">
+        <div className="mt-3.5 rounded-2xl border border-zinc-200 dark:border-white/[0.10] bg-zinc-50 dark:bg-zinc-900 p-3.5">
+          <h2 className="text-[14.5px] font-semibold text-zinc-900 dark:text-stone-100">
+            Write it myself
+          </h2>
+          <p className="pt-1.5 text-[12.5px] leading-relaxed text-zinc-600 dark:text-stone-400">
             Title, brief, dependencies — the full editor, same as any existing item.
           </p>
 
@@ -322,7 +328,7 @@ export function BoardAddSheet({
             <button
               type="button"
               onClick={() => setShowManualEditor(true)}
-              className="mt-2.5 w-full rounded-xl border border-white/[0.14] bg-transparent py-2.5 text-center text-[14px] font-bold text-stone-200 transition hover:border-stone-400 hover:text-stone-50"
+              className="mt-2.5 w-full rounded-xl border border-zinc-300 dark:border-white/[0.14] bg-transparent py-2.5 text-center text-[14px] font-bold text-zinc-800 dark:text-stone-200 transition hover:border-zinc-500 dark:hover:border-stone-400 hover:text-zinc-950 dark:hover:text-stone-50"
             >
               Open the editor
             </button>
@@ -333,18 +339,18 @@ export function BoardAddSheet({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Item title (e.g. fix-toggle-spacing)"
-                className="w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2 text-[13px] text-stone-100 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-300 dark:border-white/[0.12] bg-white dark:bg-black px-3 py-2 text-[13px] text-zinc-900 dark:text-stone-100 placeholder:text-zinc-500 dark:placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
               />
               <textarea
                 value={brief}
                 onChange={(e) => setBrief(e.target.value)}
                 placeholder="Brief description of what needs to be done"
                 rows={3}
-                className="w-full rounded-xl border border-white/[0.12] bg-black px-3 py-2 text-[13px] text-stone-100 placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-300 dark:border-white/[0.12] bg-white dark:bg-black px-3 py-2 text-[13px] text-zinc-900 dark:text-stone-100 placeholder:text-zinc-500 dark:placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
               />
               {existingItems.length > 0 && (
                 <div>
-                  <div className="mb-1 text-[11px] font-semibold text-stone-400">
+                  <div className="mb-1 text-[11px] font-semibold text-zinc-600 dark:text-stone-400">
                     Dependencies (optional)
                   </div>
                   <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
@@ -357,8 +363,8 @@ export function BoardAddSheet({
                           onClick={() => toggleDep(item.id)}
                           className={`rounded-full border px-2.5 py-0.5 text-[10.5px] ${
                             active
-                              ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
-                              : "border-white/[0.12] text-stone-400"
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+                              : "border-zinc-300 dark:border-white/[0.12] text-zinc-600 dark:text-stone-400"
                           }`}
                         >
                           {item.key} {item.title}
@@ -368,19 +374,19 @@ export function BoardAddSheet({
                   </div>
                 </div>
               )}
-              {error && <p className="text-[12px] text-rose-400">{error}</p>}
+              {error && <p className="text-[12px] text-rose-700 dark:text-rose-400">{error}</p>}
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowManualEditor(false)}
-                  className="flex-1 rounded-xl border border-white/[0.14] py-2 text-[13px] font-semibold text-stone-300"
+                  className="flex-1 rounded-xl border border-zinc-300 dark:border-white/[0.14] py-2 text-[13px] font-semibold text-zinc-700 dark:text-stone-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 rounded-xl bg-emerald-500 hover:bg-emerald-400 py-2 text-[13px] font-bold text-black disabled:opacity-50"
+                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400 py-2 text-[13px] font-bold text-white dark:text-black disabled:opacity-50"
                 >
                   {submitting ? "Saving…" : "File in Queued"}
                 </button>
@@ -389,10 +395,10 @@ export function BoardAddSheet({
           )}
         </div>
 
-        <div className="mt-4 border-t border-white/[0.08] pt-3.5 text-center text-[11.5px] leading-relaxed text-stone-400">
+        <div className="mt-4 border-t border-zinc-200 dark:border-white/[0.08] pt-3.5 text-center text-[11.5px] leading-relaxed text-zinc-600 dark:text-stone-400">
           However it arrives, the item shows its author.
           <br />
-          <b className="text-stone-200">The loop never adds items on its own.</b>
+          <b className="text-zinc-900 dark:text-stone-200">The loop never adds items on its own.</b>
         </div>
       </div>
     </div>

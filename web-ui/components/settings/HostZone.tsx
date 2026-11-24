@@ -274,7 +274,7 @@ export function HostZone({
               placeholder="C:\Users\you\Desktop\repos"
               className="mt-1 w-full rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-850/60 p-2.5 text-xs font-mono text-slate-800 dark:text-zinc-200 min-h-24 resize-y"
             />
-            <p className="text-[11px] text-slate-400 dark:text-zinc-400 mt-1">
+            <p className="text-[11px] text-slate-600 dark:text-zinc-400 mt-1">
               Saved on blur. Only enforced while the toggle above is ON.
             </p>
           </div>
@@ -284,10 +284,10 @@ export function HostZone({
         <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-2.5">
           <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <Terminal className="h-3.5 w-3.5 text-slate-500" />
+              <Terminal className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Recent Unattended Git Activity</span>
             </div>
-            <span className="text-[11px] text-slate-400 dark:text-zinc-400 font-normal">
+            <span className="text-[11px] text-slate-600 dark:text-zinc-400 font-normal">
               {hostSettings.runnerAvailable
                 ? "Audit log"
                 : "Historical log (runner currently offline)"}
@@ -357,7 +357,7 @@ export function HostZone({
           ) : (
             <div
               data-testid="host-git-empty-activity"
-              className="text-xs text-slate-400 dark:text-zinc-400 italic p-3 text-center bg-slate-50 dark:bg-zinc-850/40 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800"
+              className="text-xs text-slate-600 dark:text-zinc-400 italic p-3 text-center bg-slate-50 dark:bg-zinc-850/40 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800"
             >
               No unattended git operations recorded yet.
             </div>

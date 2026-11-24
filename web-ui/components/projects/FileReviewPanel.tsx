@@ -86,7 +86,7 @@ export function FileReviewPanel({
               type="button"
               data-testid="project-tree-refresh-btn"
               onClick={onRefreshTree}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 p-1 rounded-lg"
+              className="text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-300 p-1 rounded-lg"
               title="Refresh"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -94,7 +94,7 @@ export function FileReviewPanel({
           </div>
 
           {isLoadingTree && (
-            <div className="p-4 text-center text-xs text-slate-400">Loading tree...</div>
+            <div className="p-4 text-center text-xs text-slate-600 dark:text-zinc-400">Loading tree...</div>
           )}
 
           {treeError && (
@@ -104,7 +104,7 @@ export function FileReviewPanel({
           )}
 
           {!isLoadingTree && !treeError && tree.length === 0 && (
-            <div className="p-4 text-center text-xs text-slate-400">No files found.</div>
+            <div className="p-4 text-center text-xs text-slate-600 dark:text-zinc-400">No files found.</div>
           )}
 
           <div className="space-y-1">
@@ -117,7 +117,7 @@ export function FileReviewPanel({
                   key={node.path}
                   onClick={() => isFile && onSelectFile(node.path)}
                   className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs transition-colors ${
-                    isFile ? "cursor-pointer" : "cursor-default text-slate-400 font-semibold"
+                    isFile ? "cursor-pointer" : "cursor-default text-slate-600 dark:text-zinc-400 font-semibold"
                   } ${
                     isSelected
                       ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 font-semibold"
@@ -127,7 +127,7 @@ export function FileReviewPanel({
                   }`}
                 >
                   {isFile ? (
-                    <FileCode className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <FileCode className="h-3.5 w-3.5 shrink-0 text-slate-600 dark:text-zinc-400" />
                   ) : (
                     <Folder className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   )}
@@ -150,7 +150,7 @@ export function FileReviewPanel({
               </div>
 
               {isLoadingFile && (
-                <div className="p-8 text-center text-xs text-slate-400">
+                <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">
                   Loading file content...
                 </div>
               )}
@@ -174,7 +174,7 @@ export function FileReviewPanel({
               )}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-400">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-600 dark:text-zinc-400">
               <Eye className="h-8 w-8 mb-2 opacity-50" />
               <p className="text-xs">
                 Select any file from the repository tree to preview its content.
@@ -239,7 +239,7 @@ export function FileReviewPanel({
       </div>
 
       {isLoadingDiffs && (
-        <div className="p-8 text-center text-xs text-slate-400">Loading diffs...</div>
+        <div className="p-8 text-center text-xs text-slate-600 dark:text-zinc-400">Loading diffs...</div>
       )}
 
       {diffError && (
@@ -261,7 +261,7 @@ export function FileReviewPanel({
           <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
             No modified files found.
           </p>
-          <p className="text-xs text-slate-400 dark:text-zinc-400">
+          <p className="text-xs text-slate-600 dark:text-zinc-400">
             Run an overnight autonomous task or checkout a task branch to review diffs.
           </p>
         </div>
@@ -282,7 +282,7 @@ export function FileReviewPanel({
                 : item.changeType === "D"
                   ? "bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
                   : item.changeType === "R"
-                    ? "bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                    ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                     : "bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800";
 
             const typeLabel =

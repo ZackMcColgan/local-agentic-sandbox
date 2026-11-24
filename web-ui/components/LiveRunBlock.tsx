@@ -340,7 +340,7 @@ export function LiveRunBlock({
               </span>
             )}
             {isParked && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700">
                 • Parked
               </span>
             )}
@@ -491,7 +491,7 @@ export function LiveRunBlock({
                 className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                   isPass
                     ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                    : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
                 }`}
               >
                 {critiquedMilestone.criticVerdict || (isPass ? "PASS" : "REVIEW")}
@@ -605,7 +605,7 @@ export function LiveRunBlock({
               ? "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/40"
               : task.ciStatus.state === "failed"
                 ? "border-rose-200 dark:border-rose-900/70 bg-rose-50/70 dark:bg-rose-950/40"
-                : "border-sky-200 dark:border-sky-900/60 bg-sky-50/70 dark:bg-sky-950/40"
+                : "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/40"
           }`}
         >
           <div className="flex items-center gap-2 min-w-0">
@@ -614,7 +614,7 @@ export function LiveRunBlock({
             ) : task.ciStatus.state === "failed" ? (
               <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
             ) : (
-              <Loader2 className="h-4 w-4 text-sky-600 dark:text-sky-400 animate-spin shrink-0" />
+              <Loader2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 animate-spin shrink-0" />
             )}
             <div className="min-w-0">
               <span
@@ -623,7 +623,7 @@ export function LiveRunBlock({
                     ? "text-emerald-900 dark:text-emerald-100"
                     : task.ciStatus.state === "failed"
                       ? "text-rose-900 dark:text-rose-100"
-                      : "text-sky-900 dark:text-sky-100"
+                      : "text-emerald-900 dark:text-emerald-100"
                 }`}
               >
                 CI Check:{" "}
@@ -656,10 +656,10 @@ export function LiveRunBlock({
 
       {/* Parked Run Banner */}
       {isParked && task.parkedReason && (
-        <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/70 bg-amber-50/80 dark:bg-amber-950/40 flex items-start gap-2.5">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="p-3.5 rounded-2xl border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 flex items-start gap-2.5">
+          <AlertCircle className="h-4 w-4 text-zinc-600 dark:text-zinc-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+            <p className="text-xs font-bold text-zinc-900 dark:text-zinc-200">
               Run parked: {task.parkedReason}
             </p>
           </div>

@@ -186,7 +186,7 @@ export function SvgViewer({
               </span>
             </div>
             {isDrawio && (
-              <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold">
+              <span className="hidden xs:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
                 Draw.io
               </span>
             )}
@@ -315,7 +315,7 @@ export function SvgViewer({
                 </>
               ) : (
                 <>
-                  <Copy className="h-3 w-3 text-slate-500" />
+                  <Copy className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
                   <span className="hidden sm:inline text-[10px]">Copy</span>
                 </>
               )}
@@ -327,7 +327,7 @@ export function SvgViewer({
                 href={`https://viewer.diagrams.net/?highlight=0000ff&edit=_blank&layers=1&nav=1#R${encodeURIComponent(rawSvg)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-[11px] transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-[11px] transition-colors"
                 title="Open in Diagrams.net"
               >
                 <ExternalLink className="h-3 w-3" />
@@ -346,7 +346,7 @@ export function SvgViewer({
                   : "Download SVG file"
               }
             >
-              <Download className="h-3 w-3 text-slate-500" />
+              <Download className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
               <span className="hidden sm:inline text-[10px]">Download</span>
             </button>
 
@@ -445,27 +445,27 @@ export function SvgViewer({
                 dangerouslySetInnerHTML={{ __html: sanitized }}
               />
             ) : rawSvg ? (
-              <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-amber-600 dark:text-amber-400">
+              <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-zinc-700 dark:text-zinc-300">
                 <AlertCircle className="h-6 w-6" />
                 <span className="text-xs font-medium">SVG preview could not be generated</span>
                 <button
                   type="button"
                   onClick={() => setActiveTab("code")}
-                  className="text-[11px] underline text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200"
+                  className="text-[11px] underline text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                 >
                   View markup in Code tab
                 </button>
               </div>
             ) : (
-              <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-slate-400">
+              <div className="py-8 px-4 flex flex-col items-center text-center gap-2 text-slate-600 dark:text-zinc-400">
                 <FileCode className="h-6 w-6 opacity-60" />
                 <span className="text-xs">No SVG content provided</span>
               </div>
             )}
           </div>
         ) : (
-          <div className="w-full h-full bg-slate-900 dark:bg-black p-3.5 overflow-auto">
-            <pre className="text-[11px] font-mono text-emerald-300/90 whitespace-pre leading-relaxed">
+          <div className="w-full h-full bg-zinc-50 dark:bg-black p-3.5 overflow-auto">
+            <pre className="text-[11px] font-mono text-emerald-800 dark:text-emerald-300/90 whitespace-pre leading-relaxed">
               <code>{rawSvg}</code>
             </pre>
           </div>
@@ -474,12 +474,12 @@ export function SvgViewer({
 
       {/* 3. Footer Bar */}
       {!embeddedInCanvas && (
-        <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-2">
+        <div className="px-3 py-1.5 bg-white dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 text-[10px] text-slate-600 dark:text-zinc-400 flex items-center justify-between gap-2">
           <span className="font-mono truncate">
             {isDrawio ? "Draw.io Vector Diagram • Scalable" : "SVG Vector Format • Scalable"}
           </span>
           {activeTab === "preview" && (
-            <span className="hidden sm:inline text-slate-400 dark:text-zinc-400 shrink-0">
+            <span className="hidden sm:inline text-slate-600 dark:text-zinc-400 shrink-0">
               Click +/- or zoom buttons to inspect details
             </span>
           )}
