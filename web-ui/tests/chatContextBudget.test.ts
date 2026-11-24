@@ -1222,4 +1222,123 @@ describe("Chat Context-Budget Enforcement Suite", () => {
       assert.equal(normalized[1].content, HIGH_WATER_BANKING_DIRECTIVE);
     });
   });
+
+  describe("R4: Atomic assistant.tool_calls + role: 'tool' eviction", () => {
+    it("fitContextWindow evicts assistant(tool_calls) and all paired role: 'tool' messages atomically without leaving orphaned tool messages", () => {
+      const messages: ContextMessage[] = [
+        { role: "system", content: "System." },
+        { role: "user", content: "First user brief." },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: "c0",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' },
+            },
+            {
+              id: "c1",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          tool_call_id: "c0",
+          content: "A".repeat(16000),
+        },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          tool_call_id: "c1",
+          content: "B".repeat(16000),
+        },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: "c2",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"c.ts"}' },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          name: "workspace_read_file",
+          tool_call_id: "c2",
+          content: "C".repeat(2000),
+        },
+        { role: "user", content: "Latest user prompt." },
+      ];
+
+      const fitted = fitContextWindow(messages, { maxContentTokens: 2000 });
+      for (let i = 0; i < fitted.length; i++) {
+        if (fitted[i].role === "tool") {
+          // Walk backwards over contiguous tool messages to find parent assistant(tool_calls)
+          let j = i - 1;
+          while (j >= 0 && fitted[j].role === "tool") j--;
+          const parent = j >= 0 ? fitted[j] : undefined;
+          assert.equal(
+            parent?.role,
+            "assistant",
+            `Orphaned tool message at index ${i} without parent assistant(tool_calls)`
+          );
+          assert.ok(
+            Array.isArray(parent?.tool_calls) && parent.tool_calls.length > 0,
+            `Parent assistant at index ${j} must carry tool_calls`
+          );
+        }
+      }
+    });
+
+    it("fitConversationToBudget Rung (c) evicts assistant(tool_calls) and all paired role: 'tool' messages atomically", () => {
+      const messages: ContextMessage[] = [
+        { role: "system", content: "System." },
+        { role: "user", content: "First user brief." },
+        {
+          role: "assistant",
+          content: "Step 1: " + "X".repeat(250000),
+          tool_calls: [
+            {
+              id: "r0_a",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' },
+            },
+            {
+              id: "r0_b",
+              type: "function",
+              function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' },
+            },
+          ],
+        },
+        { role: "tool", name: "workspace_read_file", tool_call_id: "r0_a", content: "ok a" },
+        { role: "tool", name: "workspace_read_file", tool_call_id: "r0_b", content: "ok b" },
+        { role: "assistant", content: "Step 2: " + "Y".repeat(250000) },
+        { role: "user", content: "Latest user prompt." },
+      ];
+
+      const res = fitConversationToBudget(messages, {
+        budgetTokens: 100000,
+        preserveRecentMessages: 6,
+      });
+      assert.ok(res.actions.includes("drop_old_turns"));
+      for (let i = 0; i < res.messages.length; i++) {
+        if (res.messages[i].role === "tool") {
+          let j = i - 1;
+          while (j >= 0 && res.messages[j].role === "tool") j--;
+          const parent = j >= 0 ? res.messages[j] : undefined;
+          assert.equal(
+            parent?.role,
+            "assistant",
+            `Orphaned tool message at index ${i} after fitConversationToBudget`
+          );
+        }
+      }
+    });
+  });
 });

@@ -336,15 +336,28 @@ function recoverTarget(
 /** Finds the assistant tool_call paired with a tool result message. */
 function findPairedCall(messages: ElisionMessage[], toolIdx: number): ElisionToolCall | undefined {
   const toolMsg = messages[toolIdx];
-  // Scan backwards for the assistant message carrying this call id.
-  for (let i = toolIdx - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role !== "assistant" || !Array.isArray(m.tool_calls)) continue;
-    if (toolMsg?.tool_call_id) {
+  if (toolMsg?.tool_call_id) {
+    for (let i = toolIdx - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m?.role !== "assistant" || !Array.isArray(m.tool_calls)) continue;
       const match = m.tool_calls.find((tc) => tc?.id === toolMsg.tool_call_id);
       if (match) return match;
     }
-    if (m.tool_calls.length > 0) return m.tool_calls[0];
+  }
+
+  // Fallback when tool_call_id is absent: track ordinal offset among contiguous
+  // role: "tool" messages following the preceding assistant.tool_calls message.
+  let toolOffset = 0;
+  for (let i = toolIdx - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role === "tool") {
+      toolOffset++;
+      continue;
+    }
+    if (m?.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      return m.tool_calls[toolOffset];
+    }
+    break;
   }
   return undefined;
 }

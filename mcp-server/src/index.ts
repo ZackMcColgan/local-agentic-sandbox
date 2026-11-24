@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import { registerCodeRunner } from "./tools/codeRunner.js";
@@ -11,6 +11,7 @@ import path from "path";
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 export function createMcpServer(): McpServer {
   const mcp = new McpServer({
@@ -22,9 +23,6 @@ export function createMcpServer(): McpServer {
   registerWorkspaceTools(mcp);
   return mcp;
 }
-
-// Active SSE sessions keyed by sessionId
-const sessions = new Map<string, { server: McpServer; transport: SSEServerTransport }>();
 
 export const ALLOWED_FILE_EXTENSIONS = new Set([
   ".svg",
@@ -141,40 +139,34 @@ app.get("/health", (_req: Request, res: Response) => {
       rootfs: "READ_ONLY",
       capabilities: "DROPPED_ALL",
     },
-    active_sessions: sessions.size,
+    transport_mode: "streamable-http-stateless",
   });
 });
 
-app.get("/sse", async (req: Request, res: Response) => {
+app.post("/mcp", async (req: Request, res: Response) => {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  res.on("close", () => {
+    void transport.close().catch(() => {});
+    void server.close().catch(() => {});
+  });
+
   try {
-    const server = createMcpServer();
-    const transport = new SSEServerTransport("/messages", res);
-    sessions.set(transport.sessionId, { server, transport });
-
-    req.on("close", async () => {
-      sessions.delete(transport.sessionId);
-      try {
-        await server.close();
-      } catch {}
-    });
-
     await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("Failed to establish SSE transport:", error);
+    console.error("Failed to handle stateless Streamable HTTP request:", error);
     if (!res.headersSent) {
-      res.status(500).send("SSE Connection Failed");
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal server error" },
+        id: null,
+      });
     }
-  }
-});
-
-app.post("/messages", async (req: Request, res: Response) => {
-  const sessionId = req.query.sessionId as string;
-  const session = (sessionId && sessions.get(sessionId)) || Array.from(sessions.values())[0];
-
-  if (session) {
-    await session.transport.handlePostMessage(req, res);
-  } else {
-    res.status(400).send("Session not initialized or expired");
   }
 });
 
@@ -194,7 +186,7 @@ const isMainModule = Boolean(
 if (isMainModule) {
   app.listen(PORT, HOST, () => {
     console.log(`[MCP Server] Active and listening at http://${HOST}:${PORT}`);
-    console.log(`[MCP Server] SSE Endpoint: http://${HOST}:${PORT}/sse`);
+    console.log(`[MCP Server] Streamable HTTP Endpoint (stateless): http://${HOST}:${PORT}/mcp`);
     console.log(
       `[MCP Server] Registered Tools: execute_sandboxed_python, verify_container_provenance`
     );

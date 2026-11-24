@@ -710,8 +710,8 @@ export class ThreadStore {
 
     const isLive = executionLive || (Boolean(presence) && !presenceZombie);
 
-    // S2: Reconcile active status against live activeExecutionSet / activeTurnRegistry
-    if (thread.status === "active" && !isLive) {
+    // S2: Reconcile active/running status against live activeExecutionSet / activeTurnRegistry
+    if ((thread.status === "active" || thread.status === "running") && !isLive) {
       let isTaskPaused = false;
       if (thread.taskId) {
         try {

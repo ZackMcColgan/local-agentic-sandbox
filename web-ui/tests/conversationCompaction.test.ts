@@ -270,4 +270,45 @@ describe("Conversation Compaction at 85% Suite (Fix D3)", () => {
       );
     }
   });
+
+  it("R4: compactConversationHistory never splits assistant(tool_calls) from its paired role: 'tool' messages across the preserveRecent boundary", () => {
+    const big = "X".repeat(2000);
+    const messages = [
+      { role: "system", content: "System." },
+      { role: "user", content: "First brief." },
+      {
+        role: "assistant",
+        content: "Calling tool batch 1: " + big,
+        tool_calls: [
+          { id: "c0", function: { name: "workspace_read_file", arguments: '{"path":"a.ts"}' } },
+          { id: "c1", function: { name: "workspace_read_file", arguments: '{"path":"b.ts"}' } },
+        ],
+      },
+      { role: "tool", name: "workspace_read_file", tool_call_id: "c0", content: "A".repeat(800) },
+      { role: "tool", name: "workspace_read_file", tool_call_id: "c1", content: "B".repeat(800) },
+      { role: "assistant", content: "Batch 1 done." },
+      { role: "user", content: "Follow up question." },
+    ];
+
+    // preserveRecentMessages=3 puts raw endIdx on tool c1 (index 4), splitting it from assistant at index 2.
+    const res = compactConversationHistory(messages, {
+      maxContentTokens: 400,
+      compactionThreshold: 0.85,
+      preserveRecentMessages: 3,
+    });
+
+    assert.equal(res.compacted, true);
+    for (let i = 0; i < res.messages.length; i++) {
+      if (res.messages[i].role === "tool") {
+        let j = i - 1;
+        while (j >= 0 && res.messages[j].role === "tool") j--;
+        const parent = j >= 0 ? res.messages[j] : undefined;
+        assert.equal(
+          parent?.role,
+          "assistant",
+          `Orphaned tool message at index ${i} in compacted messages`
+        );
+      }
+    }
+  });
 });

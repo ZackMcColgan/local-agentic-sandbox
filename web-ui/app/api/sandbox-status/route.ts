@@ -4,7 +4,10 @@ import { getLLMProvider } from "@/lib/llm/provider";
 
 const LLM_BASE_URL =
   process.env.LLM_BASE_URL || process.env.OLLAMA_BASE_URL || "http://llm-service:11434";
-const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/sse").replace(/\/sse$/, "");
+const MCP_BASE = (process.env.MCP_SERVER_URL || "http://mcp-server:8080/mcp").replace(
+  /\/(mcp|sse)\/?$/,
+  ""
+);
 const ACTIVE_MODEL = process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
 
 export async function GET() {
@@ -59,7 +62,7 @@ export async function GET() {
       ollama: llmInfo,
       mcp_server: {
         status: mcpStatus,
-        url: `${MCP_BASE}/sse`,
+        url: `${MCP_BASE}/mcp`,
         tools: mcpTools,
       },
     },

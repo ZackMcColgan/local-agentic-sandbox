@@ -83,4 +83,20 @@ describe("Phase 3 — Item 1 & 3: Deployment Configuration Suite", () => {
       "deploy/k8s/web-ui.yaml must set MODEL_NAME"
     );
   });
+
+  it("deploy/k8s/web-ui.yaml persists RUN_LEDGER_DB_PATH and USER_PROFILE_PATH onto /workspace/.agent", () => {
+    const root = findRepoRoot();
+    const k8sDeployContent = fs.readFileSync(path.join(root, "deploy/k8s/web-ui.yaml"), "utf8");
+
+    assert.match(
+      k8sDeployContent,
+      /name:\s*RUN_LEDGER_DB_PATH[\s\S]*?value:\s*"\/workspace\/\.agent\/runs\.db"/,
+      "deploy/k8s/web-ui.yaml must set RUN_LEDGER_DB_PATH to /workspace/.agent/runs.db"
+    );
+    assert.match(
+      k8sDeployContent,
+      /name:\s*USER_PROFILE_PATH[\s\S]*?value:\s*"\/workspace\/\.agent\/settings\/user_profile\.json"/,
+      "deploy/k8s/web-ui.yaml must set USER_PROFILE_PATH to /workspace/.agent/settings/user_profile.json"
+    );
+  });
 });

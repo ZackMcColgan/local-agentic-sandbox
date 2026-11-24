@@ -275,7 +275,6 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       clearTurnActive(thread.id);
       abortActiveTurn(thread.id);
       const updatedThread = (await getThreadStore().getThread(id)) || thread;
-      updatedThread.status = "stopped";
       if (updatedThread.taskId) {
         cancelTask(updatedThread.taskId);
         activeExecutionSet.delete(updatedThread.taskId);
@@ -289,28 +288,29 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       // Unload all models from LLM VRAM immediately
       await unloadAllModels();
 
+      // Re-read immediately before mutating so concurrent writes during unloadAllModels are preserved.
+      const freshThread = (await getThreadStore().getThread(id)) || updatedThread;
+      freshThread.status = "stopped";
+
       // Mark the last assistant message as stopped
-      for (let i = updatedThread.messages.length - 1; i >= 0; i--) {
-        if (updatedThread.messages[i].role === "assistant") {
-          updatedThread.messages[i].isStopped = true;
-          const existingContent = updatedThread.messages[i].content || "";
+      for (let i = freshThread.messages.length - 1; i >= 0; i--) {
+        if (freshThread.messages[i].role === "assistant") {
+          freshThread.messages[i].isStopped = true;
+          const existingContent = freshThread.messages[i].content || "";
           if (!existingContent.includes("*[Stopped by user]*")) {
-            updatedThread.messages[i].content = existingContent.trim()
+            freshThread.messages[i].content = existingContent.trim()
               ? `${existingContent.trimEnd()}\n\n*[Stopped by user]*`
               : "*[Stopped by user]*";
           }
-          if (
-            !updatedThread.messages[i].status ||
-            updatedThread.messages[i].status === "streaming"
-          ) {
-            updatedThread.messages[i].status = "incomplete";
+          if (!freshThread.messages[i].status || freshThread.messages[i].status === "streaming") {
+            freshThread.messages[i].status = "incomplete";
           }
           break;
         }
       }
 
-      getThreadStore().saveThread(updatedThread);
-      return NextResponse.json({ status: "stopped", thread: updatedThread });
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ status: "stopped", thread: freshThread });
     }
 
     // 1b. Action: Pause Run
@@ -321,9 +321,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         if (task) {
           supervisor.pauseTask(task, "User paused run");
           getSharedRunLedger().pauseRun(task.taskId);
-          thread.status = "paused";
-          getThreadStore().saveThread(thread);
-          return NextResponse.json({ status: "paused", thread, task });
+          const freshThread = (await getThreadStore().getThread(id)) || thread;
+          freshThread.status = "paused";
+          getThreadStore().saveThread(freshThread);
+          return NextResponse.json({ status: "paused", thread: freshThread, task });
         }
       }
       return NextResponse.json({ error: "No active task to pause" }, { status: 400 });
@@ -344,16 +345,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           supervisor.saveCheckpoint(task);
           supervisor.resumeTask(task.taskId);
           activeExecutionSet.add(task.taskId);
-          thread.status = "active";
-          getThreadStore().saveThread(thread);
+          const freshThread = (await getThreadStore().getThread(id)) || thread;
+          freshThread.status = "active";
+          getThreadStore().saveThread(freshThread);
 
           const taskWithBudget = task as TaskManifest & { chunkBudget?: unknown };
-          if (thread.chunkBudget !== undefined && taskWithBudget.chunkBudget === undefined) {
-            taskWithBudget.chunkBudget = thread.chunkBudget;
+          if (freshThread.chunkBudget !== undefined && taskWithBudget.chunkBudget === undefined) {
+            taskWithBudget.chunkBudget = freshThread.chunkBudget;
           }
-          launchTaskExecution(thread.id, task, thread.model);
+          launchTaskExecution(freshThread.id, task, freshThread.model);
 
-          return NextResponse.json({ status: "running", thread, task });
+          return NextResponse.json({ status: "running", thread: freshThread, task });
         }
       }
       return NextResponse.json({ error: "No task checkpoint found to resume" }, { status: 400 });
@@ -370,18 +372,22 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           } catch {
             // synced by saveCheckpoint
           }
-          thread.taskId = restarted.taskId;
-          thread.status = "active";
+          const freshThread = (await getThreadStore().getThread(id)) || thread;
+          freshThread.taskId = restarted.taskId;
+          freshThread.status = "active";
           activeExecutionSet.add(restarted.taskId);
-          getThreadStore().saveThread(thread);
+          getThreadStore().saveThread(freshThread);
 
           const restartedWithBudget = restarted as TaskManifest & { chunkBudget?: unknown };
-          if (thread.chunkBudget !== undefined && restartedWithBudget.chunkBudget === undefined) {
-            restartedWithBudget.chunkBudget = thread.chunkBudget;
+          if (
+            freshThread.chunkBudget !== undefined &&
+            restartedWithBudget.chunkBudget === undefined
+          ) {
+            restartedWithBudget.chunkBudget = freshThread.chunkBudget;
           }
-          launchTaskExecution(thread.id, restarted, thread.model);
+          launchTaskExecution(freshThread.id, restarted, freshThread.model);
 
-          return NextResponse.json({ status: "running", thread, task: restarted });
+          return NextResponse.json({ status: "running", thread: freshThread, task: restarted });
         }
       }
       return NextResponse.json({ error: "No task found to restart" }, { status: 400 });
@@ -389,9 +395,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 2. Action: Rename Thread
     if (body.action === "rename" && body.title) {
-      thread.title = body.title;
-      getThreadStore().saveThread(thread);
-      return NextResponse.json({ thread });
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
+      freshThread.title = body.title;
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     // 3. Action: Add Message
@@ -402,15 +409,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 4. Action: Restore Compaction
     if (body.action === "restoreCompaction") {
-      getThreadStore().clearCompactionBoundary(thread);
-      return NextResponse.json({ thread });
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
+      getThreadStore().clearCompactionBoundary(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     // 5. Action: Toggle Host Access
     if (body.action === "setHostAccess") {
-      thread.hostAccess = Boolean(body.hostAccess);
-      getThreadStore().saveThread(thread);
-      return NextResponse.json({ thread });
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
+      freshThread.hostAccess = Boolean(body.hostAccess);
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     return NextResponse.json({ thread });
