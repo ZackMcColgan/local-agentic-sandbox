@@ -266,9 +266,13 @@ export class SelfDeployPipeline {
       if (checkoutRes.exitCode !== 0) {
         throw new Error(`Git checkout develop failed: ${checkoutRes.stderr || checkoutRes.stdout}`);
       }
-      const mergeRes = await this.commandRunner("git", ["merge", "--no-ff", "--", input.branchName], {
-        cwd: this.repoRoot,
-      });
+      const mergeRes = await this.commandRunner(
+        "git",
+        ["merge", "--no-ff", "--", input.branchName],
+        {
+          cwd: this.repoRoot,
+        }
+      );
       if (mergeRes.exitCode !== 0) {
         throw new Error(
           `Git merge --no-ff ${input.branchName} into develop failed: ${mergeRes.stderr || mergeRes.stdout}`

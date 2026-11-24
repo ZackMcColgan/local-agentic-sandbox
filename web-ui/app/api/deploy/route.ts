@@ -47,16 +47,16 @@ function isSameOriginRequest(req: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
+
     if (!isSameOriginRequest(req)) {
       return NextResponse.json(
         { error: "Forbidden: cross-origin deploy request rejected" },
         { status: 403 }
       );
     }
-
-    const parsed = await parseJsonBody(req);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.body;
     const { action } = body;
 
     if (action === "toggleKillSwitch") {
@@ -250,24 +250,21 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const pipeline =
-        (globalThis as { __mockSelfDeployPipeline?: SelfDeployPipeline })
-          .__mockSelfDeployPipeline ||
-        new SelfDeployPipeline(
-          body.dryRun
-            ? {
-                commandRunner: async (file: string, args: string[]) => {
-                  const fullCmd = [file, ...args].join(" ");
-                  if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
-                    // A real `ctr images ls name==<image>` listing names the image.
-                    return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
-                  }
-                  return { exitCode: 0, stdout: "ok\n", stderr: "" };
-                },
-                healthChecker: async () => ({ status: 200, ok: true }),
-              }
-            : undefined
-        );
+      const pipeline = new SelfDeployPipeline(
+        body.dryRun
+          ? {
+              commandRunner: async (file: string, args: string[]) => {
+                const fullCmd = [file, ...args].join(" ");
+                if (fullCmd.includes("ctr") && fullCmd.includes("images ls")) {
+                  // A real `ctr images ls name==<image>` listing names the image.
+                  return { exitCode: 0, stdout: `${fullCmd}\n`, stderr: "" };
+                }
+                return { exitCode: 0, stdout: "ok\n", stderr: "" };
+              },
+              healthChecker: async () => ({ status: 200, ok: true }),
+            }
+          : undefined
+      );
       const record = await pipeline.executeDeploy({
         branchName,
         previousSha,
