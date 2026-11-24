@@ -36,6 +36,12 @@ spec:
               value: "8081"
             - name: NODE_ENV
               value: "production"
+            - name: MCP_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-mcp
+                  key: shared-secret
+                  optional: true
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

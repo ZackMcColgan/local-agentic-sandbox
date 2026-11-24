@@ -1044,8 +1044,11 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/chatApprovalsAndCompaction.test.ts"],
   },
   {
-    match: (p) => p.includes("lib/chat/mcpClients") || p.includes("chatMcpClients.test.ts"),
-    tests: ["tests/chatMcpClients.test.ts"],
+    match: (p) =>
+      p.includes("lib/chat/mcpClients") ||
+      p.includes("chatMcpClients.test.ts") ||
+      p.includes("mcpClientPoolHardening.test.ts"),
+    tests: ["tests/chatMcpClients.test.ts", "tests/mcpClientPoolHardening.test.ts"],
   },
   {
     match: (p) => p.includes("lib/chat/triage") || p.includes("chatTriage.test.ts"),

@@ -38,10 +38,20 @@ interface PooledMcpEntry {
   rawClient: Client | McpClientLike;
   rawTransport: StreamableHTTPClientTransport | McpTransportLike;
   evicted: boolean;
+  inFlightCalls: number;
+  handlesClosed: boolean;
 }
 
 const mcpPool = new Map<string, PooledMcpEntry>();
 const mcpInFlight = new Map<string, Promise<McpSession | null>>();
+
+export function buildMcpAuthHeaders(
+  env: Record<string, string | undefined> = process.env
+): Record<string, string> | undefined {
+  const secret = env.MCP_SHARED_SECRET?.trim();
+  if (!secret) return undefined;
+  return { "x-mcp-shared-secret": secret };
+}
 
 function resolveMcpConnectTimeoutMs(deps: McpClientDeps): number {
   if (typeof deps.connectTimeoutMs === "number" && deps.connectTimeoutMs > 0) {
@@ -94,12 +104,35 @@ async function closeRawHandles(
   }
 }
 
+async function closeEntryHandlesOnce(entry: PooledMcpEntry): Promise<void> {
+  if (entry.handlesClosed) return;
+  entry.handlesClosed = true;
+  await closeRawHandles(entry.rawClient, entry.rawTransport);
+}
+
 async function evictPooledEntry(url: string, targetEntry?: PooledMcpEntry): Promise<void> {
   const current = mcpPool.get(url);
   if (!current || (targetEntry && current !== targetEntry)) return;
   current.evicted = true;
   mcpPool.delete(url);
-  await closeRawHandles(current.rawClient, current.rawTransport);
+  if (current.inFlightCalls === 0) {
+    await closeEntryHandlesOnce(current);
+  }
+}
+
+function wrapPooledTransport(
+  rawTransport: StreamableHTTPClientTransport | McpTransportLike
+): StreamableHTTPClientTransport {
+  return new Proxy(rawTransport as StreamableHTTPClientTransport, {
+    get(target, prop, receiver) {
+      if (prop === "close") {
+        // Pooled transport handles stay open across turns; pool eviction/reset closes raw handles.
+        return async () => {};
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 function wrapPooledClient(
@@ -115,11 +148,17 @@ function wrapPooledClient(
       }
       if (prop === "callTool") {
         return async (...args: Parameters<Client["callTool"]>) => {
+          entry.inFlightCalls++;
           try {
             return await target.callTool(...args);
           } catch (err) {
             await evictPooledEntry(sseUrl, entry);
             throw err;
+          } finally {
+            entry.inFlightCalls--;
+            if (entry.evicted && entry.inFlightCalls === 0) {
+              await closeEntryHandlesOnce(entry);
+            }
           }
         };
       }
@@ -144,9 +183,13 @@ async function openMcpSession(
   let transport: StreamableHTTPClientTransport | McpTransportLike | null = null;
   let client: Client | McpClientLike | null = null;
   try {
+    const authHeaders = buildMcpAuthHeaders();
     transport = deps.createTransport
       ? deps.createTransport(new URL(sseUrl))
-      : new StreamableHTTPClientTransport(new URL(sseUrl));
+      : new StreamableHTTPClientTransport(
+          new URL(sseUrl),
+          authHeaders ? { requestInit: { headers: authHeaders } } : undefined
+        );
     client = deps.createClient
       ? deps.createClient(name)
       : new Client({ name, version: "1.0.0" }, { capabilities: {} });
@@ -185,7 +228,7 @@ export async function resetMcpClientPool(): Promise<void> {
   await Promise.allSettled(
     entries.map(async (entry) => {
       entry.evicted = true;
-      await closeRawHandles(entry.rawClient, entry.rawTransport);
+      await closeEntryHandlesOnce(entry);
     })
   );
 }
@@ -227,9 +270,11 @@ export async function connectMcpClient(
       rawClient: opened.rawClient,
       rawTransport: opened.rawTransport,
       evicted: false,
+      inFlightCalls: 0,
+      handlesClosed: false,
       session: {
         client: opened.rawClient as Client,
-        transport: opened.rawTransport as StreamableHTTPClientTransport,
+        transport: wrapPooledTransport(opened.rawTransport),
         tools: opened.tools,
       },
     };

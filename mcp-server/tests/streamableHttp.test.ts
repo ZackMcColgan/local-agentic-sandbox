@@ -9,8 +9,11 @@ import { cleanupTestWorkspace } from "./isolatedWorkspace.js";
 describe("MCP Server Streamable HTTP Transport & Stateless Core", () => {
   let server: Server;
   let baseUrl: string;
+  const origSecret = process.env.MCP_SHARED_SECRET;
+  const TEST_SECRET = "streamable-http-test-shared-secret-32-chars-min";
 
   before(async () => {
+    process.env.MCP_SHARED_SECRET = TEST_SECRET;
     const { app } = await import("../src/index.js");
     server = app.listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => server.once("listening", resolve));
@@ -19,6 +22,8 @@ describe("MCP Server Streamable HTTP Transport & Stateless Core", () => {
   });
 
   after(() => {
+    if (origSecret === undefined) delete process.env.MCP_SHARED_SECRET;
+    else process.env.MCP_SHARED_SECRET = origSecret;
     if (server) {
       (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close();
@@ -27,7 +32,9 @@ describe("MCP Server Streamable HTTP Transport & Stateless Core", () => {
   });
 
   it("serves tools/list and a real tool call over Streamable HTTP on POST /mcp", async () => {
-    const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
+    const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+      requestInit: { headers: { "x-mcp-shared-secret": TEST_SECRET } },
+    });
     const client = new Client({ name: "mcp-server-test-client", version: "1.0.0" });
     try {
       await client.connect(transport);
@@ -68,6 +75,7 @@ describe("MCP Server Streamable HTTP Transport & Stateless Core", () => {
     const rpcHeaders = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
+      "x-mcp-shared-secret": TEST_SECRET,
     };
 
     // Independent request 1: tools/list with no session handshake

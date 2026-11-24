@@ -226,7 +226,9 @@ export async function GET(request: NextRequest) {
         const mcpBase = mcpEnv ? mcpEnv.replace(/\/(mcp|sse)\/?$/, "") : "http://localhost:8080";
 
         try {
+          const mcpSecret = process.env.MCP_SHARED_SECRET?.trim();
           const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {
+            headers: mcpSecret ? { "x-mcp-shared-secret": mcpSecret } : undefined,
             signal: AbortSignal.timeout(3000),
           });
           if (mcpFileRes.ok) {
