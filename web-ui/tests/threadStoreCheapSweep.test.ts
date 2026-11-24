@@ -11,6 +11,33 @@ function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+// Teardown races a late sweep write under loaded CI runners: a file that
+// appears during the recursive delete defeats one rmSync's built-in
+// retries, so re-attempt the whole delete for up to ~10s and name the
+// leftovers on final failure instead of throwing a bare ENOTEMPTY.
+function removeTempDirWithRetries(dir: string): void {
+  const deadline = Date.now() + 10_000;
+  let lastError: unknown = null;
+  let leftovers = "<unreadable>";
+  while (Date.now() < deadline) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      return;
+    } catch (err) {
+      lastError = err;
+      try {
+        leftovers = fs.readdirSync(dir).join(", ") || "<empty>";
+      } catch {
+        leftovers = "<unreadable>";
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    }
+  }
+  throw new Error(
+    `removeTempDirWithRetries failed for ${dir} (leftovers: ${leftovers}): ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 function writeThreadFile(dir: string, thread: Record<string, unknown>): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${thread.id}.json`), JSON.stringify(thread), "utf8");
@@ -131,7 +158,7 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTempDirWithRetries(dir);
   }
 });
 
@@ -634,7 +661,7 @@ test("A9: createThread persists isSubagent and isScheduled when provided and omi
     assert.equal("isSubagent" in reloadedPlain, false);
     assert.equal("isScheduled" in reloadedPlain, false);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTempDirWithRetries(dir);
   }
 });
 

@@ -208,6 +208,16 @@ export interface HostStatusResponse {
 
 export async function determineHostRunnerState(hostAccess: boolean): Promise<HostStatusResponse> {
   const manifest = getBridgeManifest();
+  if (!hostAccess) {
+    return {
+      hostAccess: false,
+      runnerState: "DISABLED",
+      runnerAvailable: false,
+      reason: "Host access is disabled for this thread",
+      expectedSha: manifest.bridgeSourceSha256,
+    };
+  }
+
   let probe: {
     status?: string;
     protocolVersion?: number;
@@ -223,18 +233,6 @@ export async function determineHostRunnerState(hostAccess: boolean): Promise<Hos
       probe = await res.json();
     }
   } catch {}
-
-  if (!hostAccess) {
-    return {
-      hostAccess: false,
-      runnerState: "DISABLED",
-      runnerAvailable: false,
-      reason: "Host access is disabled for this thread",
-      expectedSha: manifest.bridgeSourceSha256,
-      actualSha: probe?.bridgeSourceSha256,
-      protocolVersion: probe?.protocolVersion,
-    };
-  }
 
   if (!probe || probe.status !== "ok") {
     return {
