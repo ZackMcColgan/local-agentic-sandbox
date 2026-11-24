@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 import {
   getSafeHomedir,
   migrateLegacyFileIfNeeded,
@@ -102,6 +103,10 @@ export function loadUserProfile(customPath?: string): UserProfile {
       ...parsed,
     };
   } catch (err: unknown) {
+    quarantineCorruptFile(
+      filePath,
+      err instanceof Error ? err.message : "corrupt user profile JSON"
+    );
     console.warn(
       `[UserProfile] Warning: corrupted profile JSON at ${filePath} (${err instanceof Error ? err.message : String(err)}). Starting with empty profile.`
     );
@@ -110,38 +115,16 @@ export function loadUserProfile(customPath?: string): UserProfile {
 }
 
 /**
- * Atomically writes the user profile to disk using a temporary file and rename.
+ * Atomically writes the user profile to disk using the shared atomic helper.
  */
 export function saveUserProfile(profile: UserProfile, customPath?: string): void {
   const filePath = customPath || getUserProfilePath();
   migrateLegacyUserProfileIfNeeded(filePath);
-  const dir = path.dirname(filePath);
-
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
   const payload = JSON.stringify(profile, null, 2);
-  const tempPath = path.join(
-    dir,
-    `.profile.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
-  );
 
   try {
-    fs.writeFileSync(tempPath, payload, "utf8");
-    try {
-      fs.renameSync(tempPath, filePath);
-    } catch {
-      // Fallback for Windows cross-device or file locking: copy and delete
-      fs.copyFileSync(tempPath, filePath);
-      fs.unlinkSync(tempPath);
-    }
+    atomicWriteFileSync(filePath, payload, 0o660);
   } catch (err: unknown) {
-    if (fs.existsSync(tempPath)) {
-      try {
-        fs.unlinkSync(tempPath);
-      } catch (_) {}
-    }
     throw new Error(
       `[UserProfile] Failed to write profile to ${filePath}: ${err instanceof Error ? err.message : String(err)}`
     );

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 import { resolveBoardDir } from "./boardStore";
 import type { GateVerdict } from "./reviewerGate";
 
@@ -137,19 +138,17 @@ export class AgreementLedgerStore {
         entries,
         typeof parsed?.updatedAt === "string" ? parsed.updatedAt : new Date(0).toISOString()
       );
-    } catch {
+    } catch (err) {
+      quarantineCorruptFile(
+        this.ledgerPath,
+        err instanceof Error ? err.message : "corrupt agreement ledger JSON"
+      );
       return emptyLedger();
     }
   }
 
   private write(ledger: PersistentAgreementLedger): void {
-    if (!fs.existsSync(this.boardDir)) {
-      fs.mkdirSync(this.boardDir, { recursive: true, mode: 0o770 });
-    }
-    fs.writeFileSync(this.ledgerPath, JSON.stringify(ledger, null, 2), {
-      encoding: "utf8",
-      mode: 0o660,
-    });
+    atomicWriteFileSync(this.ledgerPath, JSON.stringify(ledger, null, 2), 0o660);
   }
 
   recordShadowVerdict(input: {

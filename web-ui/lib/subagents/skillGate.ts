@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { assertValidSafeId, confinePathToRoot, isValidSafeId } from "../securityHardening";
+import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 
 export interface SkillCandidate {
   id: string;
@@ -53,18 +54,15 @@ export function loadPendingQueue(skillsDir?: string): SkillGateStore {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    quarantineCorruptFile(filePath, err instanceof Error ? err.message : "corrupt pending.json");
     return { version: 1, candidates: {}, updatedAt: new Date().toISOString() };
   }
 }
 
 export function savePendingQueue(store: SkillGateStore, skillsDir?: string): void {
-  const dir = getSkillsBasePath(skillsDir);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
   const filePath = getPendingQueuePath(skillsDir);
-  fs.writeFileSync(filePath, JSON.stringify(store, null, 2), "utf8");
+  atomicWriteFileSync(filePath, JSON.stringify(store, null, 2), 0o660);
 }
 
 /**
@@ -160,7 +158,7 @@ ${candidate.pattern}
 ${candidate.solutionSummary}
 `;
 
-  fs.writeFileSync(skillPath, skillContent, "utf8");
+  atomicWriteFileSync(skillPath, skillContent, 0o660);
 
   candidate.status = "approved";
   candidate.approvedAt = new Date().toISOString();

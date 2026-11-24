@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { runTestGate, TestGateOptions } from "../lib/testGate.js";
+import { runTestGate, discoverAllTests, TestGateOptions } from "../lib/testGate.js";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -19,15 +19,10 @@ async function main() {
         .map((s) => s.trim())
         .filter(Boolean);
     } else if (arg === "--all") {
-      options.changedFiles = [
-        "web-ui/lib/svgUtils.ts",
-        "web-ui/lib/subagents/supervisor.ts",
-        "web-ui/lib/telemetry.ts",
-        "web-ui/lib/toolParser.ts",
-        "web-ui/lib/fileParser.ts",
-        "web-ui/lib/ingestion/pipeline.ts",
-        "web-ui/app/api/tasks/route.ts",
-      ];
+      // Full on-disk discovery instead of a hardcoded seed list (#58): every
+      // web-ui unit suite, every Playwright spec, the repo-root JS suite, and
+      // the workspace/host-bridge suite tokens.
+      options.testsOverride = discoverAllTests();
     }
   }
 

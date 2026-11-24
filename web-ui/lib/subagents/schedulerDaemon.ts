@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { atomicWriteFileSync } from "../fsAtomic";
 import { UnattendedScheduler, Schedule } from "./scheduler";
 import { isDrainAllowed, readBoardControlState } from "../board/boardControl";
 import { isBoardDrainInFlight, runBoardDrainWithMutex } from "../board/boardOrchestrator";
@@ -158,7 +159,7 @@ export class SchedulerDaemon {
         lastTick: new Date().toISOString(),
         active,
       };
-      fs.writeFileSync(this.getHeartbeatPath(), JSON.stringify(hb, null, 2), "utf8");
+      atomicWriteFileSync(this.getHeartbeatPath(), JSON.stringify(hb, null, 2), 0o660);
     } catch (err: unknown) {
       this.log(
         "WARN",
