@@ -14,6 +14,11 @@ const path = require("path");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const K8S_NAMESPACE = process.env.K8S_NAMESPACE || "local-agentic-sandbox";
+// Overall orchestration deadline: one S4 verification phase (kubectl rollout
+// status --timeout=120s plus probes) must fit inside this budget; if it does
+// not, the rollout aborts as "deadline exceeded" instead of starting a second
+// unbounded phase (rollback) or hanging forever.
+const ROLLOUT_DEADLINE_MS = 180_000;
 
 function parseArgs(argv) {
   const args = {};
@@ -128,6 +133,8 @@ async function rolloutService(params, opts = {}) {
   const recordPath = params.recordPath || "";
   const gatewayUrl = params.gatewayUrl || "http://127.0.0.1:3001";
   const nowIso = () => new Date().toISOString();
+  const startedAt = Date.now();
+  const deadlineExceeded = () => Date.now() - startedAt > ROLLOUT_DEADLINE_MS;
 
   if (!image) {
     throw new Error("Missing required --image argument");
@@ -165,6 +172,23 @@ async function rolloutService(params, opts = {}) {
       targetImage: image,
       rollbackTarget: rollbackImage || null,
       suspended: false,
+      s4Verdict: s4,
+      updatedAt: nowIso(),
+    };
+    writeRecordAtomically(recordPath, record);
+    return record;
+  }
+
+  // S4 failed: if the first verification already burned the whole deadline,
+  // abort instead of starting a second unbounded phase.
+  if (deadlineExceeded()) {
+    const record = {
+      status: "failed",
+      targetImage: image,
+      rollbackTarget: rollbackImage || null,
+      suspended: true,
+      suspendedReason: `deadline exceeded: rollout verification did not finish within ${ROLLOUT_DEADLINE_MS}ms (failed step: ${s4.failedStep})`,
+      suspendedAt: nowIso(),
       s4Verdict: s4,
       updatedAt: nowIso(),
     };
