@@ -14,6 +14,7 @@ import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import type { ChunkBudgetConfig } from "@/lib/jobChunking";
 import { getSharedSlotScheduler, SlotPriority } from "@/lib/slotScheduler";
+import { parseJsonBody } from "@/lib/apiJson";
 
 const getThreadStore = () => new ThreadStore(resolveThreadsDir());
 const getSupervisor = () => new OvernightSupervisor();
@@ -38,9 +39,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const threadStore = getThreadStore();
     const supervisor = getSupervisor();
-    const body = await req.json();
 
     // 1. Action: Launch engineering builder task inside a thread
     if (body.action === "launchTask" || body.action === "build") {

@@ -60,12 +60,25 @@ export function evaluateChunkBudget(
   return { exceeded: false, reason: null };
 }
 
-function getGitBranch(cwd: string): string {
+export const BANK_GIT_TIMEOUT_MS = 60_000;
+
+type GitExecSyncFn = (
+  file: string,
+  args?: readonly string[],
+  options?: { cwd?: string; encoding?: "utf8"; timeout?: number }
+) => string;
+
+function getGitBranch(
+  cwd: string,
+  timeout: number = BANK_GIT_TIMEOUT_MS,
+  runGit: GitExecSyncFn = execFileSync as unknown as GitExecSyncFn
+): string {
   try {
     return (
-      execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      runGit("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
         cwd,
         encoding: "utf8",
+        timeout,
       }).trim() || "HEAD"
     );
   } catch {
@@ -73,12 +86,17 @@ function getGitBranch(cwd: string): string {
   }
 }
 
-function getGitHeadSha(cwd: string): string {
+function getGitHeadSha(
+  cwd: string,
+  timeout: number = BANK_GIT_TIMEOUT_MS,
+  runGit: GitExecSyncFn = execFileSync as unknown as GitExecSyncFn
+): string {
   try {
     return (
-      execFileSync("git", ["rev-parse", "HEAD"], {
+      runGit("git", ["rev-parse", "HEAD"], {
         cwd,
         encoding: "utf8",
+        timeout,
       }).trim() || "unknown"
     );
   } catch {
@@ -86,31 +104,42 @@ function getGitHeadSha(cwd: string): string {
   }
 }
 
-function bankGitWork(cwd: string, jobId: string): { branch: string; headSha: string } {
-  const status = execFileSync("git", ["status", "--porcelain"], {
+export function bankGitWork(
+  cwd: string,
+  jobId: string,
+  options?: {
+    timeoutMs?: number;
+    execSyncFn?: GitExecSyncFn;
+  }
+): { branch: string; headSha: string } {
+  const timeout = options?.timeoutMs ?? BANK_GIT_TIMEOUT_MS;
+  const runGit = options?.execSyncFn ?? (execFileSync as unknown as GitExecSyncFn);
+
+  const status = runGit("git", ["status", "--porcelain"], {
     cwd,
     encoding: "utf8",
+    timeout,
   }).trim();
 
   if (status.length > 0) {
-    execFileSync("git", ["add", "-A"], { cwd });
-    execFileSync("git", ["commit", "-m", `chore(chunk): bank state for ${jobId}`], { cwd });
+    runGit("git", ["add", "-A"], { cwd, timeout });
+    runGit("git", ["commit", "-m", `chore(chunk): bank state for ${jobId}`], { cwd, timeout });
   }
 
   // Push if a remote is configured; local-only test repos have no remote.
   try {
-    const remotes = execFileSync("git", ["remote"], { cwd, encoding: "utf8" }).trim();
+    const remotes = runGit("git", ["remote"], { cwd, encoding: "utf8", timeout }).trim();
     if (remotes.length > 0) {
-      const branch = getGitBranch(cwd);
-      execFileSync("git", ["push", "-u", "origin", branch], { cwd });
+      const branch = getGitBranch(cwd, timeout, runGit);
+      runGit("git", ["push", "-u", "origin", branch], { cwd, timeout });
     }
   } catch {
     // Non-fatal if remote push is unavailable in offline/test environments.
   }
 
   return {
-    branch: getGitBranch(cwd),
-    headSha: getGitHeadSha(cwd),
+    branch: getGitBranch(cwd, timeout, runGit),
+    headSha: getGitHeadSha(cwd, timeout, runGit),
   };
 }
 

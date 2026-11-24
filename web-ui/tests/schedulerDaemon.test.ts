@@ -374,6 +374,110 @@ describe("Phase 4 — Item 1: Scheduler Daemon Test Suite", () => {
     }
   });
 
+  it("15s restart gap with active .scheduler-heartbeat invokes checkCrashAndRecover and marks orphaned cron manifest crashed", async () => {
+    setup();
+    try {
+      const scheduler = new UnattendedScheduler({ workspaceDir: testWorkspace });
+      const schedId = await scheduler.scheduleTask("0 2 * * *", "Restart recovery cron job");
+
+      // Create an orphaned "active" cron manifest in .agent/checkpoints
+      const checkpointDir = path.join(testWorkspace, ".agent", "checkpoints");
+      fs.mkdirSync(checkpointDir, { recursive: true });
+      const runId = "run-15s-crash";
+      const manifestPath = path.join(checkpointDir, `${runId}-checkpoint.json`);
+      const nowIso = new Date().toISOString();
+      fs.writeFileSync(
+        manifestPath,
+        JSON.stringify(
+          {
+            taskId: runId,
+            goal: "Restart recovery cron job",
+            toolchain: "node:22",
+            branchName: `feat/sched-${schedId.replace(/^sched-?/, "")}`,
+            status: "active",
+            milestones: [],
+            currentMilestoneIndex: 0,
+            checkpoints: [],
+            ambiguityFlags: [],
+            journal: [],
+            startedAt: nowIso,
+            updatedAt: nowIso,
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      // Write active .scheduler-heartbeat 15 seconds ago (< 5m threshold)
+      const schedHbPath = scheduler.getHeartbeatPath();
+      fs.writeFileSync(
+        schedHbPath,
+        JSON.stringify(
+          {
+            runId,
+            scheduleId: schedId,
+            lastHeartbeat: new Date(Date.now() - 15_000).toISOString(),
+            attempt: 1,
+            active: true,
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const daemon = new SchedulerDaemon({
+        workspaceDir: testWorkspace,
+        scheduler,
+        registerSignalHandlers: false,
+      });
+
+      // Also write .scheduler-daemon-heartbeat only 15 seconds old (< 5m)
+      fs.writeFileSync(
+        daemon.getHeartbeatPath(),
+        JSON.stringify(
+          {
+            pid: 99998,
+            startedAt: new Date(Date.now() - 30_000).toISOString(),
+            lastTick: new Date(Date.now() - 15_000).toISOString(),
+            active: true,
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      await daemon.checkStartupRecovery();
+
+      const updatedSchedHb = JSON.parse(fs.readFileSync(schedHbPath, "utf8")) as {
+        active: boolean;
+      };
+      assert.equal(
+        updatedSchedHb.active,
+        false,
+        "checkCrashAndRecover must mark .scheduler-heartbeat inactive on 15s restart gap"
+      );
+
+      const updatedSchedules = await scheduler.listSchedules();
+      const updatedSched = updatedSchedules.find((s) => s.id === schedId);
+      assert.equal(updatedSched?.failureCount, 1);
+      assert.ok(updatedSched?.backoffUntil);
+
+      const updatedManifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
+        status: string;
+      };
+      assert.equal(
+        updatedManifest.status,
+        "crashed",
+        "orphaned active cron manifest must be marked crashed"
+      );
+    } finally {
+      teardown();
+    }
+  });
+
   it("R8: Board drain duty invokes reconcile (without drain) when control is paused/stopped", async () => {
     setup();
     try {
