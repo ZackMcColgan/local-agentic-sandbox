@@ -1,6 +1,9 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { resolveAffectedTests, runTestGate } from "../lib/testGate.js";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveAffectedTests, runTestGate, discoverAllTests } from "../lib/testGate.js";
 import {
   checkOllama,
   enableOllamaMock,
@@ -129,11 +132,8 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     );
   });
 
-  it("maps the 7 orphaned charter modules to their test suites with zero uncovered files", () => {
+  it("maps the 4 real charter modules to their test suites with zero uncovered files", () => {
     const charterModules = [
-      ["web-ui/lib/liveStatus.ts", "tests/liveStatus.test.ts"],
-      ["web-ui/lib/executionSummary.ts", "tests/executionSummary.test.ts"],
-      ["web-ui/lib/modelEval.ts", "tests/modelEval.test.ts"],
       ["web-ui/lib/board/boardStore.ts", "tests/boardStore.test.ts"],
       ["web-ui/lib/board/dispatcher.ts", "tests/dispatcher.test.ts"],
       ["web-ui/lib/board/flowMonitor.ts", "tests/flowMonitor.test.ts"],
@@ -147,6 +147,59 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     }
   });
 
+  it("rejects ghost test paths: no MAPPING_RULES entry references nonexistent suites", () => {
+    const gatePath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../lib/testGate.ts"
+    );
+    const src = fs.readFileSync(gatePath, "utf8");
+    const ghosts = [
+      "tests/liveStatus.test.ts",
+      "tests/executionSummary.test.ts",
+      "tests/modelEval.test.ts",
+    ];
+    for (const ghost of ghosts) {
+      assert.ok(
+        !src.includes(`"${ghost}"`),
+        `Ghost test path ${ghost} must not appear in lib/testGate.ts`
+      );
+    }
+  });
+
+  it("maps changed e2e spec files to themselves despite the ignore list (evaluation order)", () => {
+    const specs = [
+      "web-ui/tests/e2e/explorerPanel.spec.ts",
+      "web-ui/tests/e2e/boardControl.spec.ts",
+      "web-ui/tests/e2e/flows.spec.ts",
+      "web-ui/tests/e2e/layoutInvariants.spec.ts",
+      "web-ui/tests/e2e/realmode.spec.ts",
+      "web-ui/tests/e2e/regressions.spec.ts",
+      "web-ui/tests/e2e/scenarios.spec.ts",
+      "web-ui/tests/e2e/settingsMobile.spec.ts",
+      "web-ui/tests/e2e/board-intake.spec.ts",
+      "web-ui/tests/e2e/board-orchestrator.spec.ts",
+    ];
+    const result = resolveAffectedTests(specs);
+    assert.deepEqual(result.uncoveredFiles, [], "Spec changes must not be flagged uncovered");
+    assert.deepEqual(result.ignoredFiles, [], "Spec changes must not be silently ignored");
+    for (const spec of specs) {
+      const expected = spec.replace(/^web-ui\//, "");
+      assert.ok(result.tests.includes(expected), `Expected ${expected} in mapped tests`);
+    }
+  });
+
+  it("maps scripts/llamacpp-standalone.js and supervisorControl.test.js to the supervisor suite", () => {
+    const result = resolveAffectedTests([
+      "scripts/llamacpp-standalone.js",
+      "scripts/tests/supervisorControl.test.js",
+    ]);
+    assert.deepEqual(result.uncoveredFiles, []);
+    assert.ok(
+      result.tests.includes("scripts/tests/supervisorControl.test.js"),
+      "supervisorControl.test.js must be wired into the gate"
+    );
+  });
+
   it("includes TypeScript typecheck stage in gate run", () => {
     const gateOutcome = runTestGate({
       changedFiles: ["web-ui/lib/toolParser.ts"],
@@ -156,6 +209,66 @@ describe("Phase C — Test Gate & Tiering Suite", () => {
     assert.ok(
       Array.isArray(gateOutcome.stages) && gateOutcome.stages.includes("tsc --noEmit"),
       "Gate outcome must include 'tsc --noEmit' in stages"
+    );
+  });
+
+  it("discoverAllTests returns the full on-disk test set, not a 7-file seed", () => {
+    const testDir = path.dirname(fileURLToPath(import.meta.url));
+    const all = discoverAllTests();
+
+    // Every web-ui/tests/*.test.ts on disk must be included
+    const diskUnit = fs
+      .readdirSync(testDir)
+      .filter((f) => f.endsWith(".test.ts"))
+      .map((f) => `tests/${f}`);
+    for (const t of diskUnit) {
+      assert.ok(all.includes(t), `--all discovery must include ${t}`);
+    }
+
+    // Every Playwright spec (tests/e2e + relocated tests-live specs) must be included
+    const diskSpecs = fs
+      .readdirSync(path.join(testDir, "e2e"))
+      .filter((f) => f.endsWith(".spec.ts"))
+      .map((f) => `tests/e2e/${f}`);
+    for (const s of diskSpecs) {
+      assert.ok(all.includes(s), `--all discovery must include ${s}`);
+    }
+
+    // The orphaned supervisor control suite must be included
+    assert.ok(
+      all.includes("scripts/tests/supervisorControl.test.js"),
+      "--all discovery must include scripts/tests/supervisorControl.test.js"
+    );
+
+    // Workspace suites must be included
+    assert.ok(all.includes("mcp-server:tests"), "--all must include mcp-server:tests");
+    assert.ok(all.includes("browser-mcp:tests"), "--all must include browser-mcp:tests");
+    assert.ok(all.includes("host-bridge:tests"), "--all must include host-bridge:tests");
+
+    // Ghost suites must never appear
+    for (const ghost of [
+      "tests/liveStatus.test.ts",
+      "tests/executionSummary.test.ts",
+      "tests/modelEval.test.ts",
+    ]) {
+      assert.ok(!all.includes(ghost), `Ghost suite ${ghost} must not be discovered`);
+    }
+  });
+
+  it("host-bridge package.json test script points at files that exist", () => {
+    const pkgPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../host-bridge/package.json"
+    );
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as { scripts: Record<string, string> };
+    const testScript = pkg.scripts.test ?? "";
+    assert.ok(
+      !testScript.includes("tests/**/*.test.ts"),
+      "host-bridge test script must not point at the nonexistent host-bridge/tests/ directory"
+    );
+    assert.ok(
+      testScript.includes("web-ui/tests"),
+      "host-bridge test script must run the real host-bridge suites living in web-ui/tests"
     );
   });
 });
