@@ -104,4 +104,99 @@ describe("Sprint 4 — Repository Hygiene & Root Clutter Suite", () => {
       `Found antigravity references in UI/docs:\n${JSON.stringify(violations, null, 2)}`
     );
   });
+
+  // Board item #57: personal names, local workstation paths, and banned vendor
+  // terms must not appear in tracked runtime code, metadata, eval artifacts,
+  // deploy manifests, docs, scripts, or test descriptions. Files that are
+  // detector pattern lists or intentional detection fixtures are allowlisted.
+  it("content hygiene: no personal names, local host user paths, or banned vendor terms in tracked runtime/metadata/eval/docs/test files", () => {
+    const tracked = execSync("git ls-files", { cwd: repoRoot, encoding: "utf8" })
+      .split(/\r?\n/)
+      .filter(Boolean);
+
+    const scopePrefixes = [
+      "web-ui/lib/",
+      "web-ui/app/",
+      "web-ui/components/",
+      "web-ui/tests/",
+      "web-ui/scripts/",
+      "host-bridge/",
+      "eval/",
+      "deploy/",
+      "docs/",
+      "scripts/",
+    ];
+    const scopeExact = ["README.md", "ARCHITECTURE.md", "package.json", "web-ui/package.json"];
+
+    // Allowlisted: this detector itself, reviewer-gate pattern lists and their
+    // detection fixtures, board-UI forbidden lists, repoMap's vendor-config
+    // ignore-directory entries, and path-confinement/fixture tests that
+    // intentionally exercise drive-letter host paths.
+    const allowlist = [
+      "web-ui/tests/repoHygiene.test.ts",
+      "web-ui/lib/board/reviewerGate.ts",
+      "web-ui/tests/reviewerGate.test.ts",
+      "web-ui/tests/boardUi.test.ts",
+      "web-ui/lib/subagents/repoMap.ts",
+      "web-ui/tests/activityTimeline.test.ts",
+      "web-ui/tests/boardDrainExecution.test.ts",
+      "web-ui/tests/flowMonitor.test.ts",
+      "web-ui/tests/hostFileRestriction.test.ts",
+      "web-ui/tests/uiuxAuditFixes.test.ts",
+      "web-ui/tests/conversationCompaction.test.ts",
+    ];
+
+    const targets = tracked.filter((file) => {
+      if (allowlist.includes(file)) return false;
+      if (file.endsWith(".lock") || file.endsWith(".lock.json")) return false;
+      if (file.startsWith("host-bridge/dist/")) return false;
+      return scopePrefixes.some((p) => file.startsWith(p)) || scopeExact.includes(file);
+    });
+
+    const personalPattern = /\bzack\b|\bmccolgan\b|zackm\b/i;
+    // Local workstation user-home paths (any drive letter + Users/Documents/AppData).
+    const hostPathPattern = /[A-Za-z]:[\\/](?:Users|Documents|AppData)[\\/]/i;
+    const vendorPattern =
+      /\b(claude|anthropic|chatgpt|gemini|copilot|windsurf|antigravity|codex|openai)\b/i;
+    // The ban targets vendor branding, not the OpenAI wire-format compatibility
+    // contract that the engine layer legitimately references.
+    const vendorExceptionPattern =
+      /openai[-\s]?compatible|normalizeOpenAIMessages|mock-openai-server|openai-server/i;
+    // Repo-origin identity URLs (CI badge, Helm chart home, PR-link fixtures)
+    // legitimately carry the GitHub owner slug; they are repo identity, not
+    // runtime personal-name leakage.
+    const repoIdentityExceptionPattern = /github\.com\/ZackMcColgan\/local-agentic-sandbox/i;
+
+    const violations: { file: string; line: number; kind: string; text: string }[] = [];
+    for (const file of targets) {
+      const abs = path.join(repoRoot, file);
+      if (!fs.existsSync(abs)) continue;
+      const content = fs.readFileSync(abs, "utf8");
+      const lines = content.split(/\r?\n/);
+      lines.forEach((lineText, idx) => {
+        const kinds: string[] = [];
+        if (personalPattern.test(lineText) && !repoIdentityExceptionPattern.test(lineText)) {
+          kinds.push("personal-name");
+        }
+        if (hostPathPattern.test(lineText)) kinds.push("local-host-path");
+        if (vendorPattern.test(lineText) && !vendorExceptionPattern.test(lineText)) {
+          kinds.push("banned-vendor-term");
+        }
+        if (kinds.length > 0) {
+          violations.push({
+            file,
+            line: idx + 1,
+            kind: kinds.join(","),
+            text: lineText.trim().slice(0, 120),
+          });
+        }
+      });
+    }
+
+    assert.deepEqual(
+      violations,
+      [],
+      `Found hygiene violations:\n${JSON.stringify(violations, null, 2)}`
+    );
+  });
 });

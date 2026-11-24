@@ -1404,7 +1404,7 @@ export class WorkerPool {
   }
 }
 
-/** Roster from configuration. Zack chooses models; defaults are only the documented fallback. */
+/** Roster from configuration. The Owner chooses models; defaults are only the documented fallback. */
 export function resolveModelRosterFromEnv(): ModelRosterConfig {
   return {
     planner: process.env.PLANNER_MODEL || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL,

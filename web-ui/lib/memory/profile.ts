@@ -232,7 +232,7 @@ export function extractDurablePreferences(
   const clean = text.trim();
   const results: Array<{ key: string; value: unknown; origin: "user-stated" | "corrected" }> = [];
 
-  // 1. Explicit name preferences: "only call me Zack", "call me Zack", "my name is Zack", "I go by Zack"
+  // 1. Explicit name preferences: "only call me Alex", "call me Alex", "my name is Alex", "I go by Alex"
   const nameMatch = clean.match(
     /(?:only\s+call\s+me|please\s+call\s+me|call\s+me|my\s+name\s+is|i\s+go\s+by)\s+([A-Z][a-zA-Z0-9_\-\.]+)/i
   );
