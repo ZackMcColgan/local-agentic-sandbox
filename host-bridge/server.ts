@@ -2,8 +2,12 @@ import http from "http";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { spawn, execSync } from "child_process";
 import { checkCommandDialect } from "./dialectGuard";
+import {
+  clampCommandOutput,
+  killPowerShellProcessTree,
+  spawnWrappedPowerShell,
+} from "./powershellRunner";
 import { isDestructiveHostAction } from "./classifier";
 import { verifyApprovalToken } from "./approvalToken";
 import { applyReplaceString } from "./replaceString";
@@ -566,6 +570,8 @@ export interface HostToolResult {
   error?: string;
   stdout?: string;
   stderr?: string;
+  output?: string;
+  exitCode?: number;
   [key: string]: unknown;
 }
 
@@ -601,11 +607,7 @@ export async function handleToolExecution(
     }
 
     return new Promise((resolve) => {
-      const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
-        cwd: effectiveCwd,
-        windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      const proc = spawnWrappedPowerShell(command, effectiveCwd);
 
       let stdout = "";
       let stderr = "";
@@ -622,32 +624,7 @@ export async function handleToolExecution(
 
       timer = setTimeout(() => {
         timedOut = true;
-        const pid = proc.pid;
-        if (pid) {
-          try {
-            execSync(`taskkill /PID ${pid} /T /F`, { stdio: "ignore" });
-          } catch {}
-          // Process tree survivor check
-          try {
-            const check = execSync(
-              `powershell.exe -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | ForEach-Object { $_.ProcessId }"`,
-              { encoding: "utf8", timeout: 3000 }
-            );
-            const pids = check
-              .trim()
-              .split(/\r?\n/)
-              .map((s) => s.trim())
-              .filter(Boolean);
-            for (const p of pids) {
-              try {
-                execSync(`taskkill /PID ${p} /T /F`, { stdio: "ignore" });
-              } catch {}
-            }
-          } catch {}
-        }
-        try {
-          proc.kill("SIGKILL");
-        } catch {}
+        killPowerShellProcessTree(proc);
       }, timeoutSeconds * 1000);
 
       proc.on("close", (code) => {
@@ -661,21 +638,29 @@ export async function handleToolExecution(
 
         const originalLength = combined.length;
         const truncated = originalLength > MAX_OUTPUT_CHARS;
-        const clampedOutput = truncated ? combined.slice(0, MAX_OUTPUT_CHARS) : combined;
+        const clampedOutput = clampCommandOutput(combined, MAX_OUTPUT_CHARS);
+        const clampedStdout = clampCommandOutput(stdout, MAX_OUTPUT_CHARS);
+        const clampedStderr = clampCommandOutput(stderr, MAX_OUTPUT_CHARS);
+        const exitCode = code ?? (code === null ? -1 : 0);
 
         if (timedOut) {
           resolve({
             success: false,
             timedOut: true,
             timeoutSeconds,
+            exitCode,
+            stdout: clampedStdout,
+            stderr: clampedStderr,
             output: clampedOutput,
             truncated,
             originalLength,
           });
         } else {
           resolve({
-            success: code === 0,
-            exitCode: code ?? (code === null ? -1 : 0),
+            success: exitCode === 0,
+            exitCode,
+            stdout: clampedStdout,
+            stderr: clampedStderr,
             output: clampedOutput,
             truncated,
             originalLength,
@@ -687,7 +672,10 @@ export async function handleToolExecution(
         if (timer) clearTimeout(timer);
         resolve({
           success: false,
+          exitCode: -1,
           error: err.message,
+          stdout: "",
+          stderr: "",
           output: "",
           truncated: false,
           originalLength: 0,

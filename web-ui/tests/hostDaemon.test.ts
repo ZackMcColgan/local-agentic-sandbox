@@ -434,6 +434,81 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
         }
       }
     });
+
+    it(
+      "U-F1/U-F2: PowerShell command writing to stderr with exit 0 succeeds even with $ErrorActionPreference = 'Stop', returns stdout/stderr/exitCode, and tail-preserves truncated output",
+      { skip: process.platform !== "win32" ? "Windows PowerShell test" : false },
+      async () => {
+        // 1. Native stderr with 2>&1 and $ErrorActionPreference = 'Stop' (exit 0)
+        const resStderr = await fetch(`${baseUrl}/execute`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Host-Runner-Secret": VALID_SECRET,
+            Host: `127.0.0.1:${TEST_PORT}`,
+          },
+          body: JSON.stringify({
+            tool: "host_run_powershell",
+            args: {
+              command:
+                "$ErrorActionPreference = 'Stop'; node -e \"console.error('progress: fetching origin')\" 2>&1",
+            },
+          }),
+        });
+        assert.equal(resStderr.status, 200);
+        const dataStderr = await resStderr.json();
+        assert.equal(dataStderr.success, true);
+        assert.equal(dataStderr.exitCode, 0);
+        assert.equal(typeof dataStderr.stdout, "string");
+        assert.equal(typeof dataStderr.stderr, "string");
+        assert.ok(dataStderr.stderr.includes("progress: fetching origin"));
+        assert.ok(dataStderr.output.includes("progress: fetching origin"));
+
+        // 2. Non-zero native exit code preserves exact exitCode and sets success: false
+        const resFail = await fetch(`${baseUrl}/execute`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Host-Runner-Secret": VALID_SECRET,
+            Host: `127.0.0.1:${TEST_PORT}`,
+          },
+          body: JSON.stringify({
+            tool: "host_run_powershell",
+            args: {
+              command:
+                "$ErrorActionPreference = 'Stop'; node -e \"console.error('fatal err'); process.exit(2)\" 2>&1",
+            },
+          }),
+        });
+        assert.equal(resFail.status, 200);
+        const dataFail = await resFail.json();
+        assert.equal(dataFail.success, false);
+        assert.equal(dataFail.exitCode, 2);
+        assert.ok(dataFail.stderr.includes("fatal err"));
+
+        // 3. Large output (>65536 chars) preserves tail errors
+        const resTail = await fetch(`${baseUrl}/execute`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Host-Runner-Secret": VALID_SECRET,
+            Host: `127.0.0.1:${TEST_PORT}`,
+          },
+          body: JSON.stringify({
+            tool: "host_run_powershell",
+            args: {
+              command:
+                "node -e \"console.log('HEAD_MARKER\\n' + 'x'.repeat(70000) + '\\nTAIL_FINAL_ERROR'); process.exit(1)\"",
+            },
+          }),
+        });
+        assert.equal(resTail.status, 200);
+        const dataTail = await resTail.json();
+        assert.equal(dataTail.success, false);
+        assert.equal(dataTail.truncated, true);
+        assert.ok(dataTail.output.includes("TAIL_FINAL_ERROR"));
+      }
+    );
   });
 
   describe(
