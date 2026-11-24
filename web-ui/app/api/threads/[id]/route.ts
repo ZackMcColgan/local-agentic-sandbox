@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import {
   ThreadStore,
@@ -8,7 +9,10 @@ import {
   clearTurnActive,
   abortActiveTurn,
   resolveThreadsDir,
+  type Thread,
+  type ThreadMessage,
 } from "@/lib/threads/threadStore";
+import { extractTraceError } from "@/lib/activityTimeline";
 import {
   OvernightSupervisor,
   createProductionStepExecutor,
@@ -223,10 +227,65 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
   })();
 }
 
+const HEAVY_TRACE_RESULT_THRESHOLD_CHARS = 512;
+
+function matchesIfNoneMatch(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  for (const rawToken of header.split(",")) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (token === "*") return true;
+    const normalized = token.replace(/^W\//i, "");
+    if (normalized === etag || `"${normalized.replace(/^"|"$/g, "")}"` === etag) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function stripHeavyTraceResults(thread: Thread): Thread {
+  let anyChanged = false;
+  const messages: ThreadMessage[] = (thread.messages || []).map((msg) => {
+    if (!Array.isArray(msg.traces) || msg.traces.length === 0) return msg;
+    let msgChanged = false;
+    const nextTraces = msg.traces.map((trace) => {
+      if (trace.result === undefined) return trace;
+      let serializedLen = 0;
+      if (typeof trace.result === "string") {
+        serializedLen = trace.result.length;
+      } else {
+        try {
+          serializedLen = JSON.stringify(trace.result)?.length ?? 0;
+        } catch {
+          serializedLen = HEAVY_TRACE_RESULT_THRESHOLD_CHARS + 1;
+        }
+      }
+      if (serializedLen <= HEAVY_TRACE_RESULT_THRESHOLD_CHARS) {
+        return trace;
+      }
+      msgChanged = true;
+      const traceWithErr = trace as typeof trace & { isError?: boolean };
+      const errSummary = extractTraceError(trace.result, traceWithErr.isError);
+      const { result: _omitted, ...rest } = trace;
+      return {
+        ...rest,
+        ...(errSummary && traceWithErr.isError === undefined ? { isError: true } : {}),
+      } as typeof trace;
+    });
+    if (!msgChanged) return msg;
+    anyChanged = true;
+    return { ...msg, traces: nextTraces };
+  });
+  return anyChanged ? { ...thread, messages } : thread;
+}
+
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const supervisor = getSupervisor();
     const { id } = await context.params;
+    const url = new URL(req.url);
+    const omitHeavyTraceResults = url.searchParams.get("omitHeavyTraceResults") === "1";
+
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
       // CHAT-PRESENCE: a turn may have just started before the thread file lands.
@@ -247,9 +306,38 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       }
     }
 
+    const activeTurn = getActiveTurn(id);
+    const lastMsg = thread.messages[thread.messages.length - 1];
+    const etagSource = [
+      thread.updatedAt || "",
+      String(thread.messages.length),
+      thread.status || "",
+      lastMsg?.id || "",
+      String(lastMsg?.content?.length ?? 0),
+      String(lastMsg?.traces?.length ?? 0),
+      lastMsg?.status || "",
+      activeTurn
+        ? `${activeTurn.status}:${activeTurn.lastActivityAtMs ?? activeTurn.startedAt}`
+        : "none",
+      task ? `${task.status}:${task.updatedAt || ""}` : "none",
+      omitHeavyTraceResults ? "compact" : "full",
+    ].join("|");
+    const etag = `"${crypto.createHash("sha1").update(etagSource).digest("hex").slice(0, 16)}"`;
+
+    const responseHeaders = {
+      ETag: etag,
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    };
+
+    if (matchesIfNoneMatch(req.headers.get("if-none-match"), etag)) {
+      return new NextResponse(null, { status: 304, headers: responseHeaders });
+    }
+
+    const responseThread = omitHeavyTraceResults ? stripHeavyTraceResults(thread) : thread;
+
     return NextResponse.json(
-      { thread, task, activeTurn: getActiveTurn(id) },
-      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+      { thread: responseThread, task, activeTurn },
+      { headers: responseHeaders }
     );
   } catch (err: unknown) {
     return NextResponse.json(

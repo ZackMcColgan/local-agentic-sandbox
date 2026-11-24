@@ -25,7 +25,6 @@ export const metadata: Metadata = {
     "Zero-Trust",
     "Docker Sandbox",
   ],
-  authors: [{ name: "Zack McColgan" }],
   icons: { icon: "/icon.svg", shortcut: "/icon.svg" },
 };
 
@@ -47,7 +46,7 @@ export default function RootLayout({
                 try {
                   var urlParams = new URLSearchParams(window.location.search);
                   var queryTheme = urlParams.get('theme');
-                  var saved = queryTheme || localStorage.getItem('app-theme') || localStorage.getItem('theme');
+                  var saved = queryTheme || localStorage.getItem('theme') || localStorage.getItem('app-theme');
                   var isDark = saved ? saved === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
                   if (isDark) {
                     document.documentElement.classList.add('dark');

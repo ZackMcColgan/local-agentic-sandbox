@@ -242,7 +242,7 @@ describe("Flash 3.8 Frontend Shakeout — Fix 5: UI-P1-1 Honest BuildsView Gate 
 });
 
 describe("Flash 3.8 Frontend Shakeout — Fix 6: UI-P1-2 Theme Synchronization & Key Consistency", () => {
-  it("layout.tsx and morning-report page.tsx check both app-theme and theme keys", () => {
+  it("layout.tsx and morning-report page.tsx check theme before app-theme consistently", () => {
     const layoutFile = path.resolve(findRepoRoot(), "web-ui/app/layout.tsx");
     const mrFile = path.resolve(findRepoRoot(), "web-ui/app/morning-report/page.tsx");
     const layoutContent = fs.readFileSync(layoutFile, "utf8");
@@ -250,14 +250,14 @@ describe("Flash 3.8 Frontend Shakeout — Fix 6: UI-P1-2 Theme Synchronization &
 
     assert.match(
       layoutContent,
-      /localStorage\.getItem\(['"]app-theme['"]\)\s*\|\|\s*localStorage\.getItem\(['"]theme['"]\)/,
-      "layout.tsx must check both app-theme and theme localStorage keys"
+      /localStorage\.getItem\(['"]theme['"]\)\s*\|\|\s*localStorage\.getItem\(['"]app-theme['"]\)/,
+      "layout.tsx must check theme before app-theme localStorage key"
     );
 
     assert.match(
       mrContent,
-      /localStorage\.getItem\(['"]app-theme['"]\)\s*\|\|\s*localStorage\.getItem\(['"]theme['"]\)/,
-      "morning-report/page.tsx must check both app-theme and theme localStorage keys"
+      /localStorage\.getItem\(['"]theme['"]\)\s*\|\|\s*localStorage\.getItem\(['"]app-theme['"]\)/,
+      "morning-report/page.tsx must check theme before app-theme localStorage key"
     );
   });
 });

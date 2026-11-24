@@ -106,7 +106,7 @@ describe("parity PR4 — canvas diff (board: single gutter, tinted rows, rail he
       rows.includes("bg-[rgba(248,113,113,0.12)]"),
       "board del-row tint rgba(248,113,113,.12)"
     );
-    assert.ok(rows.includes("text-[#7dd3fc]"), "board hunk text is #7dd3fc");
+    assert.ok(rows.includes("text-zinc-700 dark:text-zinc-300"), "hunk text uses neutral zinc");
     assert.ok(rows.includes("lg:text-[12.3px]"), "board desktop diff type is 12.3px");
     assert.ok(rows.includes("lg:leading-[1.75]"), "board desktop diff leading is 1.75");
   });
