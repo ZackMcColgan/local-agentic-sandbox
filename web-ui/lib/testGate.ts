@@ -1743,6 +1743,20 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("wireDeadActions.test.ts") ||
+      p.includes("components/ChatStream") ||
+      p.includes("app/page.tsx") ||
+      p.includes("app/api/threads/[id]/route") ||
+      p.includes("app/api/threads/[id]/compact/route") ||
+      p.includes("app/api/projects/[id]/tasks/route") ||
+      p.includes("lib/projects/projectRunner") ||
+      p.includes("lib/projects/projectStore") ||
+      p.includes("components/ProjectsView") ||
+      p.includes("components/projects/ProjectTaskList"),
+    tests: ["tests/wireDeadActions.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/apiJson") ||
       p.includes("lib/subagents/scheduler") ||
       p.includes("lib/threads/threadStore") ||

@@ -1040,6 +1040,30 @@ export default function Home() {
   const currentThread = threads.find((t) => t.id === selectedThreadId) || null;
   const plannedFiles = activeTask?.milestones?.flatMap((m) => m.plannedFiles || []) || [];
 
+  const persistThreadModel = (model: string, effort: "low" | "medium" | "xhigh") => {
+    if (!selectedThreadId) return;
+    setThreads((prev) =>
+      prev.map((t) => (t.id === selectedThreadId ? { ...t, model, reasoningEffort: effort } : t))
+    );
+    fetch(`/api/threads/${encodeURIComponent(selectedThreadId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "setModel",
+        model,
+        reasoningEffort: effort,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data?.thread) {
+          handleThreadUpdated(data.thread);
+        }
+      })
+      .catch(() => {});
+  };
+
   const handleModelChange = (m: string) => {
     setSelectedModel(m);
     try {
@@ -1047,13 +1071,7 @@ export default function Home() {
         localStorage.setItem("preferred_model", m);
       }
     } catch {}
-    if (selectedThreadId) {
-      fetch(`/api/threads/${selectedThreadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setModel", model: m, reasoningEffort }),
-      }).catch(() => {});
-    }
+    persistThreadModel(m, reasoningEffort);
   };
 
   const handleReasoningChange = (e: "low" | "medium" | "xhigh") => {
@@ -1063,17 +1081,7 @@ export default function Home() {
         localStorage.setItem("las.reasoningEffort", e);
       }
     } catch {}
-    if (selectedThreadId) {
-      fetch(`/api/threads/${selectedThreadId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "setModel",
-          model: selectedModel,
-          reasoningEffort: e,
-        }),
-      }).catch(() => {});
-    }
+    persistThreadModel(selectedModel, e);
   };
 
   const handleThreadUpdated = (updatedThread: Partial<Thread> & { id: string }) => {
@@ -1107,11 +1115,15 @@ export default function Home() {
   const handleToggleAllowlist: React.ComponentProps<
     typeof ProjectsView
   >["onToggleAllowlist"] = async (id, allowlisted) => {
-    await fetch("/api/projects", {
+    const res = await fetch("/api/projects", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, allowlisted }),
     });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
     await fetchProjects();
   };
 
@@ -1121,12 +1133,14 @@ export default function Home() {
     const res = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
-    if (res.ok) {
-      if (selectedProjectId === id) {
-        setSelectedProjectId(null);
-      }
-      await fetchProjects();
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
     }
+    if (selectedProjectId === id) {
+      setSelectedProjectId(null);
+    }
+    await fetchProjects();
   };
 
   return (

@@ -42,6 +42,15 @@ interface BrowserFolderItem {
   toolchain?: string;
 }
 
+async function extractHttpError(res: Response, fallbackMessage: string): Promise<Error> {
+  const data = await res.json().catch(() => ({}));
+  const msg =
+    data && typeof data === "object" && "error" in data && typeof data.error === "string"
+      ? data.error
+      : "";
+  return new Error(msg || `${fallbackMessage} (HTTP ${res.status})`);
+}
+
 export function ProjectsView({
   projects = [],
   selectedProjectId,
@@ -62,6 +71,9 @@ export function ProjectsView({
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [projectActionError, setProjectActionError] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [taskSuccess, setTaskSuccess] = useState<string | null>(null);
 
   // Registration Form State
   const [formName, setFormName] = useState("");
@@ -85,14 +97,16 @@ export function ProjectsView({
     try {
       setIsBrowserLoading(true);
       const res = await fetch(`/api/projects/browse?subpath=${encodeURIComponent(sub)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setBrowserItems(data.items || []);
-        setBrowserParentPath(data.parentPath || null);
-        setBrowserSubpath(data.relPath === "." ? "" : data.relPath);
+      if (!res.ok) {
+        throw await extractHttpError(res, "Failed to browse filesystem");
       }
+      const data = await res.json();
+      setBrowserItems(data.items || []);
+      setBrowserParentPath(data.parentPath || null);
+      setBrowserSubpath(data.relPath === "." ? "" : data.relPath);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      setFormError(msg);
       console.warn("Failed to browse filesystem:", msg);
     } finally {
       setIsBrowserLoading(false);
@@ -305,16 +319,20 @@ export function ProjectsView({
   const handleAcceptFile = async (filePath: string) => {
     if (!activeProject) return;
     setActionInProgress(filePath);
+    setDiffError(null);
     try {
       if (onAcceptFile) {
         await onAcceptFile(filePath);
       } else {
         const tId = diffTaskId || activeProject.active_task_id;
-        await fetch(`/api/projects/${activeProject.project_id}/diff`, {
+        const res = await fetch(`/api/projects/${activeProject.project_id}/diff`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "accept", taskId: tId, filePath }),
         });
+        if (!res.ok) {
+          throw await extractHttpError(res, "Failed to accept file");
+        }
       }
       setDiffItems((prev) =>
         prev.map((f) => (f.filePath === filePath ? { ...f, status: "accepted" } : f))
@@ -329,16 +347,20 @@ export function ProjectsView({
   const handleRevertFile = async (filePath: string) => {
     if (!activeProject) return;
     setActionInProgress(filePath);
+    setDiffError(null);
     try {
       if (onRevertFile) {
         await onRevertFile(filePath);
       } else {
         const tId = diffTaskId || activeProject.active_task_id;
-        await fetch(`/api/projects/${activeProject.project_id}/diff`, {
+        const res = await fetch(`/api/projects/${activeProject.project_id}/diff`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "revert", taskId: tId, filePath, baseSha: diffBaseSha }),
         });
+        if (!res.ok) {
+          throw await extractHttpError(res, "Failed to revert file");
+        }
       }
       setDiffItems((prev) =>
         prev.map((f) => (f.filePath === filePath ? { ...f, status: "reverted" } : f))
@@ -354,12 +376,16 @@ export function ProjectsView({
     if (!activeProject) return;
     const tId = diffTaskId || activeProject.active_task_id;
     if (!tId) return;
+    setDiffError(null);
     try {
-      await fetch(`/api/projects/${activeProject.project_id}/diff`, {
+      const res = await fetch(`/api/projects/${activeProject.project_id}/diff`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "finalize", taskId: tId }),
       });
+      if (!res.ok) {
+        throw await extractHttpError(res, "Failed to finalize review");
+      }
       setReviewFinalized(true);
     } catch (err: unknown) {
       setDiffError((err instanceof Error ? err.message : undefined) || "Failed to finalize review");
@@ -479,15 +505,25 @@ export function ProjectsView({
   };
 
   const handleToggle = async (p: ProjectRecord) => {
+    setProjectActionError(null);
     const nextVal = p.allowlisted === 1 ? false : true;
-    if (onToggleAllowlist) {
-      await onToggleAllowlist(p.project_id, nextVal);
-    } else {
-      await fetch("/api/projects", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: p.project_id, allowlisted: nextVal }),
-      });
+    try {
+      if (onToggleAllowlist) {
+        await onToggleAllowlist(p.project_id, nextVal);
+      } else {
+        const res = await fetch("/api/projects", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: p.project_id, allowlisted: nextVal }),
+        });
+        if (!res.ok) {
+          throw await extractHttpError(res, "Failed to update project allowlist");
+        }
+      }
+    } catch (err: unknown) {
+      setProjectActionError(
+        (err instanceof Error ? err.message : undefined) || "Failed to update project allowlist"
+      );
     }
   };
 
@@ -525,6 +561,23 @@ export function ProjectsView({
           </button>
         </div>
 
+        {/* Project Action Error Banner */}
+        {projectActionError && (
+          <div
+            role="alert"
+            className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs flex items-center justify-between gap-2"
+          >
+            <span>{projectActionError}</span>
+            <button
+              type="button"
+              onClick={() => setProjectActionError(null)}
+              className="text-rose-700 dark:text-rose-300 hover:underline font-semibold shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Project Selector Chips / Cards */}
         <ProjectTree
           projects={projects}
@@ -535,6 +588,8 @@ export function ProjectsView({
           onOpenRegisterModal={() => setIsRegisterModalOpen(true)}
           onSelectProject={(projectId) => {
             setActiveProjectId(projectId);
+            setTaskError(null);
+            setTaskSuccess(null);
             if (onSelectProject) onSelectProject(projectId);
           }}
           onToggleAllowlist={handleToggle}
@@ -542,12 +597,17 @@ export function ProjectsView({
           onCancelDelete={() => setConfirmDeleteProjectId(null)}
           onConfirmDelete={async (projectId) => {
             if (!onDeleteProject) return;
+            setProjectActionError(null);
             setDeletingProjectId(projectId);
             try {
               await onDeleteProject(projectId);
               if (activeProjectId === projectId) {
                 setActiveProjectId(null);
               }
+            } catch (err: unknown) {
+              setProjectActionError(
+                (err instanceof Error ? err.message : undefined) || "Failed to delete project"
+              );
             } finally {
               setDeletingProjectId(null);
               setConfirmDeleteProjectId(null);
@@ -639,19 +699,40 @@ export function ProjectsView({
                 projectName={activeProject.name}
                 baseBranch={activeProject.base_branch}
                 activeTaskId={activeProject.active_task_id}
+                taskError={taskError}
+                taskSuccess={taskSuccess}
                 onSubmitTask={async (prompt, mode) => {
-                  if (onRunOvernightTask) {
-                    await onRunOvernightTask(activeProject.project_id, prompt, mode);
-                  } else {
-                    await fetch(`/api/projects/${activeProject.project_id}/tasks`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(
-                        mode === "schedule"
-                          ? { prompt, mode: "schedule", scheduleTime: "02:00" }
-                          : { prompt, mode: "now" }
-                      ),
-                    });
+                  setTaskError(null);
+                  setTaskSuccess(null);
+                  try {
+                    if (onRunOvernightTask) {
+                      await onRunOvernightTask(activeProject.project_id, prompt, mode);
+                    } else {
+                      const res = await fetch(`/api/projects/${activeProject.project_id}/tasks`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(
+                          mode === "schedule"
+                            ? { prompt, mode: "schedule", scheduleTime: "02:00" }
+                            : { prompt, mode: "now" }
+                        ),
+                      });
+                      if (!res.ok) {
+                        throw await extractHttpError(res, "Failed to submit project task");
+                      }
+                      const data = await res.json().catch(() => ({}));
+                      if (mode === "schedule" && data.nextRun) {
+                        setTaskSuccess(`Scheduled for ${new Date(data.nextRun).toLocaleString()}`);
+                      } else if (data.task?.task_id) {
+                        setTaskSuccess(`Started task ${data.task.task_id}`);
+                      }
+                    }
+                  } catch (err: unknown) {
+                    const msg =
+                      (err instanceof Error ? err.message : undefined) ||
+                      "Failed to submit project task";
+                    setTaskError(msg);
+                    throw err;
                   }
                 }}
               />
