@@ -293,7 +293,7 @@ describe("Board #130 — estimateTokens measured once per round (Perf P6)", () =
         messages: msgs,
         actualTokens: estimateTokens(msgs),
       });
-      yield { message: { content: "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>" } };
+      yield { message: { content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' } };
     };
 
     const result = await runChatToolLoop({
