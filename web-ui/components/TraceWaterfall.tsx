@@ -60,27 +60,27 @@ const SPAN_CONFIG: Record<
   },
   "router.triage": {
     label: "Router Triage (Flash)",
-    color: "#7c3aed",
-    bgLight: "bg-purple-50",
-    bgDark: "bg-purple-950/40",
-    borderLight: "border-purple-300",
-    borderDark: "border-purple-600/40",
+    color: "#10b981",
+    bgLight: "bg-emerald-50",
+    bgDark: "bg-emerald-950/40",
+    borderLight: "border-emerald-300",
+    borderDark: "border-emerald-600/40",
   },
   "model.reasoning": {
     label: "Model Reasoning / Thought",
-    color: "#d97706",
-    bgLight: "bg-amber-50",
-    bgDark: "bg-amber-950/40",
-    borderLight: "border-amber-300",
-    borderDark: "border-amber-600/40",
+    color: "#71717a",
+    bgLight: "bg-zinc-50",
+    bgDark: "bg-zinc-900/40",
+    borderLight: "border-zinc-300",
+    borderDark: "border-zinc-600/40",
   },
   "mcp.tool_call": {
     label: "MCP Tool Call Dispatch",
-    color: "#0284c7",
-    bgLight: "bg-sky-50",
-    bgDark: "bg-sky-950/40",
-    borderLight: "border-sky-300",
-    borderDark: "border-sky-600/40",
+    color: "#10b981",
+    bgLight: "bg-emerald-50",
+    bgDark: "bg-emerald-950/40",
+    borderLight: "border-emerald-300",
+    borderDark: "border-emerald-600/40",
   },
   "sandbox.bash_exec": {
     label: "Sandbox Bash / Pytest Exec",
@@ -226,7 +226,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
         {/* Spans List */}
         <div className="divide-y divide-slate-100 dark:divide-zinc-800/60">
           {spans.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-400">
+            <div className="py-12 text-center text-xs text-slate-600 dark:text-zinc-400">
               No OpenTelemetry spans recorded yet. Trigger a query or command in chat to stream live
               distributed spans.
             </div>
@@ -263,9 +263,9 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                     {/* Span Title & Chevron */}
                     <div className="w-1/3 min-w-[120px] flex items-center gap-1.5 pr-2 truncate">
                       {isExpanded ? (
-                        <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                        <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-slate-600 dark:text-zinc-400" />
                       ) : (
-                        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-slate-600 dark:text-zinc-400" />
                       )}
                       {span.status === "ok" ? (
                         <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />
@@ -337,7 +337,7 @@ export const TraceWaterfall: React.FC<TraceWaterfallProps> = ({ sessionId }) => 
                           <span className="font-semibold block text-slate-700 dark:text-zinc-300 mb-1">
                             Attributes:
                           </span>
-                          <pre className="p-2 rounded bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 font-mono text-[10px] overflow-x-auto text-slate-800 dark:text-zinc-200">
+                          <pre className="p-2 rounded bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 font-mono text-[10px] max-h-64 overflow-y-auto overflow-x-auto overscroll-contain text-slate-800 dark:text-zinc-200">
                             {JSON.stringify(span.attributes, null, 2)}
                           </pre>
                         </div>

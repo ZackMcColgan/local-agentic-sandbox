@@ -53,11 +53,11 @@ describe("client import boundary: components never value-import server board sto
       const src = fs.readFileSync(path.join(componentsDir, file), "utf8");
       for (const mod of serverModules) {
         const valueImport = new RegExp(
-          `import\\s+(?!type\\b)[^;]*from\\s+["']${mod.replace(/\//g, "\\/")}["']`,
+          `import\\s+(?!type\\b)[^;]*from\\s+["']${mod.replace(/\//g, "\\/")}["']`
         );
         assert.ok(
           !valueImport.test(src),
-          `${file} must not value-import ${mod}; use import type or a client-safe module`,
+          `${file} must not value-import ${mod}; use import type or a client-safe module`
         );
       }
     }
@@ -67,7 +67,7 @@ describe("client import boundary: components never value-import server board sto
     const src = fs.readFileSync(path.resolve(__dirname, "../components/BuildsView.tsx"), "utf8");
     assert.ok(
       src.includes('from "@/lib/board/threadLink"'),
-      "BuildsView.tsx must import extractThreadIdFromLink from lib/board/threadLink",
+      "BuildsView.tsx must import extractThreadIdFromLink from lib/board/threadLink"
     );
   });
 });

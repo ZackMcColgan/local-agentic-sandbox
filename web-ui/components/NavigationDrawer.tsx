@@ -502,7 +502,7 @@ export function NavigationDrawer({
                             setActionSheetThread(thread);
                           }
                         }}
-                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-xl text-stone-400 hover:text-stone-800 dark:hover:text-stone-100 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors"
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-xl text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/60 dark:hover:bg-white/[0.08] transition-colors"
                         title="Session actions"
                       >
                         <MoreHorizontal className="h-4 w-4" />
@@ -565,7 +565,7 @@ export function NavigationDrawer({
                   setActionSheetThread(null);
                   lastActiveElementRef.current?.focus();
                 }}
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1 rounded-full text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800"
                 aria-label="Close action sheet"
               >
                 <X className="h-4 w-4" />

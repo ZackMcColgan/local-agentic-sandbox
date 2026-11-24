@@ -65,4 +65,62 @@ describe("B-8: Scheduler.executeScheduledRun uses generatePlanSpec", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("R7: executeScheduledRun re-reads schedules.json before saving so mid-run edits are preserved", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "r7-sched-rmw-"));
+    try {
+      const scheduler = new UnattendedScheduler({ workspaceDir: tmpDir });
+      const sched = {
+        id: "sched-rmw-1",
+        cronExpression: "0 2 * * *",
+        taskDescription: "Initial description",
+        enabled: true,
+        createdAt: new Date().toISOString(),
+        nextRun: new Date().toISOString(),
+      };
+      scheduler.saveSchedules([sched]);
+
+      await scheduler.executeScheduledRun(sched.id, {
+        planGenerator: async (input: { goal: string }) => ({
+          taskId: "rmw-task-1",
+          goal: input.goal,
+          toolchain: "node:22",
+          milestones: [
+            {
+              id: "M1",
+              title: "Step 1",
+              description: "Step 1",
+              acceptanceCriteria: [],
+              status: "pending",
+              builderIterations: 0,
+              criticRounds: 0,
+            },
+          ],
+        }),
+        runner: async (m: Record<string, unknown>) => {
+          // Mid-run external edit: update taskDescription of sched-rmw-1 and add sched-rmw-2
+          const current = scheduler.loadSchedules();
+          current[0].taskDescription = "Updated mid-run description";
+          current.push({
+            id: "sched-rmw-2",
+            cronExpression: "0 4 * * *",
+            taskDescription: "Added mid-run",
+            enabled: true,
+            createdAt: new Date().toISOString(),
+            nextRun: new Date().toISOString(),
+          });
+          scheduler.saveSchedules(current);
+          return { ...m, status: "completed" };
+        },
+      } as unknown as Parameters<typeof scheduler.executeScheduledRun>[1]);
+
+      const after = scheduler.loadSchedules();
+      assert.equal(after.length, 2, "mid-run added schedule must be preserved");
+      assert.equal(after[0].taskDescription, "Updated mid-run description");
+      assert.ok(after[0].lastRun, "lastRun must still be updated");
+      assert.equal(after[1].id, "sched-rmw-2");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -23,17 +23,18 @@ function around(src: string, marker: string, before: number, after: number): str
   return src.slice(Math.max(0, i - before), i + after);
 }
 
-describe("parity PR2 — brief bubble (board: sky tint, 16px radius, footer toggle row)", () => {
-  it("bubble uses the board's exact dark sky tokens and 16px radius", () => {
+describe("parity PR2 — brief bubble (board: emerald tint, 16px radius, footer toggle row)", () => {
+  it("bubble uses the locked emerald tokens and 16px radius", () => {
     const bubble = segment(chatStream, "User Bubble", 800);
     assert.ok(bubble.includes("rounded-2xl"), "board radius is 16px (rounded-2xl)");
     assert.ok(
-      bubble.includes("dark:bg-[rgba(14,116,144,0.18)]"),
-      "board bubble bg rgba(14,116,144,.18)"
+      bubble.includes("dark:bg-[rgba(16,185,129,0.14)]"),
+      "board bubble bg rgba(16,185,129,.14)"
     );
     assert.ok(
-      bubble.includes("dark:border-[rgba(56,189,248,0.32)]"),
-      "board bubble border rgba(56,189,248,.32)"
+      bubble.includes("dark:border-[rgba(16,189,129,0.32)]") ||
+        bubble.includes("dark:border-[rgba(16,185,129,0.32)]"),
+      "board bubble border rgba(16,185,129,.32)"
     );
     assert.ok(!bubble.includes("rounded-3xl"), "the old 24px radius is gone");
   });
@@ -44,8 +45,8 @@ describe("parity PR2 — brief bubble (board: sky tint, 16px radius, footer togg
     assert.ok(toggle.includes("justify-center"), "toggle row is centered");
     assert.ok(toggle.includes("chars)"), "toggle label carries the brief char count");
     assert.ok(
-      toggle.includes("dark:text-[#bae6fd]"),
-      "toggle label uses the board's pale sky text in dark mode"
+      toggle.includes("dark:text-emerald-300"),
+      "toggle label uses emerald text in dark mode"
     );
   });
 });

@@ -140,7 +140,7 @@ describe("turnSpeed — generation timing, tok/s, and header now-line", () => {
     assert.equal(state.tokPerSecLabel, null);
   });
 
-  it("Fix 1: emits amber stall segment on now-line only while streaming and stalled (>45s silent)", () => {
+  it("Fix 1: emits rose stall segment on now-line only while streaming and stalled (>45s silent)", () => {
     const NOW = 1_700_000_000_000;
     const stalled = deriveNowLineState({
       hasRunTurn: true,
@@ -166,8 +166,8 @@ describe("turnSpeed — generation timing, tok/s, and header now-line", () => {
     );
     assert.ok(stalledHtml.includes('data-testid="now-line-stalled"'));
     assert.ok(stalledHtml.includes("Stalled · no heartbeat 1730s"));
-    assert.ok(stalledHtml.includes("text-amber-700"));
-    assert.ok(stalledHtml.includes("dark:text-amber-400"));
+    assert.ok(stalledHtml.includes("text-rose-700"));
+    assert.ok(stalledHtml.includes("dark:text-rose-400"));
 
     const live = deriveNowLineState({
       hasRunTurn: true,

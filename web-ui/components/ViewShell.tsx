@@ -11,7 +11,11 @@ import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView, postMorningReportFlagAction } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
+import {
+  Thread,
+  type ActiveTurnInfo,
+  type ThreadCompactionBoundary,
+} from "@/lib/threads/threadStore";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   ArrowLeft,
@@ -77,6 +81,8 @@ export interface ViewShellProps {
   currentThread: Thread | null;
   activeTurn?: ActiveTurnInfo | null;
   threadUpdatedAt?: string | null;
+  threadCompaction?: ThreadCompactionBoundary | null;
+  onLocalSseOpenChange?: (open: boolean) => void;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   draftComposerPrompt: string | null;
@@ -174,6 +180,8 @@ export function ViewShell({
   currentThread,
   activeTurn,
   threadUpdatedAt,
+  threadCompaction,
+  onLocalSseOpenChange,
   messages,
   setMessages,
   draftComposerPrompt,
@@ -443,6 +451,8 @@ export function ViewShell({
                   onTracesUpdate={onTracesUpdate}
                   liveTraces={traces}
                   isActiveView={activeNavView === "sessions" && viewMode === "unified"}
+                  onLocalSseOpenChange={onLocalSseOpenChange}
+                  threadCompaction={threadCompaction}
                   activeModel={selectedModel}
                   agentMode={agentMode}
                   reasoningEffort={reasoningEffort}
@@ -531,7 +541,7 @@ export function ViewShell({
                     </span>
                   )}
                   {activeTask?.status === "active" && (
-                    <span className="badge badge-info text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20">
+                    <span className="badge badge-info text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                       Running
                     </span>
                   )}
@@ -627,14 +637,16 @@ export function ViewShell({
                         : "");
 
                     return (
-                      <div className="p-3 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-slate-800">
-                        <div className="text-emerald-400 font-bold mb-2">
+                      <div className="p-3 bg-zinc-50 dark:bg-black text-zinc-900 dark:text-slate-100 rounded-xl font-mono text-xs overflow-auto h-full max-h-[500px] whitespace-pre-wrap leading-relaxed border border-zinc-200 dark:border-zinc-800">
+                        <div className="text-emerald-700 dark:text-emerald-400 font-bold mb-2">
                           ● Active Execution Output
                         </div>
                         {outputText ? (
                           <div>{outputText}</div>
                         ) : (
-                          <div className="text-slate-400">No test output recorded yet.</div>
+                          <div className="text-zinc-600 dark:text-zinc-400">
+                            No test output recorded yet.
+                          </div>
                         )}
                       </div>
                     );
@@ -692,7 +704,7 @@ export function ViewShell({
                                   <button
                                     type="button"
                                     onClick={() => onSetSelectedWorkspaceFile(null)}
-                                    className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                                    className="text-[10px] text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                                   >
                                     Close
                                   </button>
@@ -796,7 +808,7 @@ export function ViewShell({
                 </div>
                 <a
                   href="/morning-report"
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
                 >
                   Permalink (/morning-report)
                 </a>

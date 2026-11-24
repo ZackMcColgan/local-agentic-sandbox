@@ -3,11 +3,25 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { BOARD_SEED_ITEMS } from "./boardSeed";
 import { extractThreadIdFromLink } from "./threadLink";
+import { atomicWriteFileSync } from "../fsAtomic";
 
 export { extractThreadIdFromLink };
 
 export type BoardStatus = "queued" | "working" | "pr-open" | "parked" | "needs-attention" | "done";
 export type BoardSource = "assistant" | "manual";
+
+export const VALID_BOARD_STATUSES: ReadonlySet<BoardStatus> = new Set([
+  "queued",
+  "working",
+  "pr-open",
+  "parked",
+  "needs-attention",
+  "done",
+]);
+
+export function isValidBoardStatus(value: unknown): value is BoardStatus {
+  return typeof value === "string" && VALID_BOARD_STATUSES.has(value as BoardStatus);
+}
 
 export interface BoardEvidence {
   prNumber?: number;
@@ -40,6 +54,7 @@ export interface BoardItem {
   threadLink?: string;
   handoff?: BoardHandoff;
   autoResumeCount?: number;
+  chunkRequeueCount?: number;
   sprint?: string;
   createdAt: string;
   updatedAt: string;
@@ -61,6 +76,7 @@ export interface CreateBoardItemInput {
   threadLink?: string;
   handoff?: BoardHandoff;
   autoResumeCount?: number;
+  chunkRequeueCount?: number;
   sprint?: string;
 }
 
@@ -71,12 +87,13 @@ export interface UpdateBoardItemInput {
   dependencies?: string[];
   allowlist?: string[];
   status?: BoardStatus;
-  parkedReason?: string;
-  needsAttention?: boolean;
-  evidence?: BoardEvidence;
+  parkedReason?: string | null;
+  needsAttention?: boolean | null;
+  evidence?: BoardEvidence | null;
   threadLink?: string;
   handoff?: BoardHandoff | null;
-  autoResumeCount?: number;
+  autoResumeCount?: number | null;
+  chunkRequeueCount?: number | null;
   sprint?: string;
 }
 
@@ -169,14 +186,22 @@ export class BoardStore {
     this.migrateIfNeeded();
   }
 
+  getBoardDir(): string {
+    return this.boardDir;
+  }
+
   private migrateIfNeeded(): void {
     if (!fs.existsSync(this.filePath)) return;
     let currentVersion = 1;
+    let existingMeta: Record<string, unknown> = {};
     if (fs.existsSync(this.metaPath)) {
       try {
-        const meta = JSON.parse(fs.readFileSync(this.metaPath, "utf8")) as { version?: number };
-        if (typeof meta.version === "number") {
-          currentVersion = meta.version;
+        const parsed = JSON.parse(fs.readFileSync(this.metaPath, "utf8"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          existingMeta = parsed as Record<string, unknown>;
+          if (typeof existingMeta.version === "number") {
+            currentVersion = existingMeta.version;
+          }
         }
       } catch {
         // Ignore corrupt meta and run migration
@@ -206,12 +231,12 @@ export class BoardStore {
       return item;
     });
     if (changed) {
-      fs.writeFileSync(this.filePath, JSON.stringify(migrated, null, 2), "utf8");
+      atomicWriteFileSync(this.filePath, JSON.stringify(migrated, null, 2), 0o660);
     }
-    fs.writeFileSync(
+    atomicWriteFileSync(
       this.metaPath,
-      JSON.stringify({ version: BOARD_STORE_VERSION }, null, 2),
-      "utf8"
+      JSON.stringify({ ...existingMeta, version: BOARD_STORE_VERSION }, null, 2),
+      0o660
     );
   }
 
@@ -226,10 +251,7 @@ export class BoardStore {
   }
 
   private writeAll(items: BoardItem[]): void {
-    fs.writeFileSync(this.filePath, JSON.stringify(items, null, 2), {
-      encoding: "utf8",
-      mode: 0o660,
-    });
+    atomicWriteFileSync(this.filePath, JSON.stringify(items, null, 2), 0o660);
   }
 
   list(): BoardItem[] {
@@ -255,6 +277,9 @@ export class BoardStore {
     }
 
     const status: BoardStatus = input.status ?? "queued";
+    if (!isValidBoardStatus(status)) {
+      throw new Error(`Invalid board status: ${String(status)}`);
+    }
     if (status === "parked" && (!input.parkedReason || !input.parkedReason.trim())) {
       throw new Error("Parked board item requires a reason string");
     }
@@ -290,6 +315,9 @@ export class BoardStore {
       ...(typeof input.autoResumeCount === "number"
         ? { autoResumeCount: input.autoResumeCount }
         : {}),
+      ...(typeof input.chunkRequeueCount === "number"
+        ? { chunkRequeueCount: input.chunkRequeueCount }
+        : {}),
       ...(input.sprint ? { sprint: input.sprint } : {}),
       createdAt: now,
       updatedAt: now,
@@ -301,6 +329,10 @@ export class BoardStore {
   }
 
   update(id: string, patch: UpdateBoardItemInput): BoardItem {
+    if (patch.status !== undefined && !isValidBoardStatus(patch.status)) {
+      throw new Error(`Invalid board status: ${String(patch.status)}`);
+    }
+
     const items = this.readAll();
     const idx = items.findIndex((i) => i.id === id);
     if (idx === -1) {
@@ -309,19 +341,29 @@ export class BoardStore {
 
     const current = items[idx];
     const nextStatus = patch.status ?? current.status;
-    const nextReason = patch.parkedReason !== undefined ? patch.parkedReason : current.parkedReason;
+    const isTransitionToClear =
+      patch.status === "working" || patch.status === "done" || patch.status === "queued";
+
+    const nextReason =
+      patch.parkedReason === null
+        ? undefined
+        : patch.parkedReason !== undefined
+          ? patch.parkedReason
+          : isTransitionToClear
+            ? undefined
+            : current.parkedReason;
 
     if (nextStatus === "parked" && (!nextReason || !nextReason.trim())) {
       throw new Error("Parked board item requires a reason string");
     }
 
     const definedPatch = Object.fromEntries(
-      Object.entries(patch).filter(([, value]) => value !== undefined)
-    ) as Partial<BoardItem> & { handoff?: BoardHandoff | null };
+      Object.entries(patch).filter(([, value]) => value !== undefined && value !== null)
+    ) as Partial<BoardItem>;
 
     const updated: BoardItem = {
       ...current,
-      ...(definedPatch as Partial<BoardItem>),
+      ...definedPatch,
       status: nextStatus,
       ...(nextReason !== undefined ? { parkedReason: nextReason.trim() } : {}),
       updatedAt: new Date().toISOString(),
@@ -329,6 +371,35 @@ export class BoardStore {
 
     if (patch.handoff === null) {
       delete updated.handoff;
+    }
+    if (patch.parkedReason === null || (isTransitionToClear && patch.parkedReason === undefined)) {
+      delete updated.parkedReason;
+    }
+    if (
+      patch.needsAttention === null ||
+      (isTransitionToClear && patch.needsAttention === undefined)
+    ) {
+      delete updated.needsAttention;
+    }
+    if (patch.autoResumeCount === null) {
+      delete updated.autoResumeCount;
+    }
+    if (patch.chunkRequeueCount === null) {
+      delete updated.chunkRequeueCount;
+    }
+    if (patch.evidence === null) {
+      delete updated.evidence;
+    } else if (patch.evidence !== undefined) {
+      const mergedEvidence = Object.fromEntries(
+        Object.entries({ ...(current.evidence ?? {}), ...patch.evidence }).filter(
+          ([, v]) => v !== undefined
+        )
+      ) as BoardEvidence;
+      if (Object.keys(mergedEvidence).length > 0) {
+        updated.evidence = mergedEvidence;
+      } else {
+        delete updated.evidence;
+      }
     }
 
     items[idx] = updated;
@@ -351,8 +422,9 @@ export class BoardStore {
 let defaultStore: BoardStore | null = null;
 
 export function getBoardStore(): BoardStore {
-  if (!defaultStore) {
-    defaultStore = new BoardStore();
+  const desiredDir = resolveBoardDir();
+  if (!defaultStore || defaultStore.getBoardDir() !== desiredDir) {
+    defaultStore = new BoardStore(desiredDir);
   }
   return defaultStore;
 }

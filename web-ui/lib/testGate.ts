@@ -1012,6 +1012,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/memory"),
     tests: ["tests/userProfile.test.ts"],
   },
+  // Persistent storage migration helper
+  {
+    match: (p) => p.includes("lib/storageMigration"),
+    tests: ["tests/ledger.test.ts", "tests/userProfile.test.ts", "tests/flywheelSkills.test.ts"],
+  },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
@@ -1625,6 +1630,10 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/modelEval.test.ts"],
   },
   {
+    match: (p) => p.includes("lib/fsAtomic"),
+    tests: ["tests/boardStore.test.ts", "tests/schedulerPlanner.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/board/boardStore"),
     tests: ["tests/boardStore.test.ts"],
   },
@@ -1752,6 +1761,17 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/page.tsx") ||
       p.includes("uiClosures.test.ts"),
     tests: ["tests/uiClosures.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("components/chat/messageRender") ||
+      p.includes("components/ActivityTimeline") ||
+      p.includes("components/StintCard") ||
+      p.includes("components/ChatStream") ||
+      p.includes("lib/stintDerivation") ||
+      p.includes("lib/chatStatus") ||
+      p.includes("renderMemoization.test.ts"),
+    tests: ["tests/renderMemoization.test.ts"],
   },
 ];
 

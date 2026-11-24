@@ -21,7 +21,7 @@ export function SupervisorStatusBadge({ thread }: SupervisorStatusBadgeProps) {
       <span
         data-testid="supervisor-needs-attention"
         title={state.detail}
-        className="inline-flex items-center gap-1.5 rounded-full border border-[#10b981] bg-[#000000] px-2.5 py-0.5 text-xs font-semibold text-white"
+        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-600 dark:border-[#10b981] bg-emerald-50 dark:bg-[#000000] px-2.5 py-0.5 text-xs font-semibold text-emerald-950 dark:text-white"
       >
         <span className="h-2 w-2 rounded-full bg-[#10b981]" aria-hidden="true" />
         <span>{state.label}</span>
@@ -34,9 +34,9 @@ export function SupervisorStatusBadge({ thread }: SupervisorStatusBadgeProps) {
       <span
         data-testid="supervisor-stalled"
         title={state.detail}
-        className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-[#000000] px-2.5 py-0.5 text-xs font-medium text-zinc-400"
+        className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-[#000000] px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-400"
       >
-        <span className="h-2 w-2 rounded-full bg-zinc-400" aria-hidden="true" />
+        <span className="h-2 w-2 rounded-full bg-zinc-500 dark:bg-zinc-400" aria-hidden="true" />
         <span>{state.label}</span>
       </span>
     );
@@ -45,7 +45,7 @@ export function SupervisorStatusBadge({ thread }: SupervisorStatusBadgeProps) {
   return (
     <span
       data-testid="supervisor-auto-resumed"
-      className="inline-flex items-center gap-1.5 rounded-full border border-[#10b981]/50 bg-[#000000] px-2.5 py-0.5 text-xs font-medium text-[#10b981]"
+      className="inline-flex items-center gap-1.5 rounded-full border border-emerald-600/50 dark:border-[#10b981]/50 bg-emerald-50 dark:bg-[#000000] px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-[#10b981]"
     >
       <span className="h-2 w-2 rounded-full bg-[#10b981]" aria-hidden="true" />
       <span>{state.label}</span>

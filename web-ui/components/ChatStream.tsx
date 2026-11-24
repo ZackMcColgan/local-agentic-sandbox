@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import NextImage from "next/image";
 import { SupervisorStatusBadge } from "./SupervisorStatusBadge";
-import type { SupervisorBadgeInput } from "./supervisorBadgeState";
+import { deriveSupervisorBadgeState, type SupervisorBadgeInput } from "./supervisorBadgeState";
 import {
   Send,
   Sparkles,
@@ -52,7 +52,7 @@ import { TurnFileDiff } from "../lib/chatDiffs";
 import { resolveTurnStatusPhase, mergeStreamedTokens } from "../lib/chatStatus";
 import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
-import type { ActiveTurnInfo } from "../lib/threads/types";
+import type { ActiveTurnInfo, ThreadCompactionBoundary } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
 import {
   parseSimulateCommand,
@@ -80,6 +80,8 @@ import {
   type AttachedFileItem,
 } from "../lib/chat/attachments";
 export { formatFileSize, fileToBase64, type AttachedFileItem };
+
+const EMPTY_LIVE_TRACES: ExecutionTraceItem[] = [];
 
 export interface ChatMessage {
   id: string;
@@ -201,6 +203,8 @@ interface ChatStreamProps {
    * active-view signal (activeNavView === "sessions" && viewMode === "unified").
    */
   isActiveView?: boolean;
+  onLocalSseOpenChange?: (open: boolean) => void;
+  threadCompaction?: ThreadCompactionBoundary | null;
   initialSimulation?: {
     scenarioKey: SimulationScenarioKey;
     speedMultiplier?: number;
@@ -246,6 +250,8 @@ export function ChatStream({
   defaultComposerMode,
   onOpenProjects,
   isActiveView = true,
+  onLocalSseOpenChange,
+  threadCompaction: propThreadCompaction,
   initialSimulation,
 }: ChatStreamProps) {
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => [
@@ -301,6 +307,16 @@ export function ChatStream({
   // uir-1 / U2: turn start, last observed stream activity, live measured tok/s,
   // recovery timestamp, and the just-completed turn whose DONE chip renders.
   const turnStartedAtRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  const streamRafCancelRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      streamRafCancelRef.current?.();
+      streamRafCancelRef.current = null;
+    };
+  }, []);
   const [lastActivityAtMs, setLastActivityAtMs] = useState<number>(() => Date.now());
   const [liveTokPerSec, setLiveTokPerSec] = useState<number | null>(null);
   const [recoveredAtMs, setRecoveredAtMs] = useState<number | null>(null);
@@ -434,10 +450,23 @@ export function ChatStream({
     };
   }, [threadId]);
 
-  // Rehydration of thread compaction boundary on thread switch
+  const onLocalSseOpenChangeRef = useRef(onLocalSseOpenChange);
+  onLocalSseOpenChangeRef.current = onLocalSseOpenChange;
+
+  useEffect(() => {
+    return () => {
+      onLocalSseOpenChangeRef.current?.(false);
+    };
+  }, []);
+
+  // Rehydration of thread compaction boundary on thread switch (skipped when parent already fetched the thread)
   useEffect(() => {
     if (!threadId) {
       setThreadCompaction(null);
+      return;
+    }
+    if (propThreadCompaction !== undefined) {
+      setThreadCompaction(propThreadCompaction);
       return;
     }
     let active = true;
@@ -451,7 +480,7 @@ export function ChatStream({
     return () => {
       active = false;
     };
-  }, [threadId]);
+  }, [threadId, propThreadCompaction]);
 
   const [activeSimulation, setActiveSimulation] = useState<{
     scenarioKey: SimulationScenarioKey;
@@ -801,21 +830,25 @@ export function ChatStream({
     isUserScrolledUp,
   ]);
 
-  const toggleProof = (proofKey: string) => {
+  const toggleProof = useCallback((proofKey: string) => {
     setExpandedProofs((prev) => ({ ...prev, [proofKey]: !prev[proofKey] }));
-  };
+  }, []);
 
-  const toggleTraces = (msgId: string) => {
+  const toggleTraces = useCallback((msgId: string) => {
     setExpandedTraces((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
-  };
+  }, []);
 
-  const copyToClipboard = async (text: string, msgId: string) => {
+  const copyToClipboard = useCallback(async (text: string, msgId: string) => {
     const ok = await copyText(text);
     if (ok) {
       setCopiedMessageId(msgId);
       setTimeout(() => setCopiedMessageId(null), 2000);
     }
-  };
+  }, []);
+
+  const handleOpenCanvasDiff = useCallback((diff: TimelineWriteDiff, all: TimelineWriteDiff[]) => {
+    setActiveCanvasDiff({ current: diff, all });
+  }, []);
 
   // Auto-expanding textarea: min 46px on mobile, grows smoothly with content, never truncates
   useEffect(() => {
@@ -974,8 +1007,15 @@ export function ChatStream({
     }
   };
 
-  const handleRunControlAction = async (action: "pause" | "resume" | "restart") => {
-    const currentThreadId = activeThreadId || threadId;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const threadIdRef = useRef(threadId);
+  threadIdRef.current = threadId;
+  const onTaskUpdatedRef = useRef(onTaskUpdated);
+  onTaskUpdatedRef.current = onTaskUpdated;
+
+  const handleRunControlAction = useCallback(async (action: "pause" | "resume" | "restart") => {
+    const currentThreadId = activeThreadIdRef.current || threadIdRef.current;
     if (!currentThreadId) return;
     try {
       const res = await fetch(`/api/threads/${currentThreadId}`, {
@@ -985,14 +1025,14 @@ export function ChatStream({
       });
       if (res.ok) {
         const data = await res.json();
-        if (onTaskUpdated) {
-          onTaskUpdated(data.task, data.thread);
+        if (onTaskUpdatedRef.current) {
+          onTaskUpdatedRef.current(data.task, data.thread);
         }
       }
     } catch {
       // Non-fatal
     }
-  };
+  }, []);
 
   const readStreamResponse = async (
     res: Response,
@@ -1025,6 +1065,7 @@ export function ChatStream({
       throw new Error("No readable stream received from server");
     }
 
+    onLocalSseOpenChangeRef.current?.(true);
     const decoder = new TextDecoder();
     let streamBuffer = "";
     let accumulatedRawContent = "";
@@ -1054,297 +1095,385 @@ export function ChatStream({
       return prev.map((msg) => (msg.id === assistantMsgId ? patch(msg) : msg));
     };
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    let pendingThinkingDelta = "";
+    let pendingTokenCommit = false;
+    let pendingActivityTs: number | null = null;
 
-      streamBuffer += decoder.decode(value, { stream: true });
-      const blocks = streamBuffer.split("\n\n");
-      streamBuffer = blocks.pop() || "";
+    const cancelScheduledStreamRaf = () => {
+      streamRafCancelRef.current?.();
+      streamRafCancelRef.current = null;
+    };
 
-      for (const block of blocks) {
-        const trimmed = block.trim();
-        if (trimmed.startsWith(":")) {
-          // SSE comment keepalive counts as heartbeat activity
-          setLastActivityAtMs(Date.now());
-          continue;
-        }
-        if (!trimmed.startsWith("data:")) continue;
-        const jsonStr = trimmed.replace(/^data:\s*/, "");
-        if (!jsonStr) continue;
+    const flushBufferedStreamUpdates = () => {
+      cancelScheduledStreamRaf();
+      if (!isMountedRef.current) return;
+      if (!pendingThinkingDelta && !pendingTokenCommit && pendingActivityTs === null) return;
 
-        try {
-          const event = JSON.parse(jsonStr);
-          setLastActivityAtMs(typeof event.ts === "number" ? event.ts : Date.now());
+      const thinkingDelta = pendingThinkingDelta;
+      const shouldCommitToken = pendingTokenCommit;
+      const activityTs = pendingActivityTs;
+      pendingThinkingDelta = "";
+      pendingTokenCommit = false;
+      pendingActivityTs = null;
 
-          if (event.type === "ping") {
-            continue;
-          } else if (event.type === "metrics") {
-            if (
-              typeof event.roundOutputTokens === "number" &&
-              typeof event.roundElapsedMs === "number"
-            ) {
-              setLiveTokPerSec((prev) =>
-                computeLiveTokPerSec(event.roundOutputTokens, event.roundElapsedMs, prev)
-              );
-            }
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                outputTokens:
-                  typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
-                roundGenerationMs: Array.isArray(event.roundGenerationMs)
-                  ? event.roundGenerationMs
-                  : msg.roundGenerationMs,
-              }))
-            );
-          } else if (event.type === "round_narration") {
-            // U1: commit intermediate round commentary to the timeline and reset
-            // the live tail buffer so final summary text stays cleanly separated.
-            accumulatedRawContent = "";
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                content: "",
-                roundNarrations: Array.isArray(event.roundNarrations)
-                  ? event.roundNarrations
-                  : [
-                      ...(msg.roundNarrations || []),
-                      {
-                        round: typeof event.round === "number" ? event.round : 1,
-                        text: String(event.text || ""),
-                      },
-                    ],
-              }))
-            );
-          } else if (event.type === "meta") {
-            if (event.model) currentModel = event.model;
-            if (event.context) {
-              setContextStats((prev) => ({
-                ...prev,
-                estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
-                budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
-                compactedThisTurn: event.context.compactedThisTurn,
-                tokensBeforeCompaction: event.context.tokensBeforeCompaction,
-                tokensAfterCompaction: event.context.tokensAfterCompaction,
-              }));
-              if (event.context.compactedThisTurn) {
-                compactedThisTurn = true;
-                tokensBeforeCompaction = event.context.tokensBeforeCompaction;
-                tokensAfterCompaction = event.context.tokensAfterCompaction;
-                setMessages((prev) =>
-                  upsertAssistant(prev, (msg) => ({
-                    ...msg,
-                    compactedThisTurn: true,
-                    tokensBeforeCompaction,
-                    tokensAfterCompaction,
-                  }))
-                );
-              }
-            }
-          } else if (event.type === "compaction") {
-            compactedThisTurn = true;
-            tokensBeforeCompaction = event.tokensBefore;
-            tokensAfterCompaction = event.tokensAfter;
-            setContextStats((prev) => ({
-              ...prev,
-              estimatedTokens: event.tokensAfter,
-              compactedThisTurn: true,
-              tokensBeforeCompaction: event.tokensBefore,
-              tokensAfterCompaction: event.tokensAfter,
-            }));
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                compactedThisTurn: true,
-                tokensBeforeCompaction: event.tokensBefore,
-                tokensAfterCompaction: event.tokensAfter,
-                compactionActions: event.actions,
-              }))
-            );
-          } else if (event.type === "status") {
-            setStreamStatus(event.status);
-          } else if (event.type === "thought") {
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                thought: event.thought,
-                thinkingSegments: Array.isArray(event.thinkingSegments)
-                  ? event.thinkingSegments
-                  : msg.thinkingSegments,
-              }))
-            );
-          } else if (event.type === "thinking") {
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                thought: msg.thought ? msg.thought + (event.content || "") : event.content || "",
-              }))
-            );
-          } else if (event.type === "token") {
-            accumulatedRawContent = appendNarrationChunk(
-              accumulatedRawContent,
-              event.content || ""
-            );
-            const parsed = parseThinkingAndContent(accumulatedRawContent);
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
+      if (activityTs !== null) {
+        setLastActivityAtMs(activityTs);
+      }
+
+      if (thinkingDelta || shouldCommitToken) {
+        const parsed = shouldCommitToken ? parseThinkingAndContent(accumulatedRawContent) : null;
+        setMessages((prev) =>
+          upsertAssistant(prev, (msg) => {
+            const nextThought = thinkingDelta
+              ? msg.thought
+                ? msg.thought + thinkingDelta
+                : thinkingDelta
+              : msg.thought;
+            if (parsed) {
+              return {
                 ...msg,
                 content: parsed.content,
                 thought: parsed.thought,
                 modelUsed: currentModel,
-              }))
-            );
-          } else if (event.type === "trace") {
-            currentTraces = [...currentTraces, event.trace];
-            onTracesUpdate(currentTraces);
-            // UI-003 / UI-011b: mirror the trace into ChatStream's own live-turn
-            // state so rows survive a mid-turn stream cut even if the messages
-            // prop cannot reflect them (severed-stream end-state assertion).
-            setLiveTurnTraces((prev) => [...prev, event.trace]);
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                traces: currentTraces,
-              }))
-            );
-          } else if (event.type === "approval_required") {
-            const approval = event.approval;
-            if (approval && approval.id) {
-              setHostApprovals((prev) => {
-                const idx = prev.findIndex((a) => a.id === approval.id);
-                const item: UiHostApproval = {
-                  id: approval.id,
-                  threadId: approval.threadId || targetThreadId || activeThreadId || threadId,
-                  tool: approval.tool,
-                  args: approval.args || {},
-                  riskReason: approval.riskReason || "Destructive action requires approval",
-                  createdAt: approval.createdAt || Date.now(),
-                  expiresAt: approval.expiresAt || Date.now() + 10 * 60 * 1000,
-                  status: "pending",
-                };
-                if (idx >= 0) {
-                  const copy = [...prev];
-                  copy[idx] = { ...copy[idx], ...item };
-                  return copy;
-                }
-                return [...prev, item];
-              });
+              };
             }
-          } else if (event.type === "done") {
-            const durationMs = Math.round(performance.now() - startTime);
-            const hasRoundNarrations =
-              Array.isArray(event.roundNarrations) && event.roundNarrations.length > 0;
-            const mergedRaw = hasRoundNarrations
-              ? typeof event.content === "string"
-                ? event.content
-                : accumulatedRawContent
-              : mergeStreamedTokens(accumulatedRawContent, event.content);
-            const parsed = parseThinkingAndContent(mergedRaw);
-            const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
-            const finalModel = event.model || currentModel;
-            const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
-            const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
-            const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
-            const finalStatus =
-              event.status ||
-              (event.isIncomplete ? "incomplete" : undefined) ||
-              (event.content?.includes("⚠️ [Turn paused:") ||
-              event.content?.includes("⚠️ [Turn incomplete:")
-                ? "incomplete"
-                : undefined);
-
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                content: parsed.content,
-                thought: finalThought,
-                traces: event.traces || currentTraces,
-                attachments: event.attachments || msg.attachments,
-                diffs: event.diffs || msg.diffs,
-                modelUsed: finalModel,
-                selectedModel: msg.selectedModel || activeModel,
-                durationMs: event.durationMs || durationMs,
-                thinkingDurationMs:
-                  typeof event.thinkingDurationMs === "number"
-                    ? event.thinkingDurationMs
-                    : msg.thinkingDurationMs,
-                phaseTimings: event.phaseTimings || msg.phaseTimings,
-                compactedThisTurn: finalCompacted || undefined,
-                tokensBeforeCompaction: finalTokensBefore,
-                tokensAfterCompaction: finalTokensAfter,
-                compactionActions: event.compactionActions || msg.compactionActions,
-                roundPromptTokens: Array.isArray(event.roundPromptTokens)
-                  ? event.roundPromptTokens
-                  : msg.roundPromptTokens,
-                roundGenerationMs: Array.isArray(event.roundGenerationMs)
-                  ? event.roundGenerationMs
-                  : msg.roundGenerationMs,
-                thinkingSegments: Array.isArray(event.thinkingSegments)
-                  ? event.thinkingSegments
-                  : msg.thinkingSegments,
-                roundNarrations: Array.isArray(event.roundNarrations)
-                  ? event.roundNarrations
-                  : msg.roundNarrations,
-                outputTokens:
-                  typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
-                status: finalStatus,
-              }))
-            );
-
-            // uir-1: the DONE chip replaces the Live Activity Header on the
-            // message this turn just completed.
-            setCompletedTurnMsgId(assistantMsgId);
-
-            // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
-            setPendingSteers([]);
-            if (
-              Array.isArray(event.pendingSteers) &&
-              event.pendingSteers.length > 0 &&
-              chatQueueRef.current
-            ) {
-              for (const s of event.pendingSteers) {
-                chatQueueRef.current.enqueue(s);
-              }
-              setQueueItems(chatQueueRef.current.items());
-            }
-          } else if (event.type === "steer") {
-            // Render mid-turn consumed steer into messages in place and remove from pendingSteers
-            if (Array.isArray(event.texts) && event.texts.length > 0) {
-              setPendingSteers((prev) => prev.filter((p) => !event.texts.includes(p)));
-              const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
-                id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                role: "user",
-                content: `[Steer from user, mid-turn] ${t}`,
-              }));
-              setMessages((prev) => [...prev, ...steerMessages]);
-            }
-          } else if (event.type === "error") {
-            setMessages((prev) =>
-              upsertAssistant(prev, (msg) => ({
-                ...msg,
-                status: "error",
-              }))
-            );
-            // Server explicitly reported a terminal turn error (e.g. engine offline,
-            // simulation error event). This is a verdict, not a disconnect: never
-            // route it into the detached-turn reconciliation path.
-            const terminalErr = new Error(event.error || "Streaming error encountered") as Error & {
-              isTerminalServerError?: boolean;
+            return {
+              ...msg,
+              thought: nextThought,
             };
-            terminalErr.isTerminalServerError = true;
-            throw terminalErr;
+          })
+        );
+      }
+    };
+
+    const scheduleBufferedStreamFlush = () => {
+      if (streamRafCancelRef.current) return;
+      const rafFn =
+        typeof globalThis.requestAnimationFrame === "function"
+          ? globalThis.requestAnimationFrame.bind(globalThis)
+          : typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+            ? window.requestAnimationFrame.bind(window)
+            : null;
+      const cancelRafFn =
+        typeof globalThis.cancelAnimationFrame === "function"
+          ? globalThis.cancelAnimationFrame.bind(globalThis)
+          : typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+            ? window.cancelAnimationFrame.bind(window)
+            : null;
+
+      if (!rafFn) {
+        flushBufferedStreamUpdates();
+        return;
+      }
+
+      const rafId = rafFn(() => {
+        streamRafCancelRef.current = null;
+        flushBufferedStreamUpdates();
+      });
+      streamRafCancelRef.current = () => {
+        cancelRafFn?.(rafId);
+      };
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        streamBuffer += decoder.decode(value, { stream: true });
+        const blocks = streamBuffer.split("\n\n");
+        streamBuffer = blocks.pop() || "";
+
+        for (const block of blocks) {
+          const trimmed = block.trim();
+          if (trimmed.startsWith(":")) {
+            // SSE comment keepalive counts as heartbeat activity
+            setLastActivityAtMs(Date.now());
+            continue;
           }
-        } catch (parseErr: unknown) {
-          if (
-            parseErr instanceof Error &&
-            parseErr.message &&
-            !parseErr.message.includes("JSON.parse")
-          ) {
-            throw parseErr;
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, "");
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+            const eventActivityTs = typeof event.ts === "number" ? event.ts : Date.now();
+
+            if (event.type === "ping") {
+              setLastActivityAtMs(eventActivityTs);
+              continue;
+            } else if (event.type === "thinking") {
+              pendingThinkingDelta += event.content || "";
+              pendingActivityTs = eventActivityTs;
+              scheduleBufferedStreamFlush();
+              continue;
+            } else if (event.type === "token") {
+              accumulatedRawContent = appendNarrationChunk(
+                accumulatedRawContent,
+                event.content || ""
+              );
+              pendingTokenCommit = true;
+              pendingActivityTs = eventActivityTs;
+              scheduleBufferedStreamFlush();
+              continue;
+            }
+
+            // Flush any buffered rAF token/thinking deltas before non-delta events
+            flushBufferedStreamUpdates();
+            setLastActivityAtMs(eventActivityTs);
+
+            if (event.type === "metrics") {
+              if (
+                typeof event.roundOutputTokens === "number" &&
+                typeof event.roundElapsedMs === "number"
+              ) {
+                setLiveTokPerSec((prev) =>
+                  computeLiveTokPerSec(event.roundOutputTokens, event.roundElapsedMs, prev)
+                );
+              }
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  outputTokens:
+                    typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
+                  roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                    ? event.roundGenerationMs
+                    : msg.roundGenerationMs,
+                }))
+              );
+            } else if (event.type === "round_narration") {
+              // U1: commit intermediate round commentary to the timeline and reset
+              // the live tail buffer so final summary text stays cleanly separated.
+              accumulatedRawContent = "";
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: "",
+                  roundNarrations: Array.isArray(event.roundNarrations)
+                    ? event.roundNarrations
+                    : [
+                        ...(msg.roundNarrations || []),
+                        {
+                          round: typeof event.round === "number" ? event.round : 1,
+                          text: String(event.text || ""),
+                        },
+                      ],
+                }))
+              );
+            } else if (event.type === "meta") {
+              if (event.model) currentModel = event.model;
+              if (event.context) {
+                setContextStats((prev) => ({
+                  ...prev,
+                  estimatedTokens: event.context.estimatedTokens ?? prev.estimatedTokens,
+                  budgetTokens: event.context.budgetTokens ?? prev.budgetTokens,
+                  compactedThisTurn: event.context.compactedThisTurn,
+                  tokensBeforeCompaction: event.context.tokensBeforeCompaction,
+                  tokensAfterCompaction: event.context.tokensAfterCompaction,
+                }));
+                if (event.context.compactedThisTurn) {
+                  compactedThisTurn = true;
+                  tokensBeforeCompaction = event.context.tokensBeforeCompaction;
+                  tokensAfterCompaction = event.context.tokensAfterCompaction;
+                  setMessages((prev) =>
+                    upsertAssistant(prev, (msg) => ({
+                      ...msg,
+                      compactedThisTurn: true,
+                      tokensBeforeCompaction,
+                      tokensAfterCompaction,
+                    }))
+                  );
+                }
+              }
+            } else if (event.type === "compaction") {
+              compactedThisTurn = true;
+              tokensBeforeCompaction = event.tokensBefore;
+              tokensAfterCompaction = event.tokensAfter;
+              setContextStats((prev) => ({
+                ...prev,
+                estimatedTokens: event.tokensAfter,
+                compactedThisTurn: true,
+                tokensBeforeCompaction: event.tokensBefore,
+                tokensAfterCompaction: event.tokensAfter,
+              }));
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  compactedThisTurn: true,
+                  tokensBeforeCompaction: event.tokensBefore,
+                  tokensAfterCompaction: event.tokensAfter,
+                  compactionActions: event.actions,
+                }))
+              );
+            } else if (event.type === "status") {
+              setStreamStatus(event.status);
+            } else if (event.type === "thought") {
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  thought: event.thought,
+                  thinkingSegments: Array.isArray(event.thinkingSegments)
+                    ? event.thinkingSegments
+                    : msg.thinkingSegments,
+                }))
+              );
+            } else if (event.type === "trace") {
+              currentTraces = [...currentTraces, event.trace];
+              onTracesUpdate(currentTraces);
+              // UI-003 / UI-011b: mirror the trace into ChatStream's own live-turn
+              // state so rows survive a mid-turn stream cut even if the messages
+              // prop cannot reflect them (severed-stream end-state assertion).
+              setLiveTurnTraces((prev) => [...prev, event.trace]);
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  traces: currentTraces,
+                }))
+              );
+            } else if (event.type === "approval_required") {
+              const approval = event.approval;
+              if (approval && approval.id) {
+                setHostApprovals((prev) => {
+                  const idx = prev.findIndex((a) => a.id === approval.id);
+                  const item: UiHostApproval = {
+                    id: approval.id,
+                    threadId: approval.threadId || targetThreadId || activeThreadId || threadId,
+                    tool: approval.tool,
+                    args: approval.args || {},
+                    riskReason: approval.riskReason || "Destructive action requires approval",
+                    createdAt: approval.createdAt || Date.now(),
+                    expiresAt: approval.expiresAt || Date.now() + 10 * 60 * 1000,
+                    status: "pending",
+                  };
+                  if (idx >= 0) {
+                    const copy = [...prev];
+                    copy[idx] = { ...copy[idx], ...item };
+                    return copy;
+                  }
+                  return [...prev, item];
+                });
+              }
+            } else if (event.type === "done") {
+              const durationMs = Math.round(performance.now() - startTime);
+              const hasRoundNarrations =
+                Array.isArray(event.roundNarrations) && event.roundNarrations.length > 0;
+              const mergedRaw = hasRoundNarrations
+                ? typeof event.content === "string"
+                  ? event.content
+                  : accumulatedRawContent
+                : mergeStreamedTokens(accumulatedRawContent, event.content);
+              const parsed = parseThinkingAndContent(mergedRaw);
+              const finalThought = event.thought !== undefined ? event.thought : parsed.thought;
+              const finalModel = event.model || currentModel;
+              const finalCompacted = Boolean(event.compactedThisTurn || compactedThisTurn);
+              const finalTokensBefore = event.tokensBeforeCompaction ?? tokensBeforeCompaction;
+              const finalTokensAfter = event.tokensAfterCompaction ?? tokensAfterCompaction;
+              const finalStatus =
+                event.status ||
+                (event.isIncomplete ? "incomplete" : undefined) ||
+                (event.content?.includes("⚠️ [Turn paused:") ||
+                event.content?.includes("⚠️ [Turn incomplete:")
+                  ? "incomplete"
+                  : undefined);
+
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  content: parsed.content,
+                  thought: finalThought,
+                  traces: event.traces || currentTraces,
+                  attachments: event.attachments || msg.attachments,
+                  diffs: event.diffs || msg.diffs,
+                  modelUsed: finalModel,
+                  selectedModel: msg.selectedModel || activeModel,
+                  durationMs: event.durationMs || durationMs,
+                  thinkingDurationMs:
+                    typeof event.thinkingDurationMs === "number"
+                      ? event.thinkingDurationMs
+                      : msg.thinkingDurationMs,
+                  phaseTimings: event.phaseTimings || msg.phaseTimings,
+                  compactedThisTurn: finalCompacted || undefined,
+                  tokensBeforeCompaction: finalTokensBefore,
+                  tokensAfterCompaction: finalTokensAfter,
+                  compactionActions: event.compactionActions || msg.compactionActions,
+                  roundPromptTokens: Array.isArray(event.roundPromptTokens)
+                    ? event.roundPromptTokens
+                    : msg.roundPromptTokens,
+                  roundGenerationMs: Array.isArray(event.roundGenerationMs)
+                    ? event.roundGenerationMs
+                    : msg.roundGenerationMs,
+                  thinkingSegments: Array.isArray(event.thinkingSegments)
+                    ? event.thinkingSegments
+                    : msg.thinkingSegments,
+                  roundNarrations: Array.isArray(event.roundNarrations)
+                    ? event.roundNarrations
+                    : msg.roundNarrations,
+                  outputTokens:
+                    typeof event.outputTokens === "number" ? event.outputTokens : msg.outputTokens,
+                  status: finalStatus,
+                }))
+              );
+
+              // uir-1: the DONE chip replaces the Live Activity Header on the
+              // message this turn just completed.
+              setCompletedTurnMsgId(assistantMsgId);
+
+              // CHAT-STEER: clear pending steers indicator when turn ends or steers are acknowledged
+              setPendingSteers([]);
+              if (
+                Array.isArray(event.pendingSteers) &&
+                event.pendingSteers.length > 0 &&
+                chatQueueRef.current
+              ) {
+                for (const s of event.pendingSteers) {
+                  chatQueueRef.current.enqueue(s);
+                }
+                setQueueItems(chatQueueRef.current.items());
+              }
+            } else if (event.type === "steer") {
+              // Render mid-turn consumed steer into messages in place and remove from pendingSteers
+              if (Array.isArray(event.texts) && event.texts.length > 0) {
+                setPendingSteers((prev) => prev.filter((p) => !event.texts.includes(p)));
+                const steerMessages: ChatMessage[] = event.texts.map((t: string) => ({
+                  id: `steer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  role: "user",
+                  content: `[Steer from user, mid-turn] ${t}`,
+                }));
+                setMessages((prev) => [...prev, ...steerMessages]);
+              }
+            } else if (event.type === "error") {
+              setMessages((prev) =>
+                upsertAssistant(prev, (msg) => ({
+                  ...msg,
+                  status: "error",
+                }))
+              );
+              // Server explicitly reported a terminal turn error (e.g. engine offline,
+              // simulation error event). This is a verdict, not a disconnect: never
+              // route it into the detached-turn reconciliation path.
+              const terminalErr = new Error(
+                event.error || "Streaming error encountered"
+              ) as Error & {
+                isTerminalServerError?: boolean;
+              };
+              terminalErr.isTerminalServerError = true;
+              throw terminalErr;
+            }
+          } catch (parseErr: unknown) {
+            if (
+              parseErr instanceof Error &&
+              parseErr.message &&
+              !parseErr.message.includes("JSON.parse")
+            ) {
+              throw parseErr;
+            }
           }
         }
       }
+      flushBufferedStreamUpdates();
+    } finally {
+      cancelScheduledStreamRaf();
+      onLocalSseOpenChangeRef.current?.(false);
     }
   };
 
@@ -1897,12 +2026,12 @@ export function ChatStream({
     }
   };
 
-  const handleRetry = () => {
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const handleRetry = useCallback(() => {
+    const lastUserMsg = [...messagesRef.current].reverse().find((m) => m.role === "user");
     if (!lastUserMsg) return;
     setErrorMsg(null);
-    handleSend(lastUserMsg.content);
-  };
+    handleSendRef.current?.(lastUserMsg.content);
+  }, []);
 
   handleSendRef.current = handleSend;
 
@@ -1931,13 +2060,13 @@ export function ChatStream({
                 ? "Gemma-4"
                 : modelSafe.split(":")[0];
 
-  const deduplicatedMessages = deduplicateStreamMessages(messages);
+  const deduplicatedMessages = useMemo(() => deduplicateStreamMessages(messages), [messages]);
 
   // Anchor for the reconciled detached-turn notification: the last assistant message,
   // not the literal tail, so a steer bubble appended after reconciliation does not hide it.
-  const lastAssistantIndex = deduplicatedMessages.reduce(
-    (last, m, i) => (m.role === "assistant" ? i : last),
-    -1
+  const lastAssistantIndex = useMemo(
+    () => deduplicatedMessages.reduce((last, m, i) => (m.role === "assistant" ? i : last), -1),
+    [deduplicatedMessages]
   );
 
   // Calculate the last linked task message index so LiveRunBlock is only hosted once
@@ -1990,7 +2119,7 @@ export function ChatStream({
                   <button
                     type="button"
                     onClick={() => setShowCompactionModal(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
+                    className="p-1 rounded-lg text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -2045,7 +2174,7 @@ export function ChatStream({
                 />
                 <button
                   onClick={() => setPreviewModalImage(null)}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/90 text-white hover:bg-slate-800 border border-white/20"
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-zinc-900/90 text-white hover:bg-zinc-800 border border-white/20"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -2135,53 +2264,9 @@ export function ChatStream({
               >
                 {threadTitle || "New session"}
               </h1>
-              {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-              {/* Simulation Mode Badge */}
-              {activeSimulation && (
-                <div
-                  data-testid="simulation-badge"
-                  className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
-                  title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
-                  <span className="sr-only sm:not-sr-only">SIMULATION</span>
-                  <span aria-hidden="true" className="sm:hidden">
-                    SIM
-                  </span>
-                  <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
-                    (${activeSimulation.scenarioKey})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeSimTaskCancelRef.current) {
-                        activeSimTaskCancelRef.current();
-                        activeSimTaskCancelRef.current = null;
-                      }
-                      setActiveSimulation(null);
-                    }}
-                    className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
-                    title="Exit simulation mode"
-                    aria-label="Exit simulation mode"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Scope Badge if available */}
-              {(threadScope || activeTask?.scope) && (
-                <span
-                  className="hidden xl:inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
-                  title={`Task Scope: ${threadScope || activeTask?.scope}`}
-                >
-                  {threadScope || activeTask?.scope}
-                </span>
-              )}
-
               {/* Context Meter Pill - visible on both mobile and desktop */}
               <div
                 data-testid="context-meter-pill"
@@ -2193,7 +2278,7 @@ export function ChatStream({
                     <span className="font-normal text-slate-700 dark:text-zinc-100">
                       {formatContextK(displayContextTokens)}
                     </span>{" "}
-                    <span className="font-normal text-zinc-400">
+                    <span className="font-normal text-slate-600 dark:text-zinc-400">
                       / {Math.round(contextStats.budgetTokens / 1000)}K
                     </span>
                   </span>
@@ -2217,39 +2302,7 @@ export function ChatStream({
                     />
                   </div>
                 </div>
-                {threadCompaction ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowCompactionModal(true)}
-                    className="min-h-[40px] min-w-[40px] -my-1.5 ml-0.5 px-2 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
-                    title="View compaction summary and restore options"
-                  >
-                    Compacted
-                  </button>
-                ) : null}
               </div>
-
-              {/* uir-0 header diet: Engine + Host pills moved to Settings. The only
-              guest allowed in the freed slot is the host disconnect alert chip,
-              rendered ONLY while the host runner is down. */}
-              {!activeSimulation &&
-                hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable }) && (
-                  <button
-                    type="button"
-                    data-testid="host-disconnect-chip"
-                    onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
-                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-full bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-dashed border-zinc-500/50 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[32px]"
-                    title={runnerReason || "Host runner is unreachable — open Settings"}
-                    aria-label="Host disconnected — open Settings"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
-                    <span className="hidden min-[420px]:inline">
-                      HOST DISCONNECTED · OPEN SETTINGS
-                    </span>
-                    <span className="min-[420px]:hidden">DISCONNECTED</span>
-                    <span className="sr-only">HOST DISCONNECTED</span>
-                  </button>
-                )}
 
               {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
               <div className="flex items-center gap-1">
@@ -2390,6 +2443,100 @@ export function ChatStream({
             </div>
           </header>
 
+          {/* U-F6: Status chips relocated out of <header> into clean sub-header banner strip */}
+          {(() => {
+            const hasSupervisorBadge = Boolean(
+              supervisorState && deriveSupervisorBadgeState(supervisorState)
+            );
+            const hasScopeBadge = Boolean(threadScope || activeTask?.scope);
+            const showDisconnectChip = Boolean(
+              !activeSimulation &&
+              hostDisconnectChipVisible({ hostAccess, runnerState, runnerAvailable })
+            );
+            const hasStripItems = Boolean(
+              hasSupervisorBadge ||
+              activeSimulation ||
+              hasScopeBadge ||
+              threadCompaction ||
+              showDisconnectChip
+            );
+            if (!hasStripItems) return null;
+            return (
+              <div
+                data-testid="chat-subheader-strip"
+                className="flex flex-wrap items-center gap-1.5 px-2 sm:px-4 py-1.5 border-b border-stone-200/80 dark:border-white/[0.08] bg-stone-50/80 dark:bg-black/80 shrink-0"
+              >
+                {supervisorState && <SupervisorStatusBadge thread={supervisorState} />}
+                {activeSimulation && (
+                  <div
+                    data-testid="simulation-badge"
+                    className="inline-flex items-center gap-1 sm:gap-1.5 pl-2 pr-0.5 py-0.5 rounded-full bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-700 dark:text-zinc-400 border border-zinc-500/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider shrink-0"
+                    title={`Simulation active: ${activeSimulation.scenarioKey} (${activeSimulation.speedMultiplier || 1}x speed)`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block shrink-0" />
+                    <span className="sr-only sm:not-sr-only">SIMULATION</span>
+                    <span aria-hidden="true" className="sm:hidden">
+                      SIM
+                    </span>
+                    <span className="hidden 2xl:inline font-mono text-[10px] lowercase text-zinc-600 dark:text-zinc-300">
+                      (${activeSimulation.scenarioKey})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeSimTaskCancelRef.current) {
+                          activeSimTaskCancelRef.current();
+                          activeSimTaskCancelRef.current = null;
+                        }
+                        setActiveSimulation(null);
+                      }}
+                      className="min-h-[40px] min-w-[40px] -my-1 -mr-0.5 flex items-center justify-center rounded-full hover:bg-zinc-500/20 text-zinc-800 dark:text-zinc-200 transition-colors"
+                      title="Exit simulation mode"
+                      aria-label="Exit simulation mode"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                {hasScopeBadge && (
+                  <span
+                    className="inline-flex px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold uppercase tracking-wider"
+                    title={`Task Scope: ${threadScope || activeTask?.scope}`}
+                  >
+                    {threadScope || activeTask?.scope}
+                  </span>
+                )}
+                {threadCompaction ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompactionModal(true)}
+                    className="min-h-[32px] px-2.5 py-1 inline-flex items-center justify-center rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                    title="View compaction summary and restore options"
+                  >
+                    Compacted
+                  </button>
+                ) : null}
+                {showDisconnectChip && (
+                  <button
+                    type="button"
+                    data-testid="host-disconnect-chip"
+                    onClick={() => (onOpenSettings ? onOpenSettings() : onOpenModelSheet?.())}
+                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-dashed border-amber-400/70 dark:border-amber-700/70 text-[10px] sm:text-[11px] font-bold tracking-normal sm:tracking-wide shrink-0 min-h-[32px]"
+                    title={runnerReason || "Host runner is unreachable — open Settings"}
+                    aria-label="Host disconnected — open Settings"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+                    <span className="hidden min-[420px]:inline">
+                      HOST DISCONNECTED · OPEN SETTINGS
+                    </span>
+                    <span className="min-[420px]:hidden">DISCONNECTED</span>
+                    <span className="sr-only">HOST DISCONNECTED</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
           {(() => {
             const hasRunTurn = Boolean(isTurnLive || lastRunAssistant);
             const activeTraces =
@@ -2508,7 +2655,7 @@ export function ChatStream({
             <div className="chat-track max-w-[840px] w-full mx-auto space-y-5 pb-16 sm:pb-20">
               {deduplicatedMessages.length === 0 && !activeTask && (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-400 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
+                  <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-900 flex items-center justify-center text-slate-600 dark:text-zinc-400 mb-4 border border-slate-200/80 dark:border-zinc-800">
                     <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
@@ -2521,39 +2668,43 @@ export function ChatStream({
                 </div>
               )}
 
-              {deduplicatedMessages.map((m, idx) => (
-                <ChatMessageItem
-                  key={m.id}
-                  message={m}
-                  idx={idx}
-                  copiedMessageId={copiedMessageId}
-                  lastLinkedTaskMsgIndex={lastLinkedTaskMsgIndex}
-                  lastAssistantIndex={lastAssistantIndex}
-                  activeTask={activeTask}
-                  liveTraces={liveTraces}
-                  liveTurnTraces={liveTurnTraces}
-                  isLoading={isLoading}
-                  isStoppingTask={isStoppingTask}
-                  activeAssistantMsgId={activeAssistantMsgIdRef.current}
-                  completedTurnMsgId={completedTurnMsgId}
-                  streamStatus={streamStatus}
-                  turnStartedAtMs={turnStartedAtRef.current}
-                  lastActivityAtMs={lastActivityAtMs}
-                  expandedTraces={expandedTraces}
-                  expandedProofs={expandedProofs}
-                  hasResolvedDetachedTurn={hasResolvedDetachedTurn}
-                  activeModel={activeModel}
-                  onPreviewImage={setPreviewModalImage}
-                  onCopyToClipboard={copyToClipboard}
-                  onRetry={handleRetry}
-                  onToggleProof={toggleProof}
-                  onToggleTraces={toggleTraces}
-                  onStopTask={onStopTask}
-                  onRunControlAction={handleRunControlAction}
-                  onDeployRun={onDeployRun}
-                  onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
-                />
-              ))}
+              {deduplicatedMessages.map((m, idx) => {
+                const isStreamingMsg = Boolean(
+                  m.status === "streaming" ||
+                  (isLoading && m.id === activeAssistantMsgIdRef.current)
+                );
+                const isTaskHost = idx === lastLinkedTaskMsgIndex;
+                return (
+                  <ChatMessageItem
+                    key={m.id}
+                    message={m}
+                    idx={idx}
+                    copiedMessageId={copiedMessageId === m.id ? m.id : null}
+                    lastLinkedTaskMsgIndex={lastLinkedTaskMsgIndex}
+                    lastAssistantIndex={lastAssistantIndex}
+                    activeTask={isTaskHost ? activeTask : null}
+                    liveTraces={isTaskHost ? liveTraces : EMPTY_LIVE_TRACES}
+                    liveTurnTraces={isStreamingMsg ? liveTurnTraces : EMPTY_LIVE_TRACES}
+                    isLoading={isLoading}
+                    isStoppingTask={isTaskHost ? isStoppingTask : false}
+                    activeAssistantMsgId={activeAssistantMsgIdRef.current}
+                    completedTurnMsgId={completedTurnMsgId === m.id ? m.id : null}
+                    expandedTraces={expandedTraces}
+                    expandedProofs={expandedProofs}
+                    hasResolvedDetachedTurn={hasResolvedDetachedTurn && idx === lastAssistantIndex}
+                    activeModel={activeModel}
+                    onPreviewImage={setPreviewModalImage}
+                    onCopyToClipboard={copyToClipboard}
+                    onRetry={handleRetry}
+                    onToggleProof={toggleProof}
+                    onToggleTraces={toggleTraces}
+                    onStopTask={onStopTask}
+                    onRunControlAction={handleRunControlAction}
+                    onDeployRun={onDeployRun}
+                    onOpenCanvasDiff={handleOpenCanvasDiff}
+                  />
+                );
+              })}
 
               {/* Single timeline fallback when liveTurnTraces arrived before an assistant
                   message exists in messages (e.g. severed stream before assistant row lands).
@@ -2568,7 +2719,7 @@ export function ChatStream({
                     <ActivityTimeline
                       traces={liveTurnTraces}
                       isStreaming={isTurnLive}
-                      onOpenCanvasDiff={(diff, all) => setActiveCanvasDiff({ current: diff, all })}
+                      onOpenCanvasDiff={handleOpenCanvasDiff}
                     />
                   </div>
                 )}
@@ -2683,7 +2834,7 @@ export function ChatStream({
                           <summary className="cursor-pointer font-medium hover:underline select-none">
                             Technical details
                           </summary>
-                          <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                          <pre className="mt-1.5 p-2 rounded bg-rose-100/65 dark:bg-zinc-900 text-rose-950 dark:text-rose-200 text-[11px] font-mono max-h-64 overflow-y-auto overflow-x-auto overscroll-contain whitespace-pre-wrap">
                             {formatted.details}
                           </pre>
                         </details>
@@ -2703,11 +2854,11 @@ export function ChatStream({
                 type="button"
                 data-testid="live-follow-pill"
                 onClick={() => scrollToBottom("smooth")}
-                className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-black border border-emerald-500/70 text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="pointer-events-auto min-h-[44px] px-4 py-2 rounded-full bg-white dark:bg-black border border-emerald-600/70 dark:border-emerald-500/70 text-emerald-700 dark:text-emerald-400 text-xs font-semibold shadow-md hover:border-emerald-500 dark:hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Jump to bottom"
                 aria-label="Jump to bottom"
               >
-                <ArrowDown className="h-3.5 w-3.5 text-emerald-400" />
+                <ArrowDown className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                 <span>{isTurnLive ? "Live" : "Latest"}</span>
               </button>
             </div>
@@ -2838,14 +2989,14 @@ export function ChatStream({
                       <span className="max-w-[130px] truncate font-medium text-[11px] text-slate-800 dark:text-zinc-200">
                         {att.name}
                       </span>
-                      <span className="text-[9px] text-slate-400 font-mono">
+                      <span className="text-[9px] text-slate-600 dark:text-zinc-400 font-mono">
                         {formatFileSize(att.size)}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(att.id)}
-                      className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-400 hover:text-rose-500 transition-colors ml-1"
+                      className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors ml-1"
                       title="Remove file"
                     >
                       <X className="h-3.5 w-3.5" />

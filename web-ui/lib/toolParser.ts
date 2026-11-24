@@ -7,16 +7,19 @@ export interface ParsedToolCall {
   };
 }
 /**
- * Normalizes an MCP URL to guarantee it points to the /sse SSE endpoint.
+ * Normalizes an MCP URL to guarantee it points to the /mcp Streamable HTTP endpoint.
  */
 export function normalizeMcpUrl(url: string): string {
-  if (!url || typeof url !== "string") return "http://127.0.0.1:8080/sse";
+  if (!url || typeof url !== "string") return "http://127.0.0.1:8080/mcp";
   const trimmed = url.trim().replace(/\/+$/, "");
-  if (!trimmed) return "http://127.0.0.1:8080/sse";
-  if (trimmed.endsWith("/sse")) {
+  if (!trimmed) return "http://127.0.0.1:8080/mcp";
+  if (trimmed.endsWith("/mcp")) {
     return trimmed;
   }
-  return `${trimmed}/sse`;
+  if (trimmed.endsWith("/sse")) {
+    return `${trimmed.slice(0, -4)}/mcp`;
+  }
+  return `${trimmed}/mcp`;
 }
 
 export const PRIMARY_TOOL_PARAM: Record<string, string> = {

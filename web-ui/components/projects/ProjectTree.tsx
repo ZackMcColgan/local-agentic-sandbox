@@ -111,12 +111,12 @@ export function ProjectTree({
 
             <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-[11px] text-slate-600 dark:text-zinc-400">
               <span className="inline-flex items-center gap-1">
-                <GitBranch className="h-3 w-3 text-slate-400" />
+                <GitBranch className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
                 <span>{proj.base_branch}</span>
               </span>
               <span>•</span>
               <span className="inline-flex items-center gap-1">
-                <Terminal className="h-3 w-3 text-slate-400" />
+                <Terminal className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
                 <span className="font-mono">{proj.toolchain}</span>
               </span>
               {proj.active_task_id && (
@@ -136,7 +136,7 @@ export function ProjectTree({
                     e.stopPropagation();
                     onRequestDelete(proj.project_id);
                   }}
-                  className="ml-auto inline-flex items-center gap-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1 rounded-lg"
+                  className="ml-auto inline-flex items-center gap-1 text-slate-600 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1 rounded-lg"
                   title="Remove project from registry"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

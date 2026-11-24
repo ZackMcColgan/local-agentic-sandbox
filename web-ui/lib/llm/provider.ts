@@ -931,22 +931,24 @@ export class LlamaCppProvider implements LLMProvider {
 
       // End of stream: emit accumulated streaming tool calls if any
       if (toolCallsAccumulator.size > 0) {
-        const finalizedToolCalls = Array.from(toolCallsAccumulator.values()).map((tc) => {
-          let args: string | Record<string, unknown> = tc.function.arguments;
-          if (typeof args === "string") {
-            try {
-              args = JSON.parse(args);
-            } catch {}
-          }
-          return {
-            id: tc.id || undefined,
-            type: tc.type || "function",
-            function: {
-              name: tc.function.name,
-              arguments: args,
-            },
-          };
-        });
+        const finalizedToolCalls = Array.from(toolCallsAccumulator.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([, tc]) => {
+            let args: string | Record<string, unknown> = tc.function.arguments;
+            if (typeof args === "string") {
+              try {
+                args = JSON.parse(args);
+              } catch {}
+            }
+            return {
+              id: tc.id || undefined,
+              type: tc.type || "function",
+              function: {
+                name: tc.function.name,
+                arguments: args,
+              },
+            };
+          });
 
         yield {
           message: {

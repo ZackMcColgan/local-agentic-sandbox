@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, FileDiff } from "lucide-react";
 import {
   buildActivityTimeline,
   coalesceTimelineWriteDiffs,
+  extractTraceOutput,
   type RoundNarrationSegment,
   type ThinkingSegment,
   type TimelineRow,
@@ -163,7 +164,7 @@ export interface ActivityTimelineProps {
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }
 
-function CollapsibleErrorOutput({ errorSummary }: { errorSummary: string }) {
+function CollapsibleErrorOutput({ output }: { output: string }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -178,13 +179,73 @@ function CollapsibleErrorOutput({ errorSummary }: { errorSummary: string }) {
         <span>{expanded ? "▾ hide output" : "› show output"}</span>
       </button>
       {expanded && (
-        <div
+        <pre
           data-testid="timeline-row-error"
-          className="text-[11px] font-mono text-rose-700 bg-rose-50 border border-rose-300 dark:text-rose-400 dark:bg-rose-950/30 dark:border-rose-900/60 rounded-lg px-2.5 py-1.5 break-words"
+          className="max-h-64 overflow-y-auto overflow-x-auto overscroll-contain whitespace-pre-wrap text-[11px] font-mono text-rose-700 bg-rose-50 border border-rose-300 dark:text-rose-400 dark:bg-rose-950/30 dark:border-rose-900/60 rounded-lg px-2.5 py-1.5 break-words"
         >
-          {errorSummary}
+          {output}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function TimelineGroupChildRow({ child }: { child: TimelineRow }) {
+  const [expanded, setExpanded] = useState(false);
+  const childOutput = extractTraceOutput(child.traceResult);
+  const errorOutput = childOutput || child.errorSummary;
+  const canExpandNonError = child.status !== "error" && Boolean(child.traceArgs || childOutput);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        {canExpandNonError ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="truncate text-left text-zinc-700 dark:text-zinc-300 hover:underline cursor-pointer"
+          >
+            {child.label}
+          </button>
+        ) : (
+          <span
+            className={`truncate ${
+              child.status === "error"
+                ? "text-rose-700 dark:text-rose-400 font-medium"
+                : "text-zinc-700 dark:text-zinc-300"
+            }`}
+          >
+            {child.label}
+          </span>
+        )}
+        {formatRowDuration(child.durationMs) && (
+          <span className="font-mono text-zinc-600 dark:text-zinc-400 shrink-0">
+            {formatRowDuration(child.durationMs)}
+          </span>
+        )}
+      </div>
+      {expanded && canExpandNonError && (
+        <div className="flex flex-col gap-1">
+          {child.traceArgs && (
+            <pre
+              data-testid="timeline-row-details"
+              className="max-h-64 overflow-y-auto overflow-x-auto overscroll-contain rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black p-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap"
+            >
+              {JSON.stringify(child.traceArgs, null, 2)}
+            </pre>
+          )}
+          {childOutput && (
+            <pre
+              data-testid="timeline-row-output"
+              className="max-h-64 overflow-y-auto overflow-x-auto overscroll-contain rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black p-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words"
+            >
+              {childOutput}
+            </pre>
+          )}
         </div>
       )}
+      {child.status === "error" && errorOutput && <CollapsibleErrorOutput output={errorOutput} />}
     </div>
   );
 }
@@ -288,27 +349,7 @@ function TimelineRowView({
               }`}
             >
               {row.children.map((child) => (
-                <div key={child.id} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-2 text-[11px]">
-                    <span
-                      className={`truncate ${
-                        child.status === "error"
-                          ? "text-rose-700 dark:text-rose-400 font-medium"
-                          : "text-zinc-700 dark:text-zinc-300"
-                      }`}
-                    >
-                      {child.label}
-                    </span>
-                    {formatRowDuration(child.durationMs) && (
-                      <span className="font-mono text-zinc-600 dark:text-zinc-400 shrink-0">
-                        {formatRowDuration(child.durationMs)}
-                      </span>
-                    )}
-                  </div>
-                  {child.status === "error" && child.errorSummary && (
-                    <CollapsibleErrorOutput errorSummary={child.errorSummary} />
-                  )}
-                </div>
+                <TimelineGroupChildRow key={child.id} child={child} />
               ))}
             </div>
           )}
@@ -316,6 +357,10 @@ function TimelineRowView({
       </div>
     );
   }
+
+  const traceOutput = extractTraceOutput(row.traceResult);
+  const errorOutput = traceOutput || row.errorSummary;
+  const canExpandDetails = Boolean(row.traceArgs || (row.status !== "error" && traceOutput));
 
   return (
     <div data-testid="timeline-row" data-row-status={row.status} className="relative pl-4">
@@ -326,9 +371,9 @@ function TimelineRowView({
         <button
           type="button"
           aria-label={row.toolName ? `Tool: ${row.toolName}` : row.label}
-          aria-expanded={row.traceArgs ? detailsExpanded : undefined}
+          aria-expanded={canExpandDetails ? detailsExpanded : undefined}
           onClick={() => {
-            if (row.traceArgs) setDetailsExpanded((v) => !v);
+            if (canExpandDetails) setDetailsExpanded((v) => !v);
           }}
           className="w-full flex items-center justify-between gap-2 text-xs text-left cursor-pointer group"
         >
@@ -361,18 +406,28 @@ function TimelineRowView({
           </div>
         </button>
 
-        {detailsExpanded && row.traceArgs && (
-          <pre
-            data-testid="timeline-row-details"
-            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black p-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 overflow-x-auto whitespace-pre-wrap"
-          >
-            {JSON.stringify(row.traceArgs, null, 2)}
-          </pre>
+        {detailsExpanded && canExpandDetails && (
+          <div className="flex flex-col gap-1">
+            {row.traceArgs && (
+              <pre
+                data-testid="timeline-row-details"
+                className="max-h-64 overflow-y-auto overflow-x-auto overscroll-contain rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black p-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap"
+              >
+                {JSON.stringify(row.traceArgs, null, 2)}
+              </pre>
+            )}
+            {row.status !== "error" && traceOutput && (
+              <pre
+                data-testid="timeline-row-output"
+                className="max-h-64 overflow-y-auto overflow-x-auto overscroll-contain rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-black p-2 font-mono text-[11px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words"
+              >
+                {traceOutput}
+              </pre>
+            )}
+          </div>
         )}
 
-        {row.status === "error" && row.errorSummary && (
-          <CollapsibleErrorOutput errorSummary={row.errorSummary} />
-        )}
+        {row.status === "error" && errorOutput && <CollapsibleErrorOutput output={errorOutput} />}
 
         {row.writeDiff && (
           <div className="rounded-lg border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-black overflow-hidden">
@@ -481,7 +536,7 @@ function mergePersistedDiffsIntoRows(
   });
 }
 
-export function ActivityTimeline({
+export const ActivityTimeline = React.memo(function ActivityTimeline({
   traces,
   thinkingSegments,
   roundNarrations,
@@ -491,21 +546,26 @@ export function ActivityTimeline({
   hasContent = false,
   onOpenCanvasDiff,
 }: ActivityTimelineProps) {
-  const baseRows = buildActivityTimeline(traces, undefined, {
-    thinkingSegments,
-    roundNarrations,
-    roundGenerationMs,
-    isStreaming,
-  });
-  if (baseRows.length === 0) return null;
-
+  const baseRows = useMemo(
+    () =>
+      buildActivityTimeline(traces, undefined, {
+        thinkingSegments,
+        roundNarrations,
+        roundGenerationMs,
+        isStreaming,
+      }),
+    [traces, thinkingSegments, roundNarrations, roundGenerationMs, isStreaming]
+  );
   const rows = mergePersistedDiffsIntoRows(baseRows, persistedDiffs);
+  const allTurnDiffs = useMemo(() => {
+    const rawTurnDiffs: TimelineWriteDiff[] = [];
+    for (const r of rows) {
+      if (r.writeDiff) rawTurnDiffs.push(r.writeDiff);
+    }
+    return coalesceTimelineWriteDiffs(rawTurnDiffs);
+  }, [rows]);
 
-  const rawTurnDiffs: TimelineWriteDiff[] = [];
-  for (const r of rows) {
-    if (r.writeDiff) rawTurnDiffs.push(r.writeDiff);
-  }
-  const allTurnDiffs = coalesceTimelineWriteDiffs(rawTurnDiffs);
+  if (rows.length === 0) return null;
 
   return (
     <div
@@ -533,4 +593,4 @@ export function ActivityTimeline({
       )}
     </div>
   );
-}
+});

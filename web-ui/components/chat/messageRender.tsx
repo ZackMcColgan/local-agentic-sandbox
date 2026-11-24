@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import NextImage from "next/image";
 import {
   Sparkles,
@@ -68,12 +68,12 @@ export function UserMessageContent({ content }: { content: string }) {
       remarkPlugins={[remarkGfm]}
       components={{
         code: ({ children }) => (
-          <code className="px-1.5 py-0.5 rounded bg-blue-100/80 dark:bg-sky-900/40 text-blue-950 dark:text-sky-200 font-mono text-xs">
+          <code className="px-1.5 py-0.5 rounded bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-950 dark:text-emerald-200 font-mono text-xs">
             {children}
           </code>
         ),
         p: ({ children }) => (
-          <p className="mb-1 last:mb-0 leading-relaxed whitespace-pre-line text-blue-950 dark:text-sky-100">
+          <p className="mb-1 last:mb-0 leading-relaxed whitespace-pre-line text-emerald-950 dark:text-emerald-100">
             {children}
           </p>
         ),
@@ -88,16 +88,16 @@ export function UserMessageContent({ content }: { content: string }) {
       <div className={expanded ? undefined : "relative max-h-[9rem] overflow-hidden"}>
         {markdown}
         {!expanded && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-blue-50 dark:from-[#03151a] to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-emerald-50 dark:from-[#031a12] to-transparent" />
         )}
       </div>
-      <div className="mt-2 -mb-1 border-t border-blue-200/70 dark:border-[rgba(56,189,248,0.25)]">
+      <div className="mt-2 -mb-1 border-t border-emerald-200/70 dark:border-[rgba(16,185,129,0.28)]">
         <button
           type="button"
           data-testid="brief-collapse-toggle"
           aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-blue-700 dark:text-[#bae6fd] hover:underline cursor-pointer"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:underline cursor-pointer"
         >
           {expanded ? (
             <>
@@ -129,25 +129,25 @@ export interface ChatMessageItemProps {
   isStoppingTask: boolean;
   activeAssistantMsgId: string | null;
   completedTurnMsgId: string | null;
-  streamStatus: string | null;
-  turnStartedAtMs: number | null;
-  lastActivityAtMs: number;
-  expandedTraces: Record<string, boolean>;
-  expandedProofs: Record<string, boolean>;
+  streamStatus?: string | null;
+  turnStartedAtMs?: number | null;
+  lastActivityAtMs?: number;
+  expandedTraces?: Record<string, boolean>;
+  expandedProofs?: Record<string, boolean>;
   hasResolvedDetachedTurn: boolean;
   activeModel: string;
   onPreviewImage: (url: string | null) => void;
   onCopyToClipboard: (text: string, id: string) => void;
   onRetry: () => void;
-  onToggleProof: (proofKey: string) => void;
-  onToggleTraces: (messageId: string) => void;
+  onToggleProof?: (proofKey: string) => void;
+  onToggleTraces?: (messageId: string) => void;
   onStopTask?: () => Promise<void> | void;
   onRunControlAction: (action: "pause" | "resume" | "restart") => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
 }
 
-export function ChatMessageItem({
+export const ChatMessageItem = React.memo(function ChatMessageItem({
   message: m,
   idx,
   copiedMessageId,
@@ -174,6 +174,55 @@ export function ChatMessageItem({
   const isCopied = copiedMessageId === m.id;
   const isTaskHostMessage = idx === lastLinkedTaskMsgIndex && !!activeTask;
   const isSupersededTaskMessage = !!m.taskId && !isTaskHostMessage;
+  const isStreamingThis = Boolean(
+    m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
+  );
+
+  const turnTraces = useMemo(
+    () => mergeLiveAndSettledTraces(m.traces, isStreamingThis ? liveTurnTraces : undefined),
+    [m.traces, isStreamingThis, liveTurnTraces]
+  );
+
+  const fileDiffCards = useMemo(() => {
+    if (isUser || isSupersededTaskMessage) return [];
+    type TurnDiffEntry = {
+      path: string;
+      diff: string;
+      diffFull?: string;
+      addedLines: number;
+      removedLines: number;
+    };
+    const normalizeDiffPath = (p: string) => {
+      const s = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+      return /^[A-Za-z]:\//.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+    };
+    const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map((d) => ({
+      path: d.path,
+      diff: d.diffPreview,
+      diffFull: d.diffFull,
+      addedLines: d.addedLines,
+      removedLines: d.removedLines,
+    }));
+    const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs) ? coalesceTurnDiffs(m.diffs) : [];
+    const mergedMap = new Map<string, TurnDiffEntry>();
+    for (const d of traceDiffs) {
+      mergedMap.set(normalizeDiffPath(d.path), d);
+    }
+    for (const d of serverDiffs) {
+      const key = normalizeDiffPath(d.path);
+      const existing = mergedMap.get(key);
+      const isUnified = d.removedLines > 0 || /^@@\s+-\d+/m.test(d.diff);
+      if (!existing || isUnified) {
+        mergedMap.set(key, d);
+      }
+    }
+    return Array.from(mergedMap.values()).map((d) => ({
+      path: d.path,
+      diff: d.diffFull ?? d.diff,
+      addedLines: d.addedLines,
+      removedLines: d.removedLines,
+    }));
+  }, [isUser, isSupersededTaskMessage, m.traces, m.diffs]);
 
   if (isSupersededTaskMessage) {
     return null;
@@ -204,7 +253,9 @@ export function ChatMessageItem({
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-medium shadow-xs">
                   <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <span className="max-w-[140px] truncate">{att.name}</span>
-                  <span className="text-[10px] text-slate-400">({formatFileSize(att.size)})</span>
+                  <span className="text-[10px] text-slate-600 dark:text-zinc-400">
+                    ({formatFileSize(att.size)})
+                  </span>
                 </div>
               )}
             </div>
@@ -212,15 +263,15 @@ export function ChatMessageItem({
         </div>
       )}
 
-      {/* User Bubble: soft blue glass matching AGENTS.md 2.A */}
+      {/* User Bubble: soft emerald glass */}
       {isUser ? (
         <div className="flex flex-col items-end max-w-[88%] sm:max-w-lg min-w-0">
-          <div className="bg-blue-50/90 border border-blue-200 text-blue-950 dark:bg-[rgba(14,116,144,0.18)] dark:border-[rgba(56,189,248,0.32)] dark:text-[#e0f2fe] rounded-2xl px-4 py-3.5 shadow-xs text-sm font-normal leading-relaxed min-w-0">
-            <div className="prose dark:prose-invert max-w-none break-words text-sm text-blue-950 dark:text-sky-100">
+          <div className="bg-emerald-50/90 border border-emerald-200 text-emerald-950 dark:bg-[rgba(16,185,129,0.14)] dark:border-[rgba(16,185,129,0.32)] dark:text-[#d1fae5] rounded-2xl px-4 py-3.5 shadow-xs text-sm font-normal leading-relaxed min-w-0">
+            <div className="prose dark:prose-invert max-w-none break-words text-sm text-emerald-950 dark:text-emerald-100">
               <UserMessageContent content={m.content} />
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-400 dark:text-zinc-400">
+          <div className="flex items-center gap-2 mt-1 mr-1 text-[11px] text-slate-600 dark:text-zinc-400">
             <button
               type="button"
               data-testid="copy-user-message-btn"
@@ -317,13 +368,6 @@ export function ChatMessageItem({
           {/* Activity Timeline + Thinking Preview for ALL non-task-host turns */}
           {!isTaskHostMessage &&
             (() => {
-              const isStreamingThis = Boolean(
-                m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
-              );
-              const turnTraces = mergeLiveAndSettledTraces(
-                m.traces,
-                isStreamingThis ? liveTurnTraces : undefined
-              );
               const hasThought = Boolean(m.thought && m.thought.trim());
               const hasNarrations = Boolean(
                 Array.isArray(m.roundNarrations) && m.roundNarrations.length > 0
@@ -421,13 +465,15 @@ export function ChatMessageItem({
                       data-testid="host-runner-disconnect-status"
                       className={`mb-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
                         hostDisconnect.kind === "recovered"
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                          : "border-zinc-700 bg-black text-zinc-400"
+                          ? "border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-black text-zinc-700 dark:text-zinc-400"
                       }`}
                     >
                       <span
                         className={`h-2 w-2 rounded-full ${
-                          hostDisconnect.kind === "recovered" ? "bg-emerald-500" : "bg-zinc-400"
+                          hostDisconnect.kind === "recovered"
+                            ? "bg-emerald-500"
+                            : "bg-zinc-500 dark:bg-zinc-400"
                         }`}
                       />
                       <span>{hostDisconnect.summary}</span>
@@ -555,7 +601,7 @@ export function ChatMessageItem({
                         <span
                           data-testid="stream-cursor"
                           aria-hidden="true"
-                          className="text-emerald-400 animate-pulse font-bold"
+                          className="text-emerald-600 dark:text-emerald-400 animate-pulse font-bold"
                         >
                           ▍
                         </span>
@@ -717,77 +763,17 @@ export function ChatMessageItem({
             </div>
           )}
 
-          {/* Chat Diff Cards fallback when ActivityTimeline did not render write diffs */}
-          {(() => {
-            if (isUser) return null;
-            const isStreamingThis = Boolean(
-              m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
-            );
-            const turnTraces = mergeLiveAndSettledTraces(
-              m.traces,
-              isStreamingThis ? liveTurnTraces : undefined
-            );
-            const timelineHandlesDiffs =
+          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline);
+              suppressed when the timeline already renders this turn's write diffs */}
+          {fileDiffCards.length > 0 &&
+            !(
               Boolean(onOpenCanvasDiff) &&
-              turnTraces.some((t) => Boolean(extractWriteDiffFromTrace(t)));
-            if (timelineHandlesDiffs) return null;
-
-            type TurnDiffEntry = {
-              path: string;
-              diff: string;
-              diffFull?: string;
-              addedLines: number;
-              removedLines: number;
-              truncated?: boolean;
-              totalDiffLines?: number;
-              omittedLines?: number;
-            };
-            const normalizeDiffPath = (p: string) => {
-              const s = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
-              return /^[A-Za-z]:\//.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
-            };
-            const traceDiffs: TurnDiffEntry[] = extractFileWriteDiffsFromTraces(m.traces).map(
-              (d) => ({
-                path: d.path,
-                diff: d.diffPreview,
-                diffFull: d.diffFull,
-                addedLines: d.addedLines,
-                removedLines: d.removedLines,
-                truncated: d.diffPreview.includes("more lines"),
-              })
-            );
-            const serverDiffs: TurnDiffEntry[] = Array.isArray(m.diffs)
-              ? coalesceTurnDiffs(m.diffs)
-              : [];
-            const mergedMap = new Map<string, TurnDiffEntry>();
-            for (const d of traceDiffs) {
-              mergedMap.set(normalizeDiffPath(d.path), d);
-            }
-            for (const d of serverDiffs) {
-              const key = normalizeDiffPath(d.path);
-              const existing = mergedMap.get(key);
-              const isUnified = d.removedLines > 0 || /^@@\s+-\d+/m.test(d.diff);
-              if (!existing || isUnified) {
-                mergedMap.set(key, d);
-              }
-            }
-            const fileDiffs = Array.from(mergedMap.values());
-
-            if (fileDiffs.length === 0) return null;
-
-            return (
+              turnTraces.some((t) => Boolean(extractWriteDiffFromTrace(t)))
+            ) && (
               <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-                <CanvasDiffCard
-                  diffs={fileDiffs.map((d) => ({
-                    path: d.path,
-                    diff: d.diffFull ?? d.diff,
-                    addedLines: d.addedLines,
-                    removedLines: d.removedLines,
-                  }))}
-                />
+                <CanvasDiffCard diffs={fileDiffCards} />
               </div>
-            );
-          })()}
+            )}
 
           {/* Stint card on completed turns */}
           {!isTaskHostMessage &&
@@ -830,7 +816,7 @@ export function ChatMessageItem({
             return (
               <div
                 data-testid="served-by-note"
-                className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-400 pt-0.5"
+                className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-zinc-400 pt-0.5"
               >
                 <Sparkles className="h-2.5 w-2.5 text-emerald-500/70" />
                 <span>{note}</span>
@@ -841,4 +827,4 @@ export function ChatMessageItem({
       )}
     </div>
   );
-}
+});

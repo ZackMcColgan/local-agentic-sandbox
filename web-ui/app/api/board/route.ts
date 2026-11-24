@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   fileBoardItem,
   getBoardStore,
+  isValidBoardStatus,
   seedBoardIfEmpty,
   type CreateBoardItemInput,
   type UpdateBoardItemInput,
@@ -44,6 +45,12 @@ export async function PATCH(req: NextRequest) {
     const body = (await req.json()) as { id?: string } & UpdateBoardItemInput;
     if (!body.id) {
       return NextResponse.json({ error: "Missing item id" }, { status: 400 });
+    }
+    if (body.status !== undefined && !isValidBoardStatus(body.status)) {
+      return NextResponse.json(
+        { error: `Invalid board status: ${String(body.status)}` },
+        { status: 400 }
+      );
     }
     const { id, ...patch } = body;
     const updated = getBoardStore().update(id, patch);
