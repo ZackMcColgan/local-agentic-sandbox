@@ -7,6 +7,7 @@ import {
   validateImageTag,
   validateK8sResourceName,
 } from "@/lib/deploy/selfDeploy";
+import { validateDeployDryRunUrl } from "@/lib/deploy/dryRunUrlGuard";
 import { OvernightSupervisor } from "@/lib/subagents/supervisor";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { TaskManifest } from "@/lib/subagents/types";
@@ -83,6 +84,12 @@ export async function POST(req: NextRequest) {
             { error: err instanceof Error ? err.message : String(err) },
             { status: 400 }
           );
+        }
+      }
+      if (dryRunUrl !== undefined) {
+        const urlCheck = validateDeployDryRunUrl(dryRunUrl, process.env.DEPLOY_URL);
+        if (!urlCheck.ok) {
+          return NextResponse.json({ error: urlCheck.error }, { status: 400 });
         }
       }
 

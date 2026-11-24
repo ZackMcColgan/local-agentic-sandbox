@@ -1409,8 +1409,12 @@ const MAPPING_RULES: MappingRule[] = [
   },
   // Deploy API (Sprint 7)
   {
-    match: (p) => p.includes("app/api/deploy") || p.includes("components/LiveRunBlock"),
-    tests: ["tests/deployApiWiring.test.ts"],
+    match: (p) =>
+      p.includes("app/api/deploy") ||
+      p.includes("components/LiveRunBlock") ||
+      p.includes("lib/deploy/dryRunUrlGuard") ||
+      p.includes("deployDryRunUrlGuard.test.ts"),
+    tests: ["tests/deployApiWiring.test.ts", "tests/deployDryRunUrlGuard.test.ts"],
   },
   // Build Deploy Flow (Sprint 12 Phase 5)
   {
