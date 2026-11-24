@@ -967,10 +967,8 @@ export function ChatStream({
     if (!currentThreadId || isCompactingManually) return;
     setIsCompactingManually(true);
     try {
-      const res = await fetch(`/api/threads/${currentThreadId}`, {
+      const res = await fetch(`/api/threads/${encodeURIComponent(currentThreadId)}/compact`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "compact" }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -981,6 +979,8 @@ export function ChatStream({
             estimatedTokens: data.tokensAfter ?? prev.estimatedTokens,
           }));
         }
+      } else {
+        console.error("Manual compaction failed:", res.status);
       }
     } catch (err) {
       console.error("Manual compaction error:", err);

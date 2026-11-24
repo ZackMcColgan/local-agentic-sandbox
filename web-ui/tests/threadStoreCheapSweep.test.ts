@@ -66,7 +66,7 @@ test("A1: sweepStalledThreads with no candidates does not call listThreads or ge
     );
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -131,7 +131,7 @@ test("A2: sweepStalledThreads with one stale active candidate loads only that ca
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -181,7 +181,7 @@ test("A3: message-level streaming on a non-active thread is still detected and e
     assert.equal(updated.messages[1].status, "incomplete");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -240,7 +240,7 @@ test("A4: mergeThreadsIntoBoard uses summaries, never calls listThreads, and han
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -280,7 +280,7 @@ test("A4c: mergeThreadsIntoBoard excludes plain chat threads without taskId", as
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -325,7 +325,7 @@ test("A4b: mergeThreadsIntoBoard dedupes ghost when stored thread carries matchi
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -365,7 +365,7 @@ test("A4c: mergeThreadsIntoBoard excludes plain chat threads without taskId", as
     else process.env.THREADS_DIR = prevEnv;
     if (prevCheckpointEnv === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
     else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointEnv;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -432,7 +432,7 @@ test("A5: listThreadSummaries(query) matches title, preview, and body without ca
     assert.equal(results[2].matchSnippet, "early message with needle inside body");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -481,7 +481,7 @@ test("A6: sweepStalledThreads does not block the event loop (>1000ms) on large s
     assert.ok(timerLagMs < 1000, `Expected event-loop timer lag < 1000ms, got ${timerLagMs}ms`);
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -532,7 +532,7 @@ test("A7: auto-resume for stale streaming JOB thread is preserved", async () => 
     assert.equal(allSummaries.length, 2, "auto-resume should have created a fresh thread");
   } finally {
     clearTurnActive("t-stale-active");
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -601,7 +601,7 @@ test("A8: supervisor sweep is a process-wide singleton across multiple ThreadSto
     for (const t of createdTimers) {
       origClearInterval(t);
     }
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -634,7 +634,7 @@ test("A9: createThread persists isSubagent and isScheduled when provided and omi
     assert.equal("isSubagent" in reloadedPlain, false);
     assert.equal("isScheduled" in reloadedPlain, false);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -686,6 +686,6 @@ test("A10: post-restart non-board taskId sweep reads raw active thread before re
     assert.ok(oldThread.stalledReason);
     assert.ok(oldThread.resumedToThreadId);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
