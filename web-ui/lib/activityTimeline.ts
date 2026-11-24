@@ -67,6 +67,7 @@ export interface TimelineRow {
 
 const MAX_TARGET_LEN = 64;
 const MAX_ERROR_LEN = 140;
+const MAX_TRACE_OUTPUT_CHARS = 65536;
 
 function truncate(text: string, maxLen: number): string {
   const cleaned = text.replace(/\s+/g, " ").trim();
@@ -295,43 +296,206 @@ function targetForTrace(kind: TimelineToolKind, trace: TimelineTraceInput): stri
   return truncate((trace.tool || "action").replace(/_/g, " "), MAX_TARGET_LEN);
 }
 
+function clampTraceOutput(text: string, maxChars = MAX_TRACE_OUTPUT_CHARS): string {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 0) return "";
+  const probe = `... [truncated ${text.length} earlier chars]\n`;
+  if (probe.length >= maxChars) {
+    return text.slice(text.length - maxChars);
+  }
+  const initialTail = maxChars - probe.length;
+  const omitted = text.length - initialTail;
+  const prefix = `... [truncated ${omitted} earlier chars]\n`;
+  return prefix + text.slice(text.length - (maxChars - prefix.length));
+}
+
+function parseJsonObjectText(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractObjStreams(obj: Record<string, unknown>): string | undefined {
+  if (typeof obj.output === "string" && obj.output.length > 0) {
+    if (
+      typeof obj.error === "string" &&
+      obj.error.trim() &&
+      !obj.output.includes(obj.error.trim())
+    ) {
+      return `${obj.output.replace(/\r?\n$/, "")}\n${obj.error}`;
+    }
+    return obj.output;
+  }
+
+  const parts: string[] = [];
+  if (typeof obj.stdout === "string" && obj.stdout.length > 0) parts.push(obj.stdout);
+  if (typeof obj.stderr === "string" && obj.stderr.length > 0) parts.push(obj.stderr);
+  if (parts.length > 0) {
+    return parts.length === 2 && parts[0].endsWith("\n") ? parts[0] + parts[1] : parts.join("\n");
+  }
+
+  if (typeof obj.content === "string" && obj.content.length > 0) return obj.content;
+  if (typeof obj.error === "string" && obj.error.length > 0) return obj.error;
+  if (typeof obj.message === "string" && obj.message.length > 0) return obj.message;
+  return undefined;
+}
+
+function pickErrorDetail(obj: Record<string, unknown>, fallback: string): string {
+  const candidates = [obj.error, obj.message, obj.stderr, obj.output, obj.stdout];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c;
+  }
+  return fallback;
+}
+
 /**
  * Extracts a concise single-line error summary from a trace result if it indicates failure.
+ * Respects explicit `isError === false` and structured success indicators first, and unwraps
+ * MCP `content[0].text` JSON envelopes.
  */
 export function extractTraceError(result: unknown, isError?: boolean): string | undefined {
+  if (isError === false) return undefined;
+
+  if (result && typeof result === "object") {
+    const obj = result as Record<string, unknown>;
+
+    if (obj.isError === true || obj.ok === false || obj.success === false) {
+      return truncate(pickErrorDetail(obj, "Tool execution failed"), MAX_ERROR_LEN);
+    }
+    if (typeof obj.exitCode === "number" && obj.exitCode !== 0) {
+      return truncate(pickErrorDetail(obj, `Exit code ${obj.exitCode}`), MAX_ERROR_LEN);
+    }
+    if (typeof obj.exit_code === "number" && obj.exit_code !== 0) {
+      return truncate(pickErrorDetail(obj, `Exit code ${obj.exit_code}`), MAX_ERROR_LEN);
+    }
+    if (obj.status === "EXECUTION_ERROR") {
+      return truncate(pickErrorDetail(obj, "Tool execution failed"), MAX_ERROR_LEN);
+    }
+
+    const explicitSuccess =
+      obj.isError === false ||
+      obj.success === true ||
+      obj.ok === true ||
+      obj.exitCode === 0 ||
+      obj.exit_code === 0 ||
+      obj.status === "SUCCESS";
+    if (explicitSuccess) {
+      return undefined;
+    }
+
+    if (typeof obj.error === "string" && obj.error.trim()) {
+      return truncate(obj.error, MAX_ERROR_LEN);
+    }
+
+    if (Array.isArray(obj.content)) {
+      for (const item of obj.content) {
+        if (!item || typeof item !== "object") continue;
+        const text = (item as { text?: unknown }).text;
+        if (typeof text !== "string") continue;
+        const parsed = parseJsonObjectText(text);
+        if (parsed) {
+          const parsedFailed =
+            parsed.isError === true ||
+            parsed.ok === false ||
+            parsed.success === false ||
+            parsed.status === "EXECUTION_ERROR" ||
+            (typeof parsed.exit_code === "number" && parsed.exit_code !== 0) ||
+            (typeof parsed.exitCode === "number" && parsed.exitCode !== 0);
+          if (parsedFailed) {
+            const code =
+              typeof parsed.exit_code === "number"
+                ? parsed.exit_code
+                : typeof parsed.exitCode === "number"
+                  ? parsed.exitCode
+                  : undefined;
+            const fallback = code !== undefined ? `Exit code ${code}` : "Tool execution failed";
+            return truncate(pickErrorDetail(parsed, fallback), MAX_ERROR_LEN);
+          }
+          const parsedSuccess =
+            parsed.isError === false ||
+            parsed.success === true ||
+            parsed.ok === true ||
+            parsed.exit_code === 0 ||
+            parsed.exitCode === 0 ||
+            parsed.status === "SUCCESS";
+          if (!parsedSuccess && typeof parsed.error === "string" && parsed.error.trim()) {
+            return truncate(parsed.error, MAX_ERROR_LEN);
+          }
+          if (parsedSuccess && !isError) {
+            return undefined;
+          }
+        }
+        if (isError === true && text.trim()) {
+          return truncate(text, MAX_ERROR_LEN);
+        }
+      }
+    }
+
+    if (isError === true) {
+      return "Action failed";
+    }
+    return undefined;
+  }
+
   if (typeof result === "string") {
-    if (isError || /^(error|failed|enoent|eacces|exit code [1-9])/i.test(result.trim())) {
+    if (isError === true) {
+      return truncate(result, MAX_ERROR_LEN) || "Action failed";
+    }
+    if (
+      isError === undefined &&
+      /^(error|failed|enoent|eacces|exit code [1-9])/i.test(result.trim())
+    ) {
       return truncate(result, MAX_ERROR_LEN);
     }
     return undefined;
   }
 
-  if (result && typeof result === "object") {
-    const obj = result as Record<string, unknown>;
-    if (typeof obj.error === "string" && obj.error.trim()) {
-      return truncate(obj.error, MAX_ERROR_LEN);
-    }
-    if (obj.isError === true || obj.ok === false || obj.success === false) {
-      const msg =
-        (typeof obj.message === "string" && obj.message) ||
-        (typeof obj.stderr === "string" && obj.stderr) ||
-        (typeof obj.output === "string" && obj.output) ||
-        "Tool execution failed";
-      return truncate(msg, MAX_ERROR_LEN);
-    }
-    if (typeof obj.exitCode === "number" && obj.exitCode !== 0) {
-      const detail =
-        (typeof obj.stderr === "string" && obj.stderr.trim()) ||
-        (typeof obj.stdout === "string" && obj.stdout.trim()) ||
-        `Exit code ${obj.exitCode}`;
-      return truncate(detail, MAX_ERROR_LEN);
-    }
-  }
-
-  if (isError) {
+  if (isError === true) {
     return "Action failed";
   }
   return undefined;
+}
+
+/**
+ * Extracts full multi-line tool output (`output`, `stderr`, `stdout`, or MCP `content[].text`)
+ * up to 64 KB with tail preservation, separate from the concise 1-line error summary.
+ */
+export function extractTraceOutput(result: unknown): string | undefined {
+  if (result === undefined || result === null) return undefined;
+  if (typeof result === "string") {
+    return result.length > 0 ? clampTraceOutput(result) : undefined;
+  }
+  if (typeof result !== "object") return undefined;
+
+  const obj = result as Record<string, unknown>;
+  if (Array.isArray(obj.content)) {
+    const chunks: string[] = [];
+    for (const item of obj.content) {
+      if (!item || typeof item !== "object") continue;
+      const text = (item as { text?: unknown }).text;
+      if (typeof text !== "string" || text.length === 0) continue;
+      const parsed = parseJsonObjectText(text);
+      if (parsed) {
+        const inner = extractObjStreams(parsed);
+        if (inner && inner.length > 0) {
+          chunks.push(inner);
+          continue;
+        }
+      }
+      chunks.push(text);
+    }
+    if (chunks.length > 0) {
+      return clampTraceOutput(chunks.join("\n"));
+    }
+  }
+
+  const direct = extractObjStreams(obj);
+  return direct && direct.length > 0 ? clampTraceOutput(direct) : undefined;
 }
 
 function countDiffLines(diffText: string): { addedLines: number; removedLines: number } {

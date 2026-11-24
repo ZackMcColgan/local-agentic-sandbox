@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import React from "react";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
+import { GlobalWindow } from "happy-dom";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -209,5 +211,123 @@ describe("ActivityTimeline — thinking preview & turn rendering", () => {
     );
     assert.ok(html.includes('data-testid="open-in-canvas-btn"'));
     assert.ok(html.includes("Open"));
+  });
+
+  it("U-F2: 120-line multi-line command trace renders uncollapsed newlines inside max-h-* overflow-y-auto overscroll-contain <pre> on both error and success rows", async () => {
+    const errorLines = Array.from(
+      { length: 120 },
+      (_, i) => `err-line-${i + 1}: failure diagnostic details`
+    ).join("\n");
+    const okLines = Array.from(
+      { length: 120 },
+      (_, i) => `ok-line-${i + 1}: command stdout details`
+    ).join("\n");
+
+    const win = new GlobalWindow();
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    globalThis.window = win as unknown as Window & typeof globalThis;
+    globalThis.document = win.document as unknown as Document;
+    const container = win.document.createElement("div") as unknown as HTMLDivElement;
+    win.document.body.appendChild(
+      container as unknown as Parameters<typeof win.document.body.appendChild>[0]
+    );
+    const root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root.render(
+          React.createElement(ActivityTimeline, {
+            traces: [
+              {
+                tool: "host_run_powershell",
+                args: { command: "failing-cmd" },
+                durationMs: 120,
+                isError: true,
+                result: {
+                  success: false,
+                  exitCode: 1,
+                  stderr: errorLines,
+                  output: errorLines,
+                },
+              },
+              {
+                tool: "host_run_powershell",
+                args: { command: "passing-cmd" },
+                durationMs: 80,
+                isError: false,
+                result: {
+                  success: true,
+                  exitCode: 0,
+                  stdout: okLines,
+                  output: okLines,
+                },
+              },
+            ],
+          })
+        );
+      });
+
+      const errToggle = container.querySelector(
+        '[data-testid="timeline-error-toggle"]'
+      ) as HTMLButtonElement | null;
+      assert.ok(errToggle, "error row must render timeline-error-toggle");
+      await act(async () => {
+        errToggle!.click();
+      });
+
+      const errPre = container.querySelector(
+        'pre[data-testid="timeline-row-error"]'
+      ) as HTMLPreElement | null;
+      assert.ok(errPre, "expanded error output must render inside a <pre>");
+      const errClasses = errPre!.className;
+      assert.ok(/\bmax-h-/.test(errClasses), `missing max-h-* in ${errClasses}`);
+      assert.ok(/\boverflow-y-auto\b/.test(errClasses), `missing overflow-y-auto in ${errClasses}`);
+      assert.ok(
+        /\boverscroll-contain\b/.test(errClasses),
+        `missing overscroll-contain in ${errClasses}`
+      );
+      const errText = errPre!.textContent || "";
+      assert.ok(errText.includes("err-line-1:"), "missing first error line");
+      assert.ok(errText.includes("err-line-120:"), "missing 120th error line");
+      assert.ok(
+        errText.split("\n").length >= 120,
+        `expected >= 120 uncollapsed lines, got ${errText.split("\n").length}`
+      );
+
+      const okRowBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+        (b.textContent || "").includes("Ran passing-cmd")
+      );
+      assert.ok(okRowBtn, "success row button must be present");
+      await act(async () => {
+        okRowBtn!.click();
+      });
+
+      const okPre = container.querySelector(
+        'pre[data-testid="timeline-row-output"]'
+      ) as HTMLPreElement | null;
+      assert.ok(okPre, "expanded success row must render traceResult output inside a <pre>");
+      const okClasses = okPre!.className;
+      assert.ok(/\bmax-h-/.test(okClasses), `missing max-h-* in ${okClasses}`);
+      assert.ok(/\boverflow-y-auto\b/.test(okClasses), `missing overflow-y-auto in ${okClasses}`);
+      assert.ok(
+        /\boverscroll-contain\b/.test(okClasses),
+        `missing overscroll-contain in ${okClasses}`
+      );
+      const okText = okPre!.textContent || "";
+      assert.ok(okText.includes("ok-line-1:"), "missing first ok line");
+      assert.ok(okText.includes("ok-line-120:"), "missing 120th ok line");
+      assert.ok(
+        okText.split("\n").length >= 120,
+        `expected >= 120 uncollapsed lines, got ${okText.split("\n").length}`
+      );
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      const g = globalThis as unknown as Partial<Record<"window" | "document", unknown>>;
+      delete g.window;
+      delete g.document;
+    }
   });
 });

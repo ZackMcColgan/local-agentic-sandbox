@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { Zap, GitPullRequest } from "lucide-react";
 import {
   deriveStintMetrics,
@@ -9,8 +9,26 @@ import {
 } from "../lib/stintDerivation";
 import { formatTokenCount } from "../lib/turnSpeed";
 
-export function StintCard(props: StintRecordInput) {
-  const metrics = deriveStintMetrics(props);
+export const StintCard = React.memo(function StintCard({
+  durationMs,
+  outputTokens,
+  roundPromptTokens,
+  roundGenerationMs,
+  traces,
+  prUrl,
+}: StintRecordInput) {
+  const metrics = useMemo(
+    () =>
+      deriveStintMetrics({
+        durationMs,
+        outputTokens,
+        roundPromptTokens,
+        roundGenerationMs,
+        traces,
+        prUrl,
+      }),
+    [durationMs, outputTokens, roundPromptTokens, roundGenerationMs, traces, prUrl]
+  );
   if (!metrics) return null;
 
   const timeLabel =
@@ -108,4 +126,4 @@ export function StintCard(props: StintRecordInput) {
       )}
     </div>
   );
-}
+});
