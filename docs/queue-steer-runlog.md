@@ -293,7 +293,8 @@ docs/queue-steer-runlog.md` -> clean. `git diff --ignore-cr-at-eol --stat` -> em
   "Owner" neutral terms).
 - Scripts fixtures: `scripts/bench-quality.js`, `scripts/verify-phase-c.js` personal-name
   fixtures replaced with neutral names.
-- Host paths: sanitized `C:\Users\...` examples in `web-ui/components/settings/HostZone.tsx`
+- Host paths: sanitized absolute user-profile path examples in
+  `web-ui/components/settings/HostZone.tsx`
   placeholder, `web-ui/lib/activityTimeline.ts` and `web-ui/lib/chatUtils.ts` doc comments;
   committed eval scorecards (`eval/results/baseline-*/endpoint/scorecard.{json,md}`) verified
   clean of absolute user paths (untracked timestamped eval dirs left untouched).
