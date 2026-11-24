@@ -15,12 +15,12 @@ Autonomous AI coding agents need to generate, test, and debug code in real time.
 
 `local-agentic-sandbox` implements a **zero-trust, multi-boundary containerized architecture**:
 
-1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) at 128K context, keeping inference local with no cloud dependency. The optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default) can host a 27B fallback (`swift-15-27b-mtp`) when scaled up.
-2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 13 autonomous developer and attestation tools over Model Context Protocol (MCP) via Server-Sent Events (SSE), strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
-3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy with built-in SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
-4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring real-time conversational chat threads and thread store, a **work board** as a first-class UI surface, supervisor/scheduler, self-deploy, test gate, OpenTelemetry distributed tracing waterfall, and persistent session storage.
-5. **Observability Engine (`otel-collector` / Jaeger)**: Real-time distributed trace collection across agent turns, tool dispatches, and command executions, with the Jaeger UI served through the gateway at `/jaeger/`.
-6. **Host Bridge (`host-bridge`)**: Host process acting as the sole external boundary for git/GitHub and host-routed internet access, with an approval gate for destructive host actions and credentials stored only in the host OS keyring.
+1. **Local AI Inference Engine (Strata)**: Self-hosted **Strata inference engine** running on the host GPU (AMD Radeon RX 9070 XT, ROCm/HIP) serving **Qwen3.8-Flash-Next (125B-class MoE)** (`qwen3.8-flash-next-gyro-gyro-s`) at **64K context** (`scripts/start-strata.ps1`), keeping inference local with no cloud dependency. The optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default) can host a 27B fallback (`swift-15-27b-mtp`) when scaled up.
+2. **Hardened Execution Boundary (`mcp-server` / `mcp-runner`)**: An unprivileged, read-only container executing 13 autonomous developer and attestation tools over Model Context Protocol (MCP) via **Streamable HTTP (`POST /mcp`, stateless mode)**, strictly sandboxed (`read_only` rootfs, `cap_drop: ALL`, `uid: 10001`, `tmpfs: /tmp (noexec)`).
+3. **Isolated Browser Boundary (`browser-mcp`)**: An isolated egress-enabled web scraper and search proxy over Streamable HTTP (`POST /mcp`) with built-in application-layer SSRF protection blocking RFC 1918 subnets, fetching external documentation safely.
+4. **Web UI & Autonomous Agent Orchestrator (`web-ui`)**: A Next.js 15 interface featuring real-time conversational chat threads and thread store, a **work board** as a first-class UI surface, supervisor/scheduler, self-deploy (gated OFF by default), test gate, OpenTelemetry distributed tracing waterfall, and persistent session storage on a `10Gi` ReadWriteOnce PVC.
+5. **Observability Engine (`otel-collector` / Jaeger)**: Real-time distributed trace collection across agent turns, tool dispatches, and command executions (Jaeger UI exposed via `otel-collector` service port `16686`).
+6. **Host Bridge (`host-bridge`)**: Host process acting as the sole external boundary for git/GitHub and host-routed commands, with an approval gate for destructive host actions and shared-secret authentication via host environment variables (`web-ui` mounts internal service tokens via Kubernetes Secrets).
 
 ---
 
@@ -97,14 +97,14 @@ _Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `loc
 
 ## 3. Network & Security Isolation Matrix
 
-| Component / Pod      | Placement               | Filesystem Mode       | Linux Capabilities  | User ID           | Role & Network Isolation                                                                                                                                                                                                                           |
-| :------------------- | :---------------------- | :-------------------- | :------------------ | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`mcp-runner`**     | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`).                                                                                                                                        |
-| **`browser-mcp`**    | `local-agentic-sandbox` | Read-Only App         | Default (No Privs)  | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only.                                                                                                   |
-| **`web-ui`**         | `local-agentic-sandbox` | Read-Write            | Default             | Non-Root          | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge.                                                        |
-| **`otel-collector`** | `local-agentic-sandbox` | Ephemeral             | Default (No Privs)  | Non-Root          | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686).                                                                                                                                                                                       |
-| **`strata`**         | Host Process / PCIe     | Local Drive           | Host Native         | Host User         | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 128K context. The 27B fallback (`swift-15-27b-mtp`) lives on the optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default). |
-| **`host-bridge`**    | Host Process            | Local Drive           | Host Native         | Host User         | Sole external boundary (git/GitHub, host-routed internet, approval gate for destructive actions, credentials in host OS keyring only).                                                                                                             |
+| Component / Pod      | Placement               | Filesystem Mode       | Linux Capabilities  | User ID           | Role & Network Isolation                                                                                                                                                                                                                                                       |
+| :------------------- | :---------------------- | :-------------------- | :------------------ | :---------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`mcp-runner`**     | `local-agentic-sandbox` | **`read_only: true`** | **`cap_drop: ALL`** | **`10001:10001`** | Air-Gapped Code Execution. NetworkPolicy: Deny-all egress except CoreDNS (`:53`) and GitHub HTTPS (`:443`).                                                                                                                                                                    |
+| **`browser-mcp`**    | `local-agentic-sandbox` | Read-Only App         | Default (No Privs)  | **`10002:10002`** | Isolated Web Scraper & DuckDuckGo Search. Built-in SSRF guard blocking RFC 1918 private subnets. NetworkPolicy: HTTP/HTTPS outbound egress only.                                                                                                                               |
+| **`web-ui`**         | `local-agentic-sandbox` | Read-Write            | Default             | Non-Root          | Next.js 15 Web Portal, Work Board & Multi-MCP Dispatcher (Port 3000 / NodePort 30300). NetworkPolicy: Egress allowed to internal MCP services, Jaeger, host Strata engine, and host bridge.                                                                                    |
+| **`otel-collector`** | `local-agentic-sandbox` | Ephemeral             | Default (No Privs)  | Non-Root          | Distributed Jaeger Tracing Engine (Ports 4318, 4317, 16686).                                                                                                                                                                                                                   |
+| **`strata`**         | Host Process / PCIe     | Local Drive           | Host Native         | Host User         | Local GPU Inference (AMD Radeon RX 9070 XT, ROCm/HIP): resident Qwen3.8-Flash-Next (125B-class MoE), 64K context (`scripts/start-strata.ps1`). The 27B fallback (`swift-15-27b-mtp`) lives on the optional in-cluster Ollama harness (`llm-rocm-gpu`, scaled to 0 by default). |
+| **`host-bridge`**    | Host Process            | Local Drive           | Host Native         | Host User         | Sole external boundary (git/GitHub, host-routed commands, approval gate for destructive actions, shared secret via host environment variables).                                                                                                                                |
 
 ### 3.1 Host-Filesystem Write Trust Boundary (`./workspace:/workspace:rw`)
 
@@ -120,12 +120,11 @@ The MCP toolchain container mounts the host directory `./workspace` into `/works
 
 ### 3.2 LAN Reverse Proxy Bridge Security Tradeoff
 
-The LAN reverse proxy bridge (`scripts/lan-bridge.js`) binds to `0.0.0.0` on ports `80` and `3000` without authentication:
+The LAN reverse proxy bridge (`scripts/lan-bridge.js`) binds to `0.0.0.0` on ports `80`, `443`, and `3000` (proxying to `kind-gateway` at `127.0.0.1:3001`) without authentication:
 
-- **Owner Decision**: Unrestricted access across the local home area network allows seamless pairing from mobile phones and tablets (e.g. `http://192.168.50.254/`) via simple browser bookmarks without authentication friction.
+- **Owner Decision**: Unrestricted access across the local home area network allows seamless pairing from mobile phones and tablets via simple browser bookmarks without authentication friction.
 - **Blast Radius**: Any device on the home LAN (guests, personal phones, IoT devices) can access the Web UI and drive `workspace_run_command`. Execution is strictly restricted to the containerized `/workspace` sandbox under UID `10001` with no host-level privileges.
 - **Startup Warning**: On launch, the bridge emits an explicit security notice in console logs referencing the documentation.
-- **Opt-In Hardening**: If token protection is required in the future, the bridge supports an optional `BRIDGE_AUTH_TOKEN` environment variable with bookmark query parameter (`?token=...`) auto-hydration into secure cookies.
 
 ---
 
@@ -153,11 +152,11 @@ local-agentic-sandbox/
 │       ├── strata-service.yaml         # Service pointing to host Strata engine (:8080)
 │       ├── host-runner-service.yaml    # Service pointing to host-bridge (:8765)
 │       ├── qdrant.yaml                 # Qdrant vector store deployment & service
-│       ├── builder-tier.yaml           # Builder-tier toolchain sandbox deployment
-│       ├── ingress.yaml                # Nginx ingress rules for web-ui and /jaeger/
+│       ├── builder-tier.yaml           # Builder-tier NetworkPolicy & config (no standalone pod deployed)
+│       ├── ingress.yaml                # Nginx ingress rules for web-ui
 │       ├── observability.yaml          # Jaeger OpenTelemetry collector deployment & service
 │       ├── network-policies.yaml       # Zero-trust network egress & ingress policies
-│       └── workspace-pvc.yaml          # HostPath persistent volume claim for ./workspace
+│       └── workspace-pvc.yaml          # Standard 10Gi ReadWriteOnce persistent volume claim for /workspace
 ├── docs/
 │   ├── architecture.drawio                          # Editable Draw.io XML source diagram
 │   ├── architecture.drawio.svg                      # Rendered vector SVG diagram for README/docs
@@ -190,10 +189,10 @@ local-agentic-sandbox/
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── src/
-│   │   ├── index.ts                    # SSE transport & tool registry
+│   │   ├── index.ts                    # Streamable HTTP (POST /mcp) transport & tool registry
 │   │   └── tools/
 │   │       ├── codeRunner.ts           # Sandboxed Python execution & kernel attestation
-│   │       ├── attestation.ts          # Docker Scout & runtime boundary verification
+│   │       ├── attestation.ts          # Runtime /proc/self/status boundary verification (reports SCOUT_CLI_UNAVAILABLE when Scout CLI absent)
 │   │       ├── patchCore.ts            # Surgical file patch engine for workspace_patch_file
 │   │       └── workspaceTools.ts       # 10 argv-safe git & filesystem tools (ReDoS guarded; 13 MCP tools total)
 │   └── tests/                          # Unit & security integration tests

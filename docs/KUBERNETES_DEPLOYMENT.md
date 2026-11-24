@@ -15,7 +15,9 @@ Docker Compose is **not** used for the live deployment.
 | strata         | **Host** (native, not K8s)    | K8s reaches it via `strata-service` (`host.docker.internal:8080`)                                                                                        |
 | host-bridge    | **Host** (native, not K8s)    | K8s reaches it via `host-runner-service` (`host.docker.internal:8765`)                                                                                   |
 
-Strata and host-bridge run natively on the host for GPU and OS keyring access.
+Strata and host-bridge run natively on the host for GPU access and host git/command execution. Internal service tokens (`sandbox-mcp`, `sandbox-host-runner`, `sandbox-llm-supervisor`, and optional `sandbox-telegram`) are supplied to `web-ui` via Kubernetes Secrets (`deploy/k8s/web-ui.yaml`), while `host-bridge` reads its shared secret from host environment variables.
+
+> **Stage flags:** All autonomous post-PR stage flags (`DISPATCHER_AUTO_ISSUE`, `BOARD_STAGE_FLOW_MONITOR`, `BOARD_STAGE_REVIEWER_GATE`, `BOARD_STAGE_SELF_DEPLOY`, `SELF_DEPLOY_ENABLED`) default to **OFF (shadow mode)**.
 
 ## Prerequisites
 
@@ -88,12 +90,17 @@ Scheduled Task that runs the port-forward command at logon.
 ## Fresh install
 
 ```bash
-# 1. Apply namespaces, services, PVCs, and deployments
+# 1. Apply namespaces, services, PVCs, and deployments (plus host service definitions)
 kubectl apply -k deploy/k8s
+kubectl apply -f deploy/k8s/strata-service.yaml -f deploy/k8s/host-runner-service.yaml
 
-# 2. Build all three images (mcp-server, browser-mcp, web-ui), import into containerd, and roll out
+# 2. Create required Kubernetes Secrets (e.g. sandbox-mcp, sandbox-host-runner, sandbox-llm-supervisor)
+
+# 3. Build all three images (mcp-server, browser-mcp, web-ui), import into containerd, and roll out
 node scripts/deploy-cluster.js all
 ```
+
+> **Note on `make k8s-deploy` and Helm:** `node scripts/deploy-cluster.js` is the canonical local Kubernetes deploy path (it imports images into `desktop-control-plane` containerd storage). The Helm chart in `deploy/helm/local-agentic-sandbox/` does not currently mount `pvc-workspace` or define host service endpoints (`strata-service`, `host-runner-service`).
 
 ## Troubleshooting
 

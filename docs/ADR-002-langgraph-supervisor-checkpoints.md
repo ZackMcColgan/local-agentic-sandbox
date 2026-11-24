@@ -1,9 +1,11 @@
 # ADR-002: LangGraph StateGraph Substrate & Checkpointing for Autonomous Overnight Supervision
 
-**Status**: Accepted  
+**Status**: Accepted (partially superseded in production task dispatch — see Implementation Note below)  
 **Date**: 2026-10-02  
 **Author**: Autonomous Platform Architecture  
 **Context**: local-agentic-sandbox v2.0 (Mode A: Overnight Builder + Mode B: Local Oracle)
+
+> **Implementation Status Note:** `createOvernightGraph` (`web-ui/lib/subagents/overnightGraph.ts`) and `FileCheckpointSaver` (`web-ui/lib/subagents/checkpointSaver.ts`) remain implemented and verified in the test suite (`web-ui/tests/langgraphSupervisorNodes.test.ts`). Live production task execution in `web-ui/app/api/threads/route.ts` currently executes via `createProductionStepExecutor` (`web-ui/lib/subagents/stepExecutor.ts`), persisting task manifests to `${taskId}-checkpoint.json` on the workspace PVC.
 
 ---
 
