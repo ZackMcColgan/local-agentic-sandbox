@@ -97,10 +97,15 @@ describe("Approval Token Binding Suite (Board #131)", () => {
   it("rejects an expired token (403, no execution)", async () => {
     const victim = victimFile("expired.txt");
     const issuedAt = Date.now() - 6 * 60 * 1000; // issued 6 minutes ago
-    const token = issueApprovalToken(TEST_SECRET, "host_delete_path", { path: victim }, {
-      issuedAt,
-      ttlMs: 5 * 60 * 1000,
-    });
+    const token = issueApprovalToken(
+      TEST_SECRET,
+      "host_delete_path",
+      { path: victim },
+      {
+        issuedAt,
+        ttlMs: 5 * 60 * 1000,
+      }
+    );
     const { status, body } = await execute(base, "host_delete_path", { path: victim }, token);
     assert.equal(status, 403, `expired token must be rejected, got ${status}`);
     assert.ok(String(body.error).toLowerCase().includes("expired"), "403 must report expiry");
@@ -113,7 +118,10 @@ describe("Approval Token Binding Suite (Board #131)", () => {
     const token = issueApprovalToken(TEST_SECRET, "host_delete_path", { path: victim });
     const { status, body } = await execute(base, "host_delete_path", { path: other }, token);
     assert.equal(status, 403, `payload-mismatched token must be rejected, got ${status}`);
-    assert.ok(String(body.error).toLowerCase().includes("payload"), "403 must report payload mismatch");
+    assert.ok(
+      String(body.error).toLowerCase().includes("payload"),
+      "403 must report payload mismatch"
+    );
     assert.ok(fs.existsSync(victim), "mismatched token must not delete the bound file");
     assert.ok(fs.existsSync(other), "mismatched token must not delete the other file");
   });
@@ -138,14 +146,20 @@ describe("Approval Token Binding Suite (Board #131)", () => {
     // Minting an over-TTL token is refused outright (policy violation, not clamped).
     assert.throws(
       () =>
-        issueApprovalToken(TEST_SECRET, "host_delete_path", { path: victim }, {
-          ttlMs: 10 * 60 * 1000,
-        }),
+        issueApprovalToken(
+          TEST_SECRET,
+          "host_delete_path",
+          { path: victim },
+          {
+            ttlMs: 10 * 60 * 1000,
+          }
+        ),
       /TTL must be between/
     );
 
     // A hand-forged token claiming a 10-minute TTL must still be rejected by the bridge.
-    const forged = `${crypto.randomUUID()}.${Date.now()}.${Date.now() + 10 * 60 * 1000}` +
+    const forged =
+      `${crypto.randomUUID()}.${Date.now()}.${Date.now() + 10 * 60 * 1000}` +
       ".0000000000000000000000000000000000000000000000000000000000000000";
     const { status } = await execute(base, "host_delete_path", { path: victim }, forged);
     assert.equal(status, 403, `over-TTL token must be rejected, got ${status}`);

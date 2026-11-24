@@ -387,11 +387,10 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
     it("host_delete_path requires recursive: true for directories", async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "del-test-"));
       try {
-        const app1 = issueApprovalToken(
-          VALID_SECRET,
-          "host_delete_path",
-          { path: tempDir, recursive: false }
-        );
+        const app1 = issueApprovalToken(VALID_SECRET, "host_delete_path", {
+          path: tempDir,
+          recursive: false,
+        });
         const resNonRec = await fetch(`${baseUrl}/execute`, {
           method: "POST",
           headers: {
@@ -409,11 +408,10 @@ describe("Host Daemon & Classifier Contract Suite (Block 1)", () => {
         assert.equal(dataNonRec.success, false);
         assert.ok(dataNonRec.error.includes("requires recursive: true"));
 
-        const app2 = issueApprovalToken(
-          VALID_SECRET,
-          "host_delete_path",
-          { path: tempDir, recursive: true }
-        );
+        const app2 = issueApprovalToken(VALID_SECRET, "host_delete_path", {
+          path: tempDir,
+          recursive: true,
+        });
         const resRec = await fetch(`${baseUrl}/execute`, {
           method: "POST",
           headers: {

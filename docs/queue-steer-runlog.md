@@ -182,6 +182,7 @@ web-ui/tests/retryAfter.test.ts` -> 14 pass / 0 fail. Full change-aware gate via
 - Assumption: the brief's "at most 2 (one raw, one effective)" bound is enforced on the standard round path (no compaction/elision/directive mutations); mutation rungs re-scan once per mutation via the dirty flag, which is the intended behavior-preserving cost.
 
 ## Board #131 — Security: bind bridge approval tokens to exact tool + payload (PR #236)
+
 - Defect: the bridge only checked the approval-ID format + single-use, so any holder of the shared secret could approve ANY destructive payload with any valid-format ID.
 - Fix: host-bridge/approvalToken.ts mints HMAC-SHA256 tokens bound to tool + payload hash (canonical sorted-key JSON), nonce, issuedAt, expiresAt; TTL hard-capped at 5 min (mint throws over the ceiling). verifyApprovalToken constant-time signature check + expiry/over-TTL/malformed rejection. server.ts (/execute + /execute-async) verifies the token against the exact tool+args before execution and consumes by nonce (409 on replay). hostMode.ts mints the bound token from the secret over the final post-dialect-guard args.
 - Tests-first: web-ui/tests/approvalTokenBinding.test.ts (8 tests: invented/reused/expired/payload-mismatch/tool-swap/over-TTL rejected; bound token approves exactly once; missing-token 403 preserved). Wired into testGate MAPPING_RULES additively (added to host-bridge rule + new approvalToken rule; no existing rule edited).

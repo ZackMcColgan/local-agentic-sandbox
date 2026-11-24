@@ -18,10 +18,7 @@ export const MAX_APPROVAL_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes, hard ceili
 
 /** Deterministic SHA-256 over the payload with sorted object keys. */
 export function hashApprovalPayload(args: unknown): string {
-  return crypto
-    .createHash("sha256")
-    .update(canonicalJson(args))
-    .digest("hex");
+  return crypto.createHash("sha256").update(canonicalJson(args)).digest("hex");
 }
 
 function canonicalJson(value: unknown): string {
@@ -74,9 +71,7 @@ export function issueApprovalToken(
   }
   const ttlMs = options.ttlMs ?? MAX_APPROVAL_TOKEN_TTL_MS;
   if (ttlMs <= 0 || ttlMs > MAX_APPROVAL_TOKEN_TTL_MS) {
-    throw new Error(
-      `Approval token TTL must be between 1 and ${MAX_APPROVAL_TOKEN_TTL_MS} ms`
-    );
+    throw new Error(`Approval token TTL must be between 1 and ${MAX_APPROVAL_TOKEN_TTL_MS} ms`);
   }
   const issuedAt = options.issuedAt ?? Date.now();
   const expiresAt = issuedAt + ttlMs;
@@ -125,7 +120,10 @@ export function verifyApprovalToken(
   const expected = sign(secret, tool, hashApprovalPayload(args), nonce, issuedAt, expiresAt);
   const providedBuf = Buffer.from(signature, "utf8");
   const expectedBuf = Buffer.from(expected, "utf8");
-  if (providedBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(providedBuf, expectedBuf)) {
+  if (
+    providedBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(providedBuf, expectedBuf)
+  ) {
     return { ok: false, reason: "signature" };
   }
   return { ok: true, nonce };
