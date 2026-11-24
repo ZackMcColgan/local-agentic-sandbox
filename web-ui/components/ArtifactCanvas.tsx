@@ -192,7 +192,7 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
     <div className="min-w-max font-mono text-[11px] leading-[1.8] lg:text-[12.3px] lg:leading-[1.75]">
       {rows.map((row, idx) => {
         let rowClass = "text-slate-700 dark:text-zinc-100";
-        let signClass = "text-slate-400 dark:text-zinc-400";
+        let signClass = "text-slate-600 dark:text-zinc-400";
         let sign = " ";
         if (row.kind === "add") {
           rowClass =
@@ -206,9 +206,9 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
           sign = "−";
         } else if (row.kind === "hunk") {
           rowClass =
-            "bg-sky-500/10 dark:bg-[rgba(56,189,248,0.07)] text-sky-700 dark:text-[#7dd3fc] font-semibold";
+            "bg-zinc-100 dark:bg-zinc-800/50 text-zinc-700 dark:text-zinc-300 font-semibold";
         } else if (row.kind === "meta") {
-          rowClass = "text-slate-400 dark:text-zinc-400";
+          rowClass = "text-slate-600 dark:text-zinc-400";
         }
         const lineNo = row.kind === "del" ? row.oldLine : row.newLine;
         return (
@@ -217,7 +217,7 @@ function DiffRows({ file }: { file: CanvasDiffFile }) {
             data-testid="canvas-diff-row"
             className={`flex whitespace-pre ${rowClass}`}
           >
-            <span className="w-[34px] shrink-0 text-right pr-2 select-none text-slate-400 dark:text-zinc-400">
+            <span className="w-[34px] shrink-0 text-right pr-2 select-none text-slate-600 dark:text-zinc-400">
               {lineNo ?? ""}
             </span>
             <span className={`w-4 shrink-0 select-none text-center ${signClass}`}>{sign}</span>
@@ -353,7 +353,7 @@ function CanvasFileView({
     return (
       <div className="flex-1 min-h-0 overflow-auto bg-slate-50 dark:bg-[#121215]">
         <div className="flex p-3.5 text-xs font-mono leading-relaxed min-w-max">
-          <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
+          <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
             {lines.map((_, i) => (
               <div key={i}>{i + 1}</div>
             ))}

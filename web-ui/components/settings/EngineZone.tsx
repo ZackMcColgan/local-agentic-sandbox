@@ -89,13 +89,13 @@ export function EngineZone({
         {/* Model & VRAM Specs */}
         <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-zinc-850 p-3 rounded-2xl border border-slate-100 dark:border-zinc-800">
           <div>
-            <span className="text-slate-400 dark:text-zinc-400 block">Model</span>
+            <span className="text-slate-600 dark:text-zinc-400 block">Model</span>
             <span className="font-semibold text-slate-800 dark:text-zinc-200">
               {engineData.model || "Not reported by this engine"}
             </span>
           </div>
           <div>
-            <span className="text-slate-400 dark:text-zinc-400 block">VRAM Usage</span>
+            <span className="text-slate-600 dark:text-zinc-400 block">VRAM Usage</span>
             <span className="font-semibold text-slate-800 dark:text-zinc-200">
               {typeof engineData.vram_mb === "number"
                 ? `${engineData.vram_mb.toLocaleString()} MB`
@@ -119,7 +119,7 @@ export function EngineZone({
             onClick={() => onEngineAction("start")}
             className={`min-h-[44px] py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
               engineData.status === "running"
-                ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-300"
+                ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
                 : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
             }`}
             title="Start llama-server"
@@ -135,7 +135,7 @@ export function EngineZone({
             onClick={() => onEngineAction("stop")}
             className={`min-h-[44px] py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
               engineData.status === "stopped"
-                ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-300"
+                ? "cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
                 : "bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
             }`}
             title="Stop llama-server to reclaim VRAM"
@@ -176,7 +176,7 @@ export function EngineZone({
             </div>
           </div>
 
-          <ChevronRight className="h-5 w-5 text-slate-400 dark:text-zinc-400" />
+          <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-400" />
         </div>
       </div>
     </>

@@ -260,4 +260,145 @@ describe("BoardStore", () => {
     });
     assert.equal(afterExplicit.key, "#43");
   });
+
+  it("R7: new BoardStore() preserves existing board.meta.json control.state during migration", () => {
+    const metaDir = fs.mkdtempSync(path.join(os.tmpdir(), "board-meta-preserve-"));
+    try {
+      const boardPath = path.join(metaDir, "board.json");
+      const metaPath = path.join(metaDir, "board.meta.json");
+      fs.writeFileSync(
+        boardPath,
+        JSON.stringify([
+          {
+            id: "item-meta-1",
+            key: "#1",
+            title: "Existing item",
+            brief: "Brief",
+            dependencies: [],
+            status: "queued",
+            author: "Owner",
+            source: "manual",
+            createdAt: "2026-11-20T00:00:00.000Z",
+            updatedAt: "2026-11-20T00:00:00.000Z",
+          },
+        ]),
+        "utf8"
+      );
+      fs.writeFileSync(
+        metaPath,
+        JSON.stringify(
+          {
+            control: {
+              state: "running",
+              drainBudget: 5,
+              stopAtBoundary: false,
+              updatedAt: "2026-11-23T00:00:00.000Z",
+              lastAction: "start",
+            },
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      new BoardStore(metaDir);
+      const afterMeta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
+        version?: number;
+        control?: { state?: string; drainBudget?: number | null };
+      };
+      assert.equal(afterMeta.version, 2);
+      assert.equal(afterMeta.control?.state, "running");
+      assert.equal(afterMeta.control?.drainBudget, 5);
+    } finally {
+      fs.rmSync(metaDir, { recursive: true, force: true });
+    }
+  });
+
+  it("R8: BoardStore.update supports null deletion, clears needsAttention/parkedReason on done/working/queued transitions, and persists evidence", () => {
+    const item = store.create({
+      key: "#77",
+      title: "Clearable flags",
+      brief: "Test flag clearing and evidence",
+      dependencies: [],
+      status: "needs-attention",
+      needsAttention: true,
+      parkedReason: "Stalled earlier",
+      autoResumeCount: 2,
+      author: "Owner",
+      source: "manual",
+    });
+
+    // Explicit null deletes needsAttention, parkedReason, autoResumeCount
+    const clearedNull = store.update(item.id, {
+      needsAttention: null,
+      parkedReason: null,
+      autoResumeCount: null,
+    });
+    assert.equal("needsAttention" in clearedNull, false);
+    assert.equal("parkedReason" in clearedNull, false);
+    assert.equal("autoResumeCount" in clearedNull, false);
+
+    // Re-set failure flags, then transition to done/working/queued and confirm auto-clear
+    for (const targetStatus of ["done", "working", "queued"] as const) {
+      store.update(item.id, {
+        status: "needs-attention",
+        needsAttention: true,
+        parkedReason: "Failure reason",
+      });
+      const transitioned = store.update(item.id, {
+        status: targetStatus,
+        ...(targetStatus === "done"
+          ? { evidence: { prNumber: 245, mergeSha: "abc1234", deployTag: "v245" } }
+          : {}),
+      });
+      assert.equal(transitioned.status, targetStatus);
+      assert.equal(
+        transitioned.needsAttention,
+        undefined,
+        `needsAttention must clear on transition to ${targetStatus}`
+      );
+      assert.equal(
+        transitioned.parkedReason,
+        undefined,
+        `parkedReason must clear on transition to ${targetStatus}`
+      );
+      if (targetStatus === "done") {
+        assert.deepEqual(transitioned.evidence, {
+          prNumber: 245,
+          mergeSha: "abc1234",
+          deployTag: "v245",
+        });
+      }
+    }
+  });
+
+  it("R8: PATCH /api/board rejects invalid status values with HTTP 400", async () => {
+    const prevBoardDir = process.env.BOARD_DIR;
+    process.env.BOARD_DIR = tmpDir;
+    try {
+      const item = store.create({
+        key: "#88",
+        title: "Status validation",
+        brief: "Validate PATCH status",
+        dependencies: [],
+        author: "Owner",
+        source: "manual",
+      });
+
+      const { PATCH } = await import("../app/api/board/route");
+      const { NextRequest } = await import("next/server");
+      const req = new NextRequest("http://localhost/api/board", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: item.id, status: "not-a-valid-status" }),
+      });
+      const res = await PATCH(req);
+      assert.equal(res.status, 400);
+      assert.equal(store.get(item.id)?.status, "queued");
+    } finally {
+      if (prevBoardDir === undefined) delete process.env.BOARD_DIR;
+      else process.env.BOARD_DIR = prevBoardDir;
+    }
+  });
 });

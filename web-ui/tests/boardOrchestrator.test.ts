@@ -444,3 +444,222 @@ test("rolled-back selfDeploy with needsAttention=true marks item needs-attention
     else process.env.SELF_DEPLOY_ENABLED = prevSelfDeploy;
   }
 });
+
+test("R8: paused and stopped control states still reconcile dead working items without launching queued items", async () => {
+  for (const state of ["paused", "stopped"] as const) {
+    const deadWorking = makeItem({
+      id: "working-dead-1",
+      key: "#101",
+      title: "Completed while paused",
+      status: "working",
+      threadLink: "/?thread=t-dead-1",
+    });
+    const queuedItem = makeItem({
+      id: "queued-next-1",
+      key: "#102",
+      title: "Must not launch while paused/stopped",
+      status: "queued",
+    });
+
+    let issued = 0;
+    const orchestrator = new BoardOrchestrator({
+      items: [deadWorking, queuedItem],
+      getControlState: () => makeControl(state),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      getSlotMetrics: () => makeSlotMetrics(),
+      checkWorkingItemLiveness: async () => ({
+        status: "completed",
+        outcome: { status: "completed", threadId: "t-dead-1", prNumber: 311 },
+        reason: "Settled before control pause/stop",
+      }),
+      issueAndWait: async () => {
+        issued += 1;
+        return { status: "completed", threadId: "t-unexpected" };
+      },
+    });
+
+    const report = await orchestrator.drain();
+    assert.equal(issued, 0, `must not launch queued item when control is ${state}`);
+    assert.equal(
+      deadWorking.status,
+      "done",
+      `dead working item must settle when control is ${state}`
+    );
+    assert.equal(deadWorking.evidence?.prNumber, 311);
+    assert.equal(queuedItem.status, "queued");
+    assert.equal(report.stopReason, state === "paused" ? "control-paused" : "control-stopped");
+    assert.equal(report.completedCount, 1);
+  }
+});
+
+test("R8: shadow stage exceptions do not leave items stuck in working and selfDeploy needsAttention sets parkedReason", async () => {
+  const itemShadowErr = makeItem({
+    id: "shadow-err-1",
+    key: "#103",
+    title: "Shadow stage throws",
+  });
+  const orchestratorErr = new BoardOrchestrator({
+    items: [itemShadowErr],
+    getControlState: () => makeControl("running"),
+    getLiveJobState: () => ({ isRunning: false }),
+    getOwnerState: () => ({ isMidTurn: false }),
+    getSlotMetrics: () => makeSlotMetrics(),
+    flowMonitor: {
+      pollChecks: async () => {
+        throw new Error("GitHub API 502");
+      },
+    },
+    selfDeploy: {
+      deps: {
+        readCurrentState: async () => {
+          throw new Error("kubectl unavailable");
+        },
+        bankRollbackTarget: async (tag) => ({ banked: true, tag }),
+        buildAndImport: async () => ({
+          built: false,
+          imported: false,
+          imagePresentInNode: false,
+          detail: "noop",
+        }),
+        setImage: async () => ({ ok: false }),
+        verifyDeployment: async (observedTag) => ({
+          ok: false,
+          rolloutSuccess: false,
+          podRunningZeroRestarts: false,
+          gatewayStatus: 0,
+          threadListLoads: false,
+          observedTag,
+        }),
+      },
+    },
+    issueAndWait: async () => ({
+      status: "completed",
+      threadId: "t-shadow-err",
+      prNumber: 312,
+      headSha: "abc1234",
+      merged: true,
+      mergeSha: "def5678",
+    }),
+  });
+
+  const errReport = await orchestratorErr.drain();
+  assert.equal(itemShadowErr.status, "done");
+  assert.equal(itemShadowErr.evidence?.prNumber, 312);
+  assert.equal(itemShadowErr.evidence?.mergeSha, "def5678");
+  assert.equal(errReport.completedCount, 1);
+
+  const itemDeployFail = makeItem({
+    id: "deploy-fail-flag-1",
+    key: "#104",
+    title: "Deploy rollback sets needsAttention and parkedReason",
+  });
+  const prevSelfDeploy = process.env.SELF_DEPLOY_ENABLED;
+  process.env.SELF_DEPLOY_ENABLED = "true";
+  try {
+    const orchestratorDeployFail = new BoardOrchestrator({
+      items: [itemDeployFail],
+      stageFlags: { selfDeploy: true },
+      getControlState: () => makeControl("running"),
+      getLiveJobState: () => ({ isRunning: false }),
+      getOwnerState: () => ({ isMidTurn: false }),
+      getSlotMetrics: () => makeSlotMetrics(),
+      issueAndWait: async () => ({
+        status: "completed",
+        threadId: "t-deploy-rb-2",
+        merged: true,
+        mergeSha: "deadbee",
+      }),
+      selfDeploy: {
+        deps: {
+          readCurrentState: async () => ({
+            image: "local-agentic-sandbox-web-ui:v-prev",
+            podStatus: "Running",
+            podRestarts: 0,
+          }),
+          bankRollbackTarget: async (tag) => ({ banked: true, tag }),
+          buildAndImport: async () => ({
+            built: true,
+            imported: true,
+            imagePresentInNode: true,
+            detail: "ok",
+          }),
+          setImage: async () => ({ ok: true }),
+          verifyDeployment: async (tag) =>
+            tag === "local-agentic-sandbox-web-ui:v-prev"
+              ? {
+                  ok: true,
+                  rolloutSuccess: true,
+                  podRunningZeroRestarts: true,
+                  gatewayStatus: 200,
+                  threadListLoads: true,
+                  observedTag: tag,
+                }
+              : {
+                  ok: false,
+                  rolloutSuccess: true,
+                  podRunningZeroRestarts: false,
+                  gatewayStatus: 502,
+                  threadListLoads: false,
+                  observedTag: tag,
+                  failedStep: "gateway_200",
+                  observed: "gateway=502",
+                },
+        },
+      },
+    });
+    const deployReport = await orchestratorDeployFail.drain();
+    assert.equal(itemDeployFail.status, "needs-attention");
+    assert.equal(itemDeployFail.needsAttention, true);
+    assert.match(itemDeployFail.parkedReason ?? "", /S4 verification failed|gateway_200/);
+    assert.equal(deployReport.failedCount, 1);
+  } finally {
+    if (prevSelfDeploy === undefined) delete process.env.SELF_DEPLOY_ENABLED;
+    else process.env.SELF_DEPLOY_ENABLED = prevSelfDeploy;
+  }
+});
+
+test("R8: chunk-complete requeues are capped and park to needs-attention when exceeded", async () => {
+  const mod = await import("../lib/board/boardOrchestrator");
+  const MAX_CHUNK_REQUEUES = (mod as { MAX_CHUNK_REQUEUES?: number }).MAX_CHUNK_REQUEUES;
+  assert.equal(MAX_CHUNK_REQUEUES, 10);
+
+  const item = makeItem({
+    id: "chunk-cap-1",
+    key: "#105",
+    title: "Runaway chunk loop",
+    brief: "Complete within chunk cap.",
+  });
+
+  let calls = 0;
+  const orchestrator = new BoardOrchestrator({
+    items: [item],
+    maxItems: 5,
+    maxChunkRequeues: 2,
+    getControlState: () => makeControl("running"),
+    getLiveJobState: () => ({ isRunning: false }),
+    getOwnerState: () => ({ isMidTurn: false }),
+    getSlotMetrics: () => makeSlotMetrics(),
+    issueAndWait: async () => {
+      calls += 1;
+      return {
+        status: "chunk-complete",
+        threadId: `t-chunk-cap-${calls}`,
+        handoff: {
+          state: `chunk-${calls}`,
+          branch: "feat/chunk-cap",
+          headSha: "abc1234",
+          nextStep: "Keep going",
+        },
+      };
+    },
+  });
+
+  const report = await orchestrator.drain();
+  assert.equal(calls, 3, "2 requeues + 1 final hit exhausting cap = 3 turns");
+  assert.equal(item.status, "needs-attention");
+  assert.equal(item.needsAttention, true);
+  assert.match(item.parkedReason ?? "", /chunk requeue/i);
+  assert.equal(report.requeuedCount, 2);
+  assert.equal(report.failedCount, 1);
+});
