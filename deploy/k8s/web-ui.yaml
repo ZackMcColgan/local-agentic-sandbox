@@ -58,6 +58,12 @@ spec:
               value: "http://mcp-runner:8080/mcp"
             - name: BROWSER_MCP_URL
               value: "http://browser-mcp:8081/mcp"
+            - name: MCP_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sandbox-mcp
+                  key: shared-secret
+                  optional: true
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME

@@ -7,8 +7,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 describe("Browser MCP Streamable HTTP Transport & Stateless Core", () => {
   let server: Server;
   let baseUrl: string;
+  const origSecret = process.env.MCP_SHARED_SECRET;
+  const TEST_SECRET = "browser-streamable-http-test-secret-32-chars-min";
 
   before(async () => {
+    process.env.MCP_SHARED_SECRET = TEST_SECRET;
     const mod = (await import("../src/index.js")) as { app?: import("express").Express };
     assert.ok(mod.app, "browser-mcp/src/index.ts must export Express app");
     server = mod.app.listen(0, "127.0.0.1");
@@ -18,6 +21,8 @@ describe("Browser MCP Streamable HTTP Transport & Stateless Core", () => {
   });
 
   after(() => {
+    if (origSecret === undefined) delete process.env.MCP_SHARED_SECRET;
+    else process.env.MCP_SHARED_SECRET = origSecret;
     if (server) {
       (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close();
@@ -25,7 +30,9 @@ describe("Browser MCP Streamable HTTP Transport & Stateless Core", () => {
   });
 
   it("serves tools/list and a real tool call over Streamable HTTP on POST /mcp", async () => {
-    const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
+    const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+      requestInit: { headers: { "x-mcp-shared-secret": TEST_SECRET } },
+    });
     const client = new Client({ name: "browser-mcp-test-client", version: "1.0.0" });
     try {
       await client.connect(transport);
@@ -68,6 +75,7 @@ describe("Browser MCP Streamable HTTP Transport & Stateless Core", () => {
     const rpcHeaders = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
+      "x-mcp-shared-secret": TEST_SECRET,
     };
 
     // Independent request 1: tools/list with no session handshake

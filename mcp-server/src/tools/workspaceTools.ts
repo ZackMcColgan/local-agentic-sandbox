@@ -7,6 +7,7 @@ import path from "path";
 import { z } from "zod";
 import ts from "typescript";
 import { workspacePatchFile } from "./patchCore.js";
+import { resolveRealConfinedPath } from "./pathConfinement.js";
 export { workspacePatchFile, type PatchItem, type PatchFileResult } from "./patchCore.js";
 
 const execAsync = promisify(exec);
@@ -92,24 +93,9 @@ async function ensureWorkspaceInitialized() {
   }
 }
 
-// Ensure safe path resolution within WORKSPACE_DIR
+// Ensure safe path resolution within WORKSPACE_DIR (with realpath symlink confinement)
 export function resolveSafePath(userPath: string): string {
-  if (userPath.includes("..")) {
-    throw new Error(
-      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
-    );
-  }
-  const normalized = path.normalize(userPath).replace(/^(\/|\\)+/, "");
-  const stripped = normalized.replace(/^workspace(?:[\/\\]+|$)/i, "");
-  const resolved = path.resolve(WORKSPACE_DIR, stripped);
-  const rootResolved = path.resolve(WORKSPACE_DIR);
-
-  if (!resolved.startsWith(rootResolved)) {
-    throw new Error(
-      `Security Violation: Path traversal outside /workspace is forbidden (${userPath})`
-    );
-  }
-  return resolved;
+  return resolveRealConfinedPath(WORKSPACE_DIR, userPath, { stripWorkspacePrefix: true });
 }
 
 const IGNORED_DIRS = new Set([

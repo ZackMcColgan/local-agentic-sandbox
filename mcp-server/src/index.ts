@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { Request, Response } from "express";
-import cors from "cors";
+import { buildAllowedHosts, createMcpAuthMiddleware } from "./auth.js";
 import { registerCodeRunner } from "./tools/codeRunner.js";
 import { registerAttestation } from "./tools/attestation.js";
 import { registerWorkspaceTools, resolveSafePath } from "./tools/workspaceTools.js";
@@ -10,8 +10,15 @@ import fsSync from "fs";
 import path from "path";
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+const mcpAuthMiddleware = createMcpAuthMiddleware();
+
+const MCP_SERVICE_HOSTS = [
+  "mcp-runner",
+  "mcp-server",
+  "mcp-runner.local-agentic-sandbox.svc",
+  "mcp-runner.local-agentic-sandbox.svc.cluster.local",
+];
 
 export function createMcpServer(): McpServer {
   const mcp = new McpServer({
@@ -122,11 +129,14 @@ export async function handleFilesRequest(req: Request, res: Response) {
     res.send(content);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Security Violation") || message.includes("Path traversal")) {
+      return res.status(403).json({ error: message });
+    }
     res.status(500).json({ error: message });
   }
 }
 
-app.get("/files", handleFilesRequest);
+app.get("/files", mcpAuthMiddleware, handleFilesRequest);
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
@@ -143,11 +153,19 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
-app.post("/mcp", async (req: Request, res: Response) => {
+app.post("/mcp", mcpAuthMiddleware, async (req: Request, res: Response) => {
   const server = createMcpServer();
+  const allowedHosts = buildAllowedHosts(
+    MCP_SERVICE_HOSTS,
+    PORT,
+    req.socket?.localPort,
+    process.env.MCP_ALLOWED_HOSTS
+  );
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
+    enableDnsRebindingProtection: true,
+    allowedHosts,
   });
 
   res.on("close", () => {
@@ -168,6 +186,15 @@ app.post("/mcp", async (req: Request, res: Response) => {
       });
     }
   }
+});
+
+app.all("/mcp", mcpAuthMiddleware, (_req: Request, res: Response) => {
+  res.setHeader("Allow", "POST");
+  res.status(405).json({
+    jsonrpc: "2.0",
+    error: { code: -32000, message: "Method not allowed. Use POST /mcp." },
+    id: null,
+  });
 });
 
 export { app };

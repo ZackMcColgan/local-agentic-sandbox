@@ -1,10 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { Request, Response } from "express";
+import { buildAllowedHosts, createMcpAuthMiddleware } from "./auth.js";
 import { registerBrowserTools } from "./tools/browser.js";
 
 const app = express();
 app.use(express.json());
+const mcpAuthMiddleware = createMcpAuthMiddleware();
+
+const BROWSER_MCP_SERVICE_HOSTS = [
+  "browser-mcp",
+  "browser-mcp.local-agentic-sandbox.svc",
+  "browser-mcp.local-agentic-sandbox.svc.cluster.local",
+];
 
 export function createBrowserMcpServer(): McpServer {
   const mcp = new McpServer({
@@ -30,11 +38,19 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
-app.post("/mcp", async (req: Request, res: Response) => {
+app.post("/mcp", mcpAuthMiddleware, async (req: Request, res: Response) => {
   const server = createBrowserMcpServer();
+  const allowedHosts = buildAllowedHosts(
+    BROWSER_MCP_SERVICE_HOSTS,
+    PORT,
+    req.socket?.localPort,
+    process.env.MCP_ALLOWED_HOSTS
+  );
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
+    enableDnsRebindingProtection: true,
+    allowedHosts,
   });
 
   res.on("close", () => {
@@ -55,6 +71,15 @@ app.post("/mcp", async (req: Request, res: Response) => {
       });
     }
   }
+});
+
+app.all("/mcp", mcpAuthMiddleware, (_req: Request, res: Response) => {
+  res.setHeader("Allow", "POST");
+  res.status(405).json({
+    jsonrpc: "2.0",
+    error: { code: -32000, message: "Method not allowed. Use POST /mcp." },
+    id: null,
+  });
 });
 
 export { app };

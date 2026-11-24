@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import fsSync from "fs";
-import path from "path";
+import { resolveRealConfinedPath } from "./pathConfinement.js";
 
 export interface PatchItem {
   search: string;
@@ -16,16 +16,7 @@ export interface PatchFileResult {
 }
 
 export function resolveSafeWorkspacePath(workspaceRoot: string, userPath: string): string {
-  const normalized = path.normalize(userPath).replace(/^(\/|\\)/, "");
-  const rootResolved = path.resolve(workspaceRoot);
-  const resolved = path.resolve(workspaceRoot, normalized);
-
-  if (!resolved.startsWith(rootResolved)) {
-    throw new Error(
-      `Security Violation: Path traversal outside workspace is forbidden (${userPath})`
-    );
-  }
-  return resolved;
+  return resolveRealConfinedPath(workspaceRoot, userPath);
 }
 
 /**
