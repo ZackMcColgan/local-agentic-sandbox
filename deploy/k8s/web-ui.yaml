@@ -84,6 +84,10 @@ spec:
               value: "900000"
             - name: THREADS_DIR
               value: "/workspace/.agent/threads"
+            - name: RUN_LEDGER_DB_PATH
+              value: "/workspace/.agent/runs.db"
+            - name: USER_PROFILE_PATH
+              value: "/workspace/.agent/settings/user_profile.json"
             - name: HOST_RUNNER_URL
               value: "http://host-runner-service:8765"
             - name: HOST_CHECKOUT_PATH
