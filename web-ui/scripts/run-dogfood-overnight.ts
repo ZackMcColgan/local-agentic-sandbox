@@ -230,7 +230,7 @@ async function runOvernightDogfood() {
         question:
           "Should draw.io canvas default to pure white (#ffffff) or dark canvas matching the IDE theme?",
         judgmentCall:
-          "Selected pure white (#ffffff) per Zack's standing UI & visual inspection rule.",
+          "Selected pure white (#ffffff) per the Owner's standing UI & visual inspection rule.",
         reasoning:
           "Rule 2.A specifies Light Mode Purity / crisp white background for root README diagram visibility across light/dark GitHub themes.",
         revertAction: {

@@ -67,7 +67,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       const beforeTime = new Date().toISOString();
       const res = recordProfileEntry(
         "preferred_name",
-        "Zack",
+        "Alex",
         {
           sessionId: sessId,
           origin: "user-stated",
@@ -78,7 +78,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       assert.equal(res.created, true);
       assert.equal(res.updated, false);
       assert.equal(res.entry.key, "preferred_name");
-      assert.equal(res.entry.value, "Zack");
+      assert.equal(res.entry.value, "Alex");
       assert.equal(res.entry.sourceSessionId, sessId);
       assert.equal(res.entry.origin, "user-stated");
       assert.ok(res.entry.timestamp >= beforeTime);
@@ -86,7 +86,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
 
       // Verify file persistence on disk
       const loaded = loadUserProfile(pPath);
-      assert.equal(loaded.entries["preferred_name"].value, "Zack");
+      assert.equal(loaded.entries["preferred_name"].value, "Alex");
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -99,7 +99,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       // Initialize with an established profile
       recordProfileEntry(
         "preferred_name",
-        "Zack",
+        "Alex",
         {
           sessionId: "init_sess",
           origin: "user-stated",
@@ -156,7 +156,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       // 2. Correction
       const r2 = recordProfileEntry(
         "preferred_name",
-        "Zack",
+        "Alex",
         {
           sessionId: sess2,
           origin: "corrected",
@@ -165,7 +165,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       );
       assert.equal(r2.created, false);
       assert.equal(r2.updated, true);
-      assert.equal(r2.entry.value, "Zack");
+      assert.equal(r2.entry.value, "Alex");
       assert.equal(r2.entry.origin, "corrected");
       assert.equal(r2.entry.sourceSessionId, sess2);
 
@@ -177,7 +177,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
 
       // Verify disk state
       const loaded = loadUserProfile(pPath);
-      assert.equal(loaded.entries["preferred_name"].value, "Zack");
+      assert.equal(loaded.entries["preferred_name"].value, "Alex");
       assert.equal(loaded.entries["preferred_name"].history.length, 1);
       assert.equal(loaded.entries["preferred_name"].history[0].value, "Zachary");
     } finally {
@@ -223,7 +223,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
       entries: {
         preferred_name: {
           key: "preferred_name",
-          value: "Zack",
+          value: "Alex",
           sourceSessionId: "s1",
           timestamp: new Date().toISOString(),
           origin: "user-stated",
@@ -243,7 +243,7 @@ describe("Phase C — Tier 1 User Profile Memory Suite", () => {
 
     const formatted = formatProfileForContext(populated);
     assert.ok(formatted.includes("USER PROFILE & DURABLE PREFERENCES"));
-    assert.ok(formatted.includes("Always address the user as 'Zack'"));
+    assert.ok(formatted.includes("Always address the user as 'Alex'"));
     assert.ok(formatted.includes("preferred_language: typescript"));
   });
 
