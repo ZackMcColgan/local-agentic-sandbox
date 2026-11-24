@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { createRequire } from "module";
 import { TaskManifest } from "../subagents/types";
+import { getDefaultLedgerDbPath, migrateLegacyRunsDbIfNeeded } from "../ledger/runLedger";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -32,9 +32,10 @@ interface SqliteDatabase {
 
 function openSqliteDatabase(dbPath: string): SqliteDatabase {
   const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
+  if (dbPath !== ":memory:" && !dbPath.startsWith("file::memory:") && !fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  migrateLegacyRunsDbIfNeeded(dbPath);
   const { DatabaseSync } = requireModule("node:sqlite") as {
     DatabaseSync: new (filename: string) => SqliteDatabase;
   };
@@ -42,10 +43,7 @@ function openSqliteDatabase(dbPath: string): SqliteDatabase {
 }
 
 export function getDefaultSkillsDbPath(): string {
-  if (process.env.RUN_LEDGER_DB_PATH) {
-    return process.env.RUN_LEDGER_DB_PATH;
-  }
-  return path.join(os.homedir(), ".local-agentic-sandbox", "runs.db");
+  return getDefaultLedgerDbPath();
 }
 
 /**

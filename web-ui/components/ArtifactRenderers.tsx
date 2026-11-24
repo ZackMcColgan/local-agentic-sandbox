@@ -56,7 +56,7 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
           {parts.map((p, pIdx) => {
             if (/^"[^"]*"\s*:$/.test(p)) {
               return (
-                <span key={pIdx} className="text-sky-700 dark:text-sky-400 font-semibold">
+                <span key={pIdx} className="text-emerald-800 dark:text-emerald-300 font-semibold">
                   {p}
                 </span>
               );
@@ -70,7 +70,7 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
             }
             if (/^(?:true|false|null|\d+)$/.test(p)) {
               return (
-                <span key={pIdx} className="text-amber-600 dark:text-amber-400 font-bold">
+                <span key={pIdx} className="text-zinc-700 dark:text-zinc-300 font-bold">
                   {p}
                 </span>
               );
@@ -109,7 +109,7 @@ export function highlightTokens(code: string, language?: string): React.ReactNod
       } else if (match[3]) {
         // Comment
         tokens.push(
-          <span key={match.index} className="text-slate-400 dark:text-zinc-400 italic">
+          <span key={match.index} className="text-slate-600 dark:text-zinc-400 italic">
             {match[3]}
           </span>
         );
@@ -319,7 +319,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
               }`}
             >
               {showLineNumbers && (
-                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
+                <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
                   {lines.map((_, i) => (
                     <div key={i}>{i + 1}</div>
                   ))}
@@ -425,7 +425,7 @@ export function CodeBlock({ language, code, filename }: CodeBlockProps) {
           }`}
         >
           {showLineNumbers && (
-            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
+            <div className="select-none pr-3.5 mr-3.5 border-r border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 text-right text-[11px] font-mono leading-5">
               {lines.map((_, i) => (
                 <div key={i}>{i + 1}</div>
               ))}

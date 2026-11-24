@@ -1,5 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { normalizeMcpUrl } from "@/lib/toolParser";
 
 export interface McpClientLike {
@@ -25,7 +25,7 @@ export interface McpClientDeps {
 
 export interface McpSession {
   client: Client;
-  transport: SSEClientTransport;
+  transport: StreamableHTTPClientTransport;
   tools: Array<{ name: string; [key: string]: unknown }>;
 }
 
@@ -33,7 +33,7 @@ interface PooledMcpEntry {
   url: string;
   session: McpSession;
   rawClient: Client | McpClientLike;
-  rawTransport: SSEClientTransport | McpTransportLike;
+  rawTransport: StreamableHTTPClientTransport | McpTransportLike;
   evicted: boolean;
 }
 
@@ -41,14 +41,14 @@ const mcpPool = new Map<string, PooledMcpEntry>();
 const mcpInFlight = new Map<string, Promise<McpSession | null>>();
 
 export const getMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
-  env.MCP_SERVER_URL || "http://mcp-server:8080/sse";
+  env.MCP_SERVER_URL || "http://mcp-server:8080/mcp";
 
 export const getBrowserMcpUrl = (env: Record<string, string | undefined> = process.env): string =>
-  env.BROWSER_MCP_URL || "http://browser-mcp:8081/sse";
+  env.BROWSER_MCP_URL || "http://browser-mcp:8081/mcp";
 
 async function closeRawHandles(
   rawClient: Client | McpClientLike | null,
-  rawTransport: SSEClientTransport | McpTransportLike | null
+  rawTransport: StreamableHTTPClientTransport | McpTransportLike | null
 ): Promise<void> {
   if (rawClient) {
     try {
@@ -103,21 +103,21 @@ async function openMcpSession(
   deps: McpClientDeps
 ): Promise<{
   rawClient: Client | McpClientLike;
-  rawTransport: SSEClientTransport | McpTransportLike;
+  rawTransport: StreamableHTTPClientTransport | McpTransportLike;
   tools: Array<{ name: string; [key: string]: unknown }>;
 } | null> {
   const log = deps.log ?? console.log;
   const warn = deps.warn ?? console.warn;
-  let transport: SSEClientTransport | McpTransportLike | null = null;
+  let transport: StreamableHTTPClientTransport | McpTransportLike | null = null;
   let client: Client | McpClientLike | null = null;
   try {
     transport = deps.createTransport
       ? deps.createTransport(new URL(sseUrl))
-      : new SSEClientTransport(new URL(sseUrl));
+      : new StreamableHTTPClientTransport(new URL(sseUrl));
     client = deps.createClient
       ? deps.createClient(name)
       : new Client({ name, version: "1.0.0" }, { capabilities: {} });
-    await client.connect(transport as SSEClientTransport);
+    await client.connect(transport as StreamableHTTPClientTransport);
     const toolsResult = await client.listTools();
     log(
       `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
@@ -162,7 +162,7 @@ export async function connectMcpClient(
     if (!opened) return null;
     return {
       client: opened.rawClient as Client,
-      transport: opened.rawTransport as SSEClientTransport,
+      transport: opened.rawTransport as StreamableHTTPClientTransport,
       tools: opened.tools,
     };
   }
@@ -188,7 +188,7 @@ export async function connectMcpClient(
       evicted: false,
       session: {
         client: opened.rawClient as Client,
-        transport: opened.rawTransport as SSEClientTransport,
+        transport: opened.rawTransport as StreamableHTTPClientTransport,
         tools: opened.tools,
       },
     };

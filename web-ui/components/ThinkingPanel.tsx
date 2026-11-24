@@ -205,10 +205,10 @@ export function ThinkingPanel({
           {isStreaming && turnPhaseLabel && (
             <span
               data-testid="turn-status-slot"
-              className="inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-full text-[11px] font-medium bg-cyan-50 dark:bg-cyan-500/15 border border-cyan-300/70 dark:border-cyan-500/30 text-cyan-900 dark:text-cyan-300 shrink-0"
+              className="inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-300/70 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 shrink-0"
               title={turnPhaseLabel}
             >
-              <Loader2 className="h-3 w-3 animate-spin text-cyan-600 dark:text-cyan-400 shrink-0" />
+              <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span className="hidden sm:inline truncate">{turnPhaseLabel}</span>
             </span>
           )}
@@ -282,7 +282,7 @@ export function ThinkingPanel({
                     </h4>
                   </div>
 
-                  <div className="text-right text-[10px] font-mono text-slate-400 dark:text-zinc-400 shrink-0">
+                  <div className="text-right text-[10px] font-mono text-slate-600 dark:text-zinc-400 shrink-0">
                     <span>{phaseItem.timestamp}</span>
                     {phaseItem.timeAgo && <span> • {phaseItem.timeAgo}</span>}
                   </div>

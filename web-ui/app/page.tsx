@@ -5,7 +5,11 @@ import type { ChatMessage } from "@/components/ChatStream";
 import { useLiveTraces } from "@/lib/hooks/useLiveTraces";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
+import {
+  Thread,
+  type ActiveTurnInfo,
+  type ThreadCompactionBoundary,
+} from "@/lib/threads/threadStore";
 import { pickMostRecentlyActiveThread } from "@/lib/liveActivity";
 import { isLiveStreamingMessage, STREAM_POLL_INTERVAL_MS } from "@/lib/streamSnapshot";
 import { isSseStreamDelivering, shouldPollLiveThread } from "@/lib/streamPollGate";
@@ -180,6 +184,10 @@ export default function Home() {
   ]);
   const [observedActiveTurn, setObservedActiveTurn] = useState<ActiveTurnInfo | null>(null);
   const [observedThreadUpdatedAt, setObservedThreadUpdatedAt] = useState<string | null>(null);
+  const [observedThreadCompaction, setObservedThreadCompaction] =
+    useState<ThreadCompactionBoundary | null>(null);
+  const [isLocalSseOpen, setIsLocalSseOpen] = useState<boolean>(false);
+  const pollEtagRef = useRef<{ threadId: string; etag: string } | null>(null);
 
   // Synchronous-like hydration for theme support
   useEffect(() => {
@@ -527,13 +535,20 @@ export default function Home() {
   // Sync messages and task whenever selectedThreadId changes
   useEffect(() => {
     if (!selectedThreadId) {
+      setObservedThreadCompaction(null);
+      pollEtagRef.current = null;
       return;
     }
 
     if (skipThreadLoadRef.current === selectedThreadId) {
       skipThreadLoadRef.current = null;
+      setObservedThreadCompaction(null);
+      pollEtagRef.current = null;
       return;
     }
+
+    setObservedThreadCompaction(null);
+    pollEtagRef.current = null;
 
     const loadSelectedThread = async () => {
       try {
@@ -542,10 +557,15 @@ export default function Home() {
           headers: { "Cache-Control": "no-cache" },
         });
         if (res.ok) {
+          const etag = res.headers?.get?.("etag");
+          if (etag) {
+            pollEtagRef.current = { threadId: selectedThreadId, etag };
+          }
           const data = await res.json();
           setObservedActiveTurn(data.activeTurn || null);
           if (data.thread) {
             setObservedThreadUpdatedAt(data.thread.updatedAt || null);
+            setObservedThreadCompaction(data.thread.compaction || null);
             setSelectedModel((prev) => data.thread.model || prev);
             setReasoningEffort((prev) => data.thread.reasoningEffort || prev);
             if (Array.isArray(data.thread.messages)) {
@@ -553,6 +573,7 @@ export default function Home() {
             }
           } else {
             setObservedThreadUpdatedAt(null);
+            setObservedThreadCompaction(null);
           }
           if (data.task) {
             setActiveTask(data.task);
@@ -602,23 +623,37 @@ export default function Home() {
       if (typeof document !== "undefined" && document.hidden) {
         return;
       }
-      // PERF-P4 (#128): while the SSE stream is actively delivering chunks the
-      // stream itself is the transport, so the full-thread poll is redundant
-      // churn on the 1-vCPU event loop. Suppress it and re-arm once the stream
-      // goes quiet; the effect tears down when the stream ends.
+      // PERF-P4 (#128) + P-F3: while a local SSE response is open (including
+      // long prefills and tool waits) OR actively delivering chunks, suppress
+      // redundant full-thread polling; resume when local SSE closes or goes quiet.
       const sseStreamDelivering = isSseStreamDelivering(lastStreamChunkAtRef.current, Date.now());
-      if (!shouldPollLiveThread({ threadLiveStreaming: true, sseStreamDelivering })) {
+      if (
+        !shouldPollLiveThread({
+          threadLiveStreaming: true,
+          sseStreamDelivering,
+          isLocalSseOpen,
+        })
+      ) {
         scheduleNext(STREAM_POLL_INTERVAL_MS);
         return;
       }
       let shouldContinue = true;
       let nextDelay = STREAM_POLL_INTERVAL_MS;
       try {
-        const res = await fetch(`/api/threads/${selectedThreadId}`, {
+        const headers: Record<string, string> = { "Cache-Control": "no-cache" };
+        if (pollEtagRef.current?.threadId === selectedThreadId) {
+          headers["If-None-Match"] = pollEtagRef.current.etag;
+        }
+        const res = await fetch(`/api/threads/${selectedThreadId}?omitHeavyTraceResults=1`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" },
+          headers,
         });
         if (!active) return;
+        if (res.status === 304) {
+          consecutiveErrors = 0;
+          shouldContinue = true;
+          return;
+        }
         if (!res.ok) {
           consecutiveErrors += 1;
           nextDelay = Math.min(
@@ -628,6 +663,10 @@ export default function Home() {
           return;
         }
         consecutiveErrors = 0;
+        const nextEtag = res.headers?.get?.("etag");
+        if (nextEtag) {
+          pollEtagRef.current = { threadId: selectedThreadId, etag: nextEtag };
+        }
         const data = await res.json();
         if (!active) return;
         const nextActiveTurn: ActiveTurnInfo | null = data?.activeTurn || null;
@@ -635,6 +674,9 @@ export default function Home() {
         if (data?.thread) {
           if (typeof data.thread.updatedAt === "string") {
             setObservedThreadUpdatedAt(data.thread.updatedAt);
+          }
+          if (data.thread.compaction !== undefined) {
+            setObservedThreadCompaction(data.thread.compaction || null);
           }
           setThreads((prev) =>
             prev.map((t) =>
@@ -662,6 +704,27 @@ export default function Home() {
           shouldContinue = isLiveStreamingMessage(lastAssistant) || Boolean(nextActiveTurn);
         } else {
           shouldContinue = Boolean(nextActiveTurn);
+        }
+        if (!shouldContinue) {
+          const hasTraces =
+            Array.isArray(data?.thread?.messages) &&
+            data.thread.messages.some(
+              (m: ChatMessage) => Array.isArray(m.traces) && m.traces.length > 0
+            );
+          if (hasTraces) {
+            try {
+              const fullRes = await fetch(`/api/threads/${selectedThreadId}`, {
+                cache: "no-store",
+                headers: { "Cache-Control": "no-cache" },
+              });
+              if (active && fullRes.ok) {
+                const fullData = await fullRes.json();
+                if (active && Array.isArray(fullData?.thread?.messages)) {
+                  setMessages(fullData.thread.messages);
+                }
+              }
+            } catch {}
+          }
         }
       } catch (err) {
         consecutiveErrors += 1;
@@ -694,7 +757,7 @@ export default function Home() {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
     };
-  }, [selectedThreadId, isThreadLiveStreaming, activeNavView]);
+  }, [selectedThreadId, isThreadLiveStreaming, activeNavView, isLocalSseOpen]);
 
   // Real-time 2s polling while a task is running (Live run block updates)
   const activeTaskId = activeTask?.taskId;
@@ -1094,6 +1157,8 @@ export default function Home() {
       currentThread={currentThread}
       activeTurn={observedActiveTurn}
       threadUpdatedAt={observedThreadUpdatedAt || currentThread?.updatedAt || null}
+      threadCompaction={currentThread?.compaction ?? observedThreadCompaction}
+      onLocalSseOpenChange={setIsLocalSseOpen}
       messages={messages}
       setMessages={setMessages}
       draftComposerPrompt={draftComposerPrompt}

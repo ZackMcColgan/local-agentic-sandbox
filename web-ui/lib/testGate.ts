@@ -1007,6 +1007,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("lib/memory"),
     tests: ["tests/userProfile.test.ts"],
   },
+  // Persistent storage migration helper
+  {
+    match: (p) => p.includes("lib/storageMigration"),
+    tests: ["tests/ledger.test.ts", "tests/userProfile.test.ts", "tests/flywheelSkills.test.ts"],
+  },
   // Skill gate
   {
     match: (p) => p.includes("lib/subagents/skillGate"),
@@ -1618,6 +1623,10 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("lib/modelEval"),
     tests: ["tests/modelEval.test.ts"],
+  },
+  {
+    match: (p) => p.includes("lib/fsAtomic"),
+    tests: ["tests/boardStore.test.ts", "tests/schedulerPlanner.test.ts"],
   },
   {
     match: (p) => p.includes("lib/board/boardStore"),

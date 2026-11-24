@@ -13,6 +13,7 @@ import {
 } from "../lib/liveActivity";
 import { NowLineBar } from "../components/NowLineBar";
 import { ThinkingPanel } from "../components/ThinkingPanel";
+import { ChatStream } from "../components/ChatStream";
 
 const webUiRoot = path.resolve(__dirname, "..");
 const readSrc = (rel: string) => fs.readFileSync(path.join(webUiRoot, rel), "utf8");
@@ -253,6 +254,83 @@ describe("uir-0 — header diet in ChatStream", () => {
     assert.ok(
       cssSrc.includes("prefers-reduced-motion: reduce") && cssSrc.includes(".live-activity-pulse"),
       "globals.css provides a reduced-motion fallback for .live-activity-pulse"
+    );
+  });
+
+  it("U-F6 Header Lock: <header> contains only hamburger + context meter + model pill on mobile while status chips sit in sub-header strip", () => {
+    const html = renderToString(
+      React.createElement(ChatStream, {
+        onTracesUpdate: () => {},
+        activeModel: "qwen3.8:27b-q3_k_m",
+        reasoningEffort: "medium",
+        messages: [],
+        onOpenDrawer: () => {},
+        supervisorState: { needsAttention: true },
+        threadScope: "PROJECT",
+        initialSimulation: { scenarioKey: "chat-fast" },
+      })
+    );
+
+    const headerMatch = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/);
+    assert.ok(headerMatch, "ChatStream must render a <header> element");
+    const headerHtml = headerMatch[0];
+
+    // The 3 locked mobile header controls must be inside <header>
+    assert.ok(
+      headerHtml.includes('aria-label="Open navigation menu"'),
+      "header must contain hamburger control"
+    );
+    assert.ok(
+      headerHtml.includes('data-testid="context-meter-pill"'),
+      "header must contain context meter pill"
+    );
+    assert.ok(headerHtml.includes("Configure model:"), "header must contain model pill");
+
+    // Status chips must NOT be inside <header>
+    assert.ok(
+      !headerHtml.includes('data-testid="supervisor-needs-attention"'),
+      "SupervisorStatusBadge must be relocated out of <header>"
+    );
+    assert.ok(
+      !headerHtml.includes('data-testid="simulation-badge"'),
+      "SIMULATION badge must be relocated out of <header>"
+    );
+    assert.ok(
+      !headerHtml.includes("Compacted"),
+      "Compacted pill must be relocated out of <header>"
+    );
+    assert.ok(
+      !headerHtml.includes('data-testid="host-disconnect-chip"'),
+      "host-disconnect-chip must be relocated out of <header>"
+    );
+
+    // Status chips must render in the sub-header banner strip outside <header>
+    assert.ok(
+      html.includes('data-testid="chat-subheader-strip"'),
+      "sub-header strip must render when status chips are active"
+    );
+    assert.ok(
+      html.includes('data-testid="supervisor-needs-attention"'),
+      "SupervisorStatusBadge still renders in sub-header strip"
+    );
+    assert.ok(
+      html.includes('data-testid="simulation-badge"'),
+      "SIMULATION badge still renders in sub-header strip"
+    );
+
+    // Source verification: all 5 status chips live inside chat-subheader-strip after </header>
+    const chatStreamSrc = readSrc("components/ChatStream.tsx");
+    const headerEnd = chatStreamSrc.indexOf("</header>");
+    const stripStart = chatStreamSrc.indexOf('data-testid="chat-subheader-strip"');
+    const nowLineStart = chatStreamSrc.indexOf("<NowLineBar");
+    assert.ok(headerEnd > 0 && stripStart > headerEnd && nowLineStart > stripStart);
+    const stripSrc = chatStreamSrc.slice(stripStart, nowLineStart);
+    assert.ok(stripSrc.includes("<SupervisorStatusBadge"), "SupervisorStatusBadge in strip");
+    assert.ok(stripSrc.includes('data-testid="simulation-badge"'), "simulation-badge in strip");
+    assert.ok(stripSrc.includes("Compacted"), "Compacted pill in strip");
+    assert.ok(
+      stripSrc.includes('data-testid="host-disconnect-chip"'),
+      "host-disconnect-chip in strip"
     );
   });
 });
