@@ -22,7 +22,7 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       icon: Lock,
       status: "enforced",
       accent:
-        "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-500/20",
+        "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
     },
     {
       title: "Root Filesystem",
@@ -49,7 +49,7 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
       icon: UserCheck,
       status: "enforced",
       accent:
-        "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-500/20",
+        "text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
     },
     {
       title: "Ephemeral Buffer",

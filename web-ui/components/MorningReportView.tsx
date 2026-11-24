@@ -484,7 +484,7 @@ export function MorningReportView({
           <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-zinc-500" />
+                <AlertTriangle className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
                 <span>What Needs Attention</span>
               </h3>
               <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -505,7 +505,7 @@ export function MorningReportView({
                     key={item.taskId}
                     className={`p-3.5 rounded-xl border bg-white dark:bg-black border-slate-200 dark:border-zinc-800 ${
                       item.status === "parked"
-                        ? "shadow-[inset_3px_0_0_#f59e0b]"
+                        ? "shadow-[inset_3px_0_0_#71717a]"
                         : "shadow-[inset_3px_0_0_#ef4444]"
                     }`}
                   >
@@ -552,7 +552,7 @@ export function MorningReportView({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-zinc-500" />
+                  <ShieldAlert className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
                   <span>Ambiguity Flags &amp; Judgment Calls</span>
                 </h2>
                 <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
@@ -570,7 +570,7 @@ export function MorningReportView({
                       className={`p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-zinc-900 transition-all ${
                         flag.reviewed
                           ? "border-slate-200 dark:border-zinc-800 opacity-80"
-                          : "border-slate-200 dark:border-zinc-800 shadow-[inset_3px_0_0_#f59e0b]"
+                          : "border-slate-200 dark:border-zinc-800 shadow-[inset_3px_0_0_#10b981]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -794,7 +794,7 @@ export function MorningReportView({
                                   ? "bg-zinc-50 dark:bg-zinc-900/80 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                                   : isFail
                                     ? "bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                                    : "bg-blue-50 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                    : "bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800"
                             }`}
                           >
                             {isComp ? (
@@ -851,7 +851,7 @@ export function MorningReportView({
                                   [t.taskId]: !prev[t.taskId],
                                 }))
                               }
-                              className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200 underline cursor-pointer"
+                              className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 underline cursor-pointer"
                             >
                               <span>{isExpanded ? "Hide Details" : "Details"}</span>
                               {isExpanded ? (

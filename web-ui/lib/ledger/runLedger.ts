@@ -1,9 +1,13 @@
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { createRequire } from "module";
 import { getCanonicalCheckpointDir } from "../subagents/morningReport";
 import type { SlotUtilizationMetrics } from "../slotScheduler";
+import {
+  getSafeHomedir,
+  migrateLegacyFileIfNeeded,
+  resolvePersistentStoragePath,
+} from "../storageMigration";
 
 const requireModule = createRequire(import.meta.url);
 
@@ -75,11 +79,29 @@ export interface RunLedgerOptions {
   defaultStaleThresholdSeconds?: number;
 }
 
+export function getLegacyLedgerDbPath(): string {
+  return path.join(getSafeHomedir(), ".local-agentic-sandbox", "runs.db");
+}
+
 export function getDefaultLedgerDbPath(): string {
-  if (process.env.RUN_LEDGER_DB_PATH) {
-    return process.env.RUN_LEDGER_DB_PATH;
-  }
-  return path.join(os.homedir(), ".local-agentic-sandbox", "runs.db");
+  return resolvePersistentStoragePath({
+    envVarValue: process.env.RUN_LEDGER_DB_PATH,
+    workspaceSubpath: [".agent", "runs.db"],
+    legacyFilename: "runs.db",
+  });
+}
+
+export function migrateLegacyRunsDbIfNeeded(
+  targetDbPath: string,
+  legacyDbPathOverride?: string
+): boolean {
+  return migrateLegacyFileIfNeeded({
+    targetPath: targetDbPath,
+    legacyPath: legacyDbPathOverride || getLegacyLedgerDbPath(),
+    sidecarSuffixes: ["-wal", "-shm"],
+    skipTmpDirGuard: Boolean(legacyDbPathOverride),
+    logPrefix: "[RunLedger]",
+  });
 }
 
 export function getDefaultCheckpointDir(_dbPath?: string): string {
@@ -103,9 +125,10 @@ interface SqliteDatabase {
 
 function openSqliteDatabase(dbPath: string): SqliteDatabase {
   const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
+  if (dbPath !== ":memory:" && !dbPath.startsWith("file::memory:") && !fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  migrateLegacyRunsDbIfNeeded(dbPath);
   const { DatabaseSync } = requireModule("node:sqlite") as {
     DatabaseSync: new (filename: string) => SqliteDatabase;
   };

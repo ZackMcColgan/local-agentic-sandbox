@@ -22,7 +22,7 @@ export function LiveStatusStrip({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
           Engine
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
@@ -31,7 +31,7 @@ export function LiveStatusStrip({
         </div>
       </div>
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
           Host
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-800 dark:text-zinc-200">
@@ -40,7 +40,7 @@ export function LiveStatusStrip({
         </div>
       </div>
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
           Model
         </div>
         <div
@@ -51,7 +51,7 @@ export function LiveStatusStrip({
         </div>
       </div>
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-400">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
           Last deploy
         </div>
         <div

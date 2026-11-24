@@ -293,6 +293,37 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.deepEqual(finalToolCalls[1].function.arguments, { pattern: "TODO" });
     });
 
+    it("LlamaCppProvider.streamChat emits out-of-order delta.tool_calls indices [2, 0, 1] in sorted numeric index order [0, 1, 2]", async () => {
+      globalThis.fetch = (async () => {
+        return createMockSseResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":2,"id":"call_2","type":"function","function":{"name":"tool_two","arguments":"{\\"n\\":2}"}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_0","type":"function","function":{"name":"tool_zero","arguments":"{\\"n\\":0}"}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_1","type":"function","function":{"name":"tool_one","arguments":"{\\"n\\":1}"}}]}}]}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }) as typeof globalThis.fetch;
+
+      const provider = new LlamaCppProvider();
+      const chunks: LLMStreamChunk[] = [];
+      for await (const chunk of provider.streamChat("http://127.0.0.1:8080", {
+        model: "test-model",
+        messages: [{ role: "user", content: "Run three tools" }],
+      })) {
+        chunks.push(chunk);
+      }
+
+      const finalToolCalls = chunks[chunks.length - 1].message?.tool_calls;
+      assert.ok(finalToolCalls);
+      assert.deepEqual(
+        finalToolCalls.map((tc) => tc.function.name),
+        ["tool_zero", "tool_one", "tool_two"]
+      );
+      assert.deepEqual(
+        finalToolCalls.map((tc) => tc.id),
+        ["call_0", "call_1", "call_2"]
+      );
+    });
+
     it("parses non-delta choices[0].message.tool_calls when server sends whole message block", async () => {
       globalThis.fetch = (async () => {
         return createMockSseResponse([

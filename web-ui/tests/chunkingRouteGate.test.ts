@@ -36,7 +36,7 @@ describe("Phase 2: Chat Route Job Chunking Global Gate", () => {
         res.end("no runner");
         return;
       }
-      if (url.includes("/sse")) {
+      if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
         res.writeHead(404);
         res.end("no mcp");
         return;

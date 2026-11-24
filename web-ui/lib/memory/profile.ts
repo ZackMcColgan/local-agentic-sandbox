@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
-import os from "os";
+import {
+  getSafeHomedir,
+  migrateLegacyFileIfNeeded,
+  resolvePersistentStoragePath,
+} from "../storageMigration";
 
 export interface ProfileHistoryItem {
   value: unknown;
@@ -25,17 +29,35 @@ export interface UserProfile {
   [key: string]: unknown; // tolerant to unknown fields additively
 }
 
+export function getLegacyUserProfilePath(): string {
+  return path.join(getSafeHomedir(), ".local-agentic-sandbox", "user_profile.json");
+}
+
 /**
  * Resolves the location of user_profile.json.
  * Uses USER_PROFILE_PATH environment variable if set,
- * otherwise defaults to ~/.local-agentic-sandbox/user_profile.json.
+ * otherwise prefers WORKSPACE_DIR/.agent/settings/user_profile.json when WORKSPACE_DIR exists,
+ * and falls back to ~/.local-agentic-sandbox/user_profile.json.
  */
 export function getUserProfilePath(): string {
-  if (process.env.USER_PROFILE_PATH) {
-    return path.resolve(process.env.USER_PROFILE_PATH);
-  }
-  const home = os.homedir() || process.env.USERPROFILE || process.env.HOME || ".";
-  return path.join(home, ".local-agentic-sandbox", "user_profile.json");
+  return resolvePersistentStoragePath({
+    envVarValue: process.env.USER_PROFILE_PATH,
+    resolveEnvVar: true,
+    workspaceSubpath: [".agent", "settings", "user_profile.json"],
+    legacyFilename: "user_profile.json",
+  });
+}
+
+export function migrateLegacyUserProfileIfNeeded(
+  targetPath: string = getUserProfilePath(),
+  legacyPathOverride?: string
+): boolean {
+  return migrateLegacyFileIfNeeded({
+    targetPath,
+    legacyPath: legacyPathOverride || getLegacyUserProfilePath(),
+    skipTmpDirGuard: Boolean(legacyPathOverride),
+    logPrefix: "[UserProfile]",
+  });
 }
 
 /**
@@ -46,6 +68,7 @@ export function getUserProfilePath(): string {
  */
 export function loadUserProfile(customPath?: string): UserProfile {
   const filePath = customPath || getUserProfilePath();
+  migrateLegacyUserProfileIfNeeded(filePath);
   const emptyProfile: UserProfile = {
     version: 1,
     entries: {},
@@ -91,6 +114,7 @@ export function loadUserProfile(customPath?: string): UserProfile {
  */
 export function saveUserProfile(profile: UserProfile, customPath?: string): void {
   const filePath = customPath || getUserProfilePath();
+  migrateLegacyUserProfileIfNeeded(filePath);
   const dir = path.dirname(filePath);
 
   if (!fs.existsSync(dir)) {

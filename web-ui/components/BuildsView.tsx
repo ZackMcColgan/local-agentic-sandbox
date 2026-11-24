@@ -168,7 +168,7 @@ export function BuildsView({
           </div>
         ) : (
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-zinc-800 text-center space-y-2">
-            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center mx-auto text-slate-400">
+            <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center mx-auto text-slate-600 dark:text-zinc-400">
               <Rocket className="h-6 w-6" />
             </div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-100">
@@ -316,7 +316,7 @@ export function BuildsView({
                               : isActive
                                 ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                 : isCompleted
-                                  ? "bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                  ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                   : isFailed
                                     ? "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                                     : "bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700"
@@ -354,16 +354,16 @@ export function BuildsView({
 
                     <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-zinc-400 flex-wrap pt-1 border-t border-slate-50 dark:border-zinc-800/60">
                       <div className="flex items-center gap-1">
-                        <GitBranch className="h-3.5 w-3.5 text-slate-400" />
+                        <GitBranch className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                         <span className="font-mono">{t.branchName || t.branch || "feat/task"}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
+                        <Clock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                         <span>{new Date(t.updatedAt || t.startedAt).toLocaleTimeString()}</span>
                       </div>
                       {t.milestones && t.milestones.length > 0 && (
                         <div className="flex items-center gap-1">
-                          <Hammer className="h-3.5 w-3.5 text-slate-400" />
+                          <Hammer className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                           <span>
                             {t.milestones.filter((m) => m.status === "completed").length}/
                             {t.milestones.length} milestones

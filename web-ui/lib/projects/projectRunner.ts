@@ -10,6 +10,7 @@ import {
   failProjectTask,
   parkProjectTask,
   getProjectTask,
+  setActiveProjectTaskIdsProvider,
 } from "./projectStore";
 import { runGit } from "./projectGit";
 import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
@@ -182,6 +183,7 @@ export async function scheduleProjectTask(
     taskDescription,
   };
 }
+setActiveProjectTaskIdsProvider(() => activeRunners.keys());
 
 export interface StartProjectTaskInput {
   projectId: string;

@@ -80,11 +80,11 @@ describe("parity PR3 — session cards (#15151b, rounded-2xl, mono meta, status 
     assert.ok(chip.includes("rounded-full"), "status chip is a pill");
   });
 
-  it("running card gets the cyan border, inset bar, and actions", () => {
-    assert.ok(sidebar.includes("border-cyan-500/40"), "running border cyan-500/40");
+  it("running card gets the emerald border, inset bar, and actions", () => {
+    assert.ok(sidebar.includes("border-emerald-500/40"), "running border emerald-500/40");
     assert.ok(
-      sidebar.includes("shadow-[inset_3px_0_0_#22d3ee]"),
-      "running card has the inset 3px cyan left bar"
+      sidebar.includes("shadow-[inset_3px_0_0_#10b981]"),
+      "running card has the inset 3px emerald left bar"
     );
     assert.ok(sidebar.includes("Open settings"), "ghost action label");
   });

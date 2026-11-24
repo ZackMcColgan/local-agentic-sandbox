@@ -17,7 +17,7 @@ import {
 import { ThrottledStreamSnapshot } from "@/lib/streamSnapshot";
 import { buildFileDeliverablesDirective } from "@/lib/threadOutputs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   DEFAULT_PRIMARY_MODEL,
   DEFAULT_SUBAGENT_MODEL,
@@ -113,7 +113,7 @@ function resolveChatTurnPriority(
 
 export async function POST(req: NextRequest) {
   const turnStartMs = Date.now();
-  const activeSessions: Array<{ client: Client; transport: SSEClientTransport }> = [];
+  const activeSessions: Array<{ client: Client; transport: StreamableHTTPClientTransport }> = [];
   const toolClientMap = new Map<
     string,
     { client: Client | null; tier: "sandbox" | "browser" | "workspace" | "host" }

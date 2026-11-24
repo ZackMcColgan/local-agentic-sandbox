@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import {
   ThreadStore,
@@ -8,7 +9,10 @@ import {
   clearTurnActive,
   abortActiveTurn,
   resolveThreadsDir,
+  type Thread,
+  type ThreadMessage,
 } from "@/lib/threads/threadStore";
+import { extractTraceError } from "@/lib/activityTimeline";
 import {
   OvernightSupervisor,
   createProductionStepExecutor,
@@ -223,10 +227,65 @@ function launchTaskExecution(activeThreadId: string, manifest: TaskManifest, thr
   })();
 }
 
+const HEAVY_TRACE_RESULT_THRESHOLD_CHARS = 512;
+
+function matchesIfNoneMatch(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  for (const rawToken of header.split(",")) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (token === "*") return true;
+    const normalized = token.replace(/^W\//i, "");
+    if (normalized === etag || `"${normalized.replace(/^"|"$/g, "")}"` === etag) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function stripHeavyTraceResults(thread: Thread): Thread {
+  let anyChanged = false;
+  const messages: ThreadMessage[] = (thread.messages || []).map((msg) => {
+    if (!Array.isArray(msg.traces) || msg.traces.length === 0) return msg;
+    let msgChanged = false;
+    const nextTraces = msg.traces.map((trace) => {
+      if (trace.result === undefined) return trace;
+      let serializedLen = 0;
+      if (typeof trace.result === "string") {
+        serializedLen = trace.result.length;
+      } else {
+        try {
+          serializedLen = JSON.stringify(trace.result)?.length ?? 0;
+        } catch {
+          serializedLen = HEAVY_TRACE_RESULT_THRESHOLD_CHARS + 1;
+        }
+      }
+      if (serializedLen <= HEAVY_TRACE_RESULT_THRESHOLD_CHARS) {
+        return trace;
+      }
+      msgChanged = true;
+      const traceWithErr = trace as typeof trace & { isError?: boolean };
+      const errSummary = extractTraceError(trace.result, traceWithErr.isError);
+      const { result: _omitted, ...rest } = trace;
+      return {
+        ...rest,
+        ...(errSummary && traceWithErr.isError === undefined ? { isError: true } : {}),
+      } as typeof trace;
+    });
+    if (!msgChanged) return msg;
+    anyChanged = true;
+    return { ...msg, traces: nextTraces };
+  });
+  return anyChanged ? { ...thread, messages } : thread;
+}
+
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const supervisor = getSupervisor();
     const { id } = await context.params;
+    const url = new URL(req.url);
+    const omitHeavyTraceResults = url.searchParams.get("omitHeavyTraceResults") === "1";
+
     const thread = await getThreadStore().getThread(id);
     if (!thread) {
       // CHAT-PRESENCE: a turn may have just started before the thread file lands.
@@ -247,9 +306,38 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       }
     }
 
+    const activeTurn = getActiveTurn(id);
+    const lastMsg = thread.messages[thread.messages.length - 1];
+    const etagSource = [
+      thread.updatedAt || "",
+      String(thread.messages.length),
+      thread.status || "",
+      lastMsg?.id || "",
+      String(lastMsg?.content?.length ?? 0),
+      String(lastMsg?.traces?.length ?? 0),
+      lastMsg?.status || "",
+      activeTurn
+        ? `${activeTurn.status}:${activeTurn.lastActivityAtMs ?? activeTurn.startedAt}`
+        : "none",
+      task ? `${task.status}:${task.updatedAt || ""}` : "none",
+      omitHeavyTraceResults ? "compact" : "full",
+    ].join("|");
+    const etag = `"${crypto.createHash("sha1").update(etagSource).digest("hex").slice(0, 16)}"`;
+
+    const responseHeaders = {
+      ETag: etag,
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    };
+
+    if (matchesIfNoneMatch(req.headers.get("if-none-match"), etag)) {
+      return new NextResponse(null, { status: 304, headers: responseHeaders });
+    }
+
+    const responseThread = omitHeavyTraceResults ? stripHeavyTraceResults(thread) : thread;
+
     return NextResponse.json(
-      { thread, task, activeTurn: getActiveTurn(id) },
-      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+      { thread: responseThread, task, activeTurn },
+      { headers: responseHeaders }
     );
   } catch (err: unknown) {
     return NextResponse.json(
@@ -278,7 +366,6 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       clearTurnActive(thread.id);
       abortActiveTurn(thread.id);
       const updatedThread = (await getThreadStore().getThread(id)) || thread;
-      updatedThread.status = "stopped";
       if (updatedThread.taskId) {
         cancelTask(updatedThread.taskId);
         activeExecutionSet.delete(updatedThread.taskId);
@@ -292,28 +379,29 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       // Unload all models from LLM VRAM immediately
       await unloadAllModels();
 
+      // Re-read immediately before mutating so concurrent writes during unloadAllModels are preserved.
+      const freshThread = (await getThreadStore().getThread(id)) || updatedThread;
+      freshThread.status = "stopped";
+
       // Mark the last assistant message as stopped
-      for (let i = updatedThread.messages.length - 1; i >= 0; i--) {
-        if (updatedThread.messages[i].role === "assistant") {
-          updatedThread.messages[i].isStopped = true;
-          const existingContent = updatedThread.messages[i].content || "";
+      for (let i = freshThread.messages.length - 1; i >= 0; i--) {
+        if (freshThread.messages[i].role === "assistant") {
+          freshThread.messages[i].isStopped = true;
+          const existingContent = freshThread.messages[i].content || "";
           if (!existingContent.includes("*[Stopped by user]*")) {
-            updatedThread.messages[i].content = existingContent.trim()
+            freshThread.messages[i].content = existingContent.trim()
               ? `${existingContent.trimEnd()}\n\n*[Stopped by user]*`
               : "*[Stopped by user]*";
           }
-          if (
-            !updatedThread.messages[i].status ||
-            updatedThread.messages[i].status === "streaming"
-          ) {
-            updatedThread.messages[i].status = "incomplete";
+          if (!freshThread.messages[i].status || freshThread.messages[i].status === "streaming") {
+            freshThread.messages[i].status = "incomplete";
           }
           break;
         }
       }
 
-      getThreadStore().saveThread(updatedThread);
-      return NextResponse.json({ status: "stopped", thread: updatedThread });
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ status: "stopped", thread: freshThread });
     }
 
     // 1b. Action: Pause Run
@@ -324,9 +412,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         if (task) {
           supervisor.pauseTask(task, "User paused run");
           getSharedRunLedger().pauseRun(task.taskId);
-          thread.status = "paused";
-          getThreadStore().saveThread(thread);
-          return NextResponse.json({ status: "paused", thread, task });
+          const freshThread = (await getThreadStore().getThread(id)) || thread;
+          freshThread.status = "paused";
+          getThreadStore().saveThread(freshThread);
+          return NextResponse.json({ status: "paused", thread: freshThread, task });
         }
       }
       return NextResponse.json({ error: "No active task to pause" }, { status: 400 });
@@ -347,16 +436,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           supervisor.saveCheckpoint(task);
           supervisor.resumeTask(task.taskId);
           activeExecutionSet.add(task.taskId);
-          thread.status = "active";
-          getThreadStore().saveThread(thread);
+          const freshThread = (await getThreadStore().getThread(id)) || thread;
+          freshThread.status = "active";
+          getThreadStore().saveThread(freshThread);
 
           const taskWithBudget = task as TaskManifest & { chunkBudget?: unknown };
-          if (thread.chunkBudget !== undefined && taskWithBudget.chunkBudget === undefined) {
-            taskWithBudget.chunkBudget = thread.chunkBudget;
+          if (freshThread.chunkBudget !== undefined && taskWithBudget.chunkBudget === undefined) {
+            taskWithBudget.chunkBudget = freshThread.chunkBudget;
           }
-          launchTaskExecution(thread.id, task, thread.model);
+          launchTaskExecution(freshThread.id, task, freshThread.model);
 
-          return NextResponse.json({ status: "running", thread, task });
+          return NextResponse.json({ status: "running", thread: freshThread, task });
         }
       }
       return NextResponse.json({ error: "No task checkpoint found to resume" }, { status: 400 });
@@ -373,18 +463,22 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           } catch {
             // synced by saveCheckpoint
           }
-          thread.taskId = restarted.taskId;
-          thread.status = "active";
+          const freshThread = (await getThreadStore().getThread(id)) || thread;
+          freshThread.taskId = restarted.taskId;
+          freshThread.status = "active";
           activeExecutionSet.add(restarted.taskId);
-          getThreadStore().saveThread(thread);
+          getThreadStore().saveThread(freshThread);
 
           const restartedWithBudget = restarted as TaskManifest & { chunkBudget?: unknown };
-          if (thread.chunkBudget !== undefined && restartedWithBudget.chunkBudget === undefined) {
-            restartedWithBudget.chunkBudget = thread.chunkBudget;
+          if (
+            freshThread.chunkBudget !== undefined &&
+            restartedWithBudget.chunkBudget === undefined
+          ) {
+            restartedWithBudget.chunkBudget = freshThread.chunkBudget;
           }
-          launchTaskExecution(thread.id, restarted, thread.model);
+          launchTaskExecution(freshThread.id, restarted, freshThread.model);
 
-          return NextResponse.json({ status: "running", thread, task: restarted });
+          return NextResponse.json({ status: "running", thread: freshThread, task: restarted });
         }
       }
       return NextResponse.json({ error: "No task found to restart" }, { status: 400 });
@@ -392,9 +486,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 2. Action: Rename Thread
     if (body.action === "rename" && body.title) {
-      thread.title = body.title;
-      getThreadStore().saveThread(thread);
-      return NextResponse.json({ thread });
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
+      freshThread.title = body.title;
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     // 3. Action: Add Message
@@ -405,15 +500,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     // 4. Action: Restore Compaction
     if (body.action === "restoreCompaction") {
-      getThreadStore().clearCompactionBoundary(thread);
-      return NextResponse.json({ thread });
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
+      getThreadStore().clearCompactionBoundary(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     // 5. Action: Toggle Host Access
     if (body.action === "setHostAccess") {
-      thread.hostAccess = Boolean(body.hostAccess);
-      getThreadStore().saveThread(thread);
-      return NextResponse.json({ thread });
+      const freshThread = (await getThreadStore().getThread(id)) || thread;
+      freshThread.hostAccess = Boolean(body.hostAccess);
+      getThreadStore().saveThread(freshThread);
+      return NextResponse.json({ thread: freshThread });
     }
 
     // 6. Action: Set Model & Reasoning Effort
