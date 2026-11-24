@@ -55,9 +55,9 @@ spec:
             - name: OLLAMA_HOST
               value: "http://llm-service:11434"
             - name: MCP_SERVER_URL
-              value: "http://mcp-runner:8080/sse"
+              value: "http://mcp-runner:8080/mcp"
             - name: BROWSER_MCP_URL
-              value: "http://browser-mcp:8081/sse"
+              value: "http://browser-mcp:8081/mcp"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4318"
             - name: OTEL_SERVICE_NAME

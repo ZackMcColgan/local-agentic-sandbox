@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
     // If file not found locally on disk, try proxying to mcp-server if available
     if (!resolvedPath) {
       const mcpEnv = process.env.MCP_SERVER_URL || process.env.MCP_URL;
-      const mcpBase = mcpEnv ? mcpEnv.replace(/\/sse\/?$/, "") : "http://localhost:8080";
+      const mcpBase = mcpEnv ? mcpEnv.replace(/\/(mcp|sse)\/?$/, "") : "http://localhost:8080";
 
       try {
         const mcpFileRes = await fetch(`${mcpBase}/files?path=${encodeURIComponent(cleanPath)}`, {

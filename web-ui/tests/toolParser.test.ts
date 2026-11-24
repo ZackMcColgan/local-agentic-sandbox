@@ -4,20 +4,22 @@ import { normalizeMcpUrl, parseToolCallsFromText, cleanResidualToolTags } from "
 
 describe("Tool Parser & URL Normalization Suite", () => {
   describe("normalizeMcpUrl", () => {
-    it("appends /sse to URLs missing it", () => {
-      assert.equal(normalizeMcpUrl("http://mcp-runner:8080"), "http://mcp-runner:8080/sse");
-      assert.equal(normalizeMcpUrl("http://browser-mcp:8081"), "http://browser-mcp:8081/sse");
-      assert.equal(normalizeMcpUrl("http://localhost:8080/"), "http://localhost:8080/sse");
+    it("appends /mcp to URLs missing it", () => {
+      assert.equal(normalizeMcpUrl("http://mcp-runner:8080"), "http://mcp-runner:8080/mcp");
+      assert.equal(normalizeMcpUrl("http://browser-mcp:8081"), "http://browser-mcp:8081/mcp");
+      assert.equal(normalizeMcpUrl("http://localhost:8080/"), "http://localhost:8080/mcp");
     });
 
-    it("preserves URLs that already have /sse", () => {
-      assert.equal(normalizeMcpUrl("http://mcp-runner:8080/sse"), "http://mcp-runner:8080/sse");
-      assert.equal(normalizeMcpUrl("http://browser-mcp:8081/sse/"), "http://browser-mcp:8081/sse");
+    it("preserves URLs that already have /mcp and migrates legacy /sse suffix", () => {
+      assert.equal(normalizeMcpUrl("http://mcp-runner:8080/mcp"), "http://mcp-runner:8080/mcp");
+      assert.equal(normalizeMcpUrl("http://browser-mcp:8081/mcp/"), "http://browser-mcp:8081/mcp");
+      assert.equal(normalizeMcpUrl("http://mcp-runner:8080/sse"), "http://mcp-runner:8080/mcp");
+      assert.equal(normalizeMcpUrl("http://browser-mcp:8081/sse/"), "http://browser-mcp:8081/mcp");
     });
 
     it("handles edge cases and empty URLs", () => {
-      assert.equal(normalizeMcpUrl(""), "http://127.0.0.1:8080/sse");
-      assert.equal(normalizeMcpUrl("   "), "http://127.0.0.1:8080/sse");
+      assert.equal(normalizeMcpUrl(""), "http://127.0.0.1:8080/mcp");
+      assert.equal(normalizeMcpUrl("   "), "http://127.0.0.1:8080/mcp");
     });
   });
 

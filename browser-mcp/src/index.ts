@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import express, { Request, Response } from "express";
 import { registerBrowserTools } from "./tools/browser.js";
 
 const app = express();
+app.use(express.json());
 
 export function createBrowserMcpServer(): McpServer {
   const mcp = new McpServer({
@@ -14,7 +17,10 @@ export function createBrowserMcpServer(): McpServer {
   return mcp;
 }
 
-const sessions = new Map<string, { server: McpServer; transport: SSEServerTransport }>();
+const sessions = new Map<
+  string,
+  { server: McpServer; transport: StreamableHTTPServerTransport }
+>();
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({
@@ -31,44 +37,67 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
-app.get("/sse", async (req: Request, res: Response) => {
+app.post("/mcp", async (req: Request, res: Response) => {
   try {
-    const server = createBrowserMcpServer();
-    const transport = new SSEServerTransport("/messages", res);
-    sessions.set(transport.sessionId, { server, transport });
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    let entry = sessionId ? sessions.get(sessionId) : undefined;
 
-    req.on("close", async () => {
-      sessions.delete(transport.sessionId);
-      try {
-        await server.close();
-      } catch {}
-    });
+    if (!entry && isInitializeRequest(req.body)) {
+      const server = createBrowserMcpServer();
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          sessions.set(sid, { server, transport });
+        },
+      });
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          sessions.delete(transport.sessionId);
+        }
+      };
+      await server.connect(transport);
+      entry = { server, transport };
+    }
 
-    await server.connect(transport);
+    if (!entry) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Bad Request: No valid session ID provided" },
+        id: null,
+      });
+      return;
+    }
+
+    await entry.transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("Failed to establish SSE transport in browser-mcp:", error);
+    console.error("Failed to handle Streamable HTTP request in browser-mcp:", error);
     if (!res.headersSent) {
-      res.status(500).send("SSE Connection Failed");
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal server error" },
+        id: null,
+      });
     }
   }
 });
 
-app.post("/messages", async (req: Request, res: Response) => {
-  const sessionId = req.query.sessionId as string;
-  const session = (sessionId && sessions.get(sessionId)) || Array.from(sessions.values())[0];
-
-  if (session) {
-    await session.transport.handlePostMessage(req, res);
-  } else {
-    res.status(400).send("Session not initialized or expired");
-  }
-});
+export { app };
 
 const PORT = parseInt(process.env.PORT || "8081", 10);
 const HOST = "0.0.0.0";
 
-app.listen(PORT, HOST, () => {
-  console.log(`[Browser MCP] Active and listening at http://${HOST}:${PORT}`);
-  console.log(`[Browser MCP] SSE Endpoint: http://${HOST}:${PORT}/sse`);
-  console.log(`[Browser MCP] Registered Tools: search_web, fetch_webpage_markdown`);
-});
+const isMainModule = Boolean(
+  typeof process !== "undefined" &&
+    process.argv?.[1] &&
+    (process.argv[1].endsWith("index.js") || process.argv[1].endsWith("index.ts")) &&
+    !process.env.NODE_TEST_CONTEXT &&
+    !process.argv[1].includes(".test.")
+);
+
+if (isMainModule) {
+  app.listen(PORT, HOST, () => {
+    console.log(`[Browser MCP] Active and listening at http://${HOST}:${PORT}`);
+    console.log(`[Browser MCP] Streamable HTTP Endpoint: http://${HOST}:${PORT}/mcp`);
+    console.log(`[Browser MCP] Registered Tools: search_web, fetch_webpage_markdown`);
+  });
+}

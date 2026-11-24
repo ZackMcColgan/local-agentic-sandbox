@@ -24,7 +24,7 @@ import {
   TurnFileDiff,
 } from "@/lib/chatDiffs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { DEFAULT_PRIMARY_MODEL, AgentMode } from "@/config/models";
 import { TelemetryTracer } from "@/lib/telemetry";
 import { parseToolCallsFromText, cleanResidualToolTags } from "@/lib/toolParser";
@@ -252,7 +252,7 @@ export interface RunChatTurnDeps {
   heartbeatIntervalMs?: number;
 
   // MCP sessions & telemetry
-  activeSessions: Array<{ client: Client; transport: SSEClientTransport }>;
+  activeSessions: Array<{ client: Client; transport: StreamableHTTPClientTransport }>;
   toolClientMap: Map<
     string,
     { client: Client | null; tier: "sandbox" | "browser" | "workspace" | "host" }

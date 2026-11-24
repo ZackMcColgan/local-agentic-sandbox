@@ -18,19 +18,19 @@ describe("chat route MCP client characterization", () => {
   });
 
   it("getMcpUrl and getBrowserMcpUrl return env overrides or defaults", () => {
-    assert.equal(getMcpUrl({}), "http://mcp-server:8080/sse");
+    assert.equal(getMcpUrl({}), "http://mcp-server:8080/mcp");
     assert.equal(
-      getMcpUrl({ MCP_SERVER_URL: "http://127.0.0.1:9000/sse" }),
-      "http://127.0.0.1:9000/sse"
+      getMcpUrl({ MCP_SERVER_URL: "http://127.0.0.1:9000/mcp" }),
+      "http://127.0.0.1:9000/mcp"
     );
-    assert.equal(getBrowserMcpUrl({}), "http://browser-mcp:8081/sse");
+    assert.equal(getBrowserMcpUrl({}), "http://browser-mcp:8081/mcp");
     assert.equal(
-      getBrowserMcpUrl({ BROWSER_MCP_URL: "http://127.0.0.1:9001/sse" }),
-      "http://127.0.0.1:9001/sse"
+      getBrowserMcpUrl({ BROWSER_MCP_URL: "http://127.0.0.1:9001/mcp" }),
+      "http://127.0.0.1:9001/mcp"
     );
   });
 
-  it("connectMcpClient normalizes URL, connects, lists tools, and returns session", async () => {
+  it("connectMcpClient normalizes URL to /mcp, connects, lists tools, and returns client handle", async () => {
     let seenUrl = "";
     let connectedTransport: unknown = null;
     const fakeTransport = { close: async () => {} };
@@ -54,7 +54,7 @@ describe("chat route MCP client characterization", () => {
     });
 
     assert.ok(session);
-    assert.equal(seenUrl, "http://mcp-server:8080/sse");
+    assert.equal(seenUrl, "http://mcp-server:8080/mcp");
     assert.equal(connectedTransport, fakeTransport);
     assert.deepEqual(session.tools, fakeTools);
   });
@@ -64,7 +64,7 @@ describe("chat route MCP client characterization", () => {
     let transportClosed = false;
     const warnings: unknown[][] = [];
 
-    const session = await connectMcpClient("http://mcp-server:8080/sse", "test-client", {
+    const session = await connectMcpClient("http://mcp-server:8080/mcp", "test-client", {
       createTransport: () => ({
         close: async () => {
           transportClosed = true;

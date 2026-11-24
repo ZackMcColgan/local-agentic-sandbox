@@ -36,7 +36,7 @@ function makeScriptedOllamaServer(
       res.end(JSON.stringify({ models: [] }));
       return;
     }
-    if (url.includes("/sse")) {
+    if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
       // MCP endpoints unreachable: route falls back to graceful advertised-tool traces.
       res.writeHead(404);
       res.end("no mcp");
@@ -240,7 +240,7 @@ test("Synthesis deadline: stalled synthesis stream aborts at inactivity deadline
       res.end(JSON.stringify({ models: [] }));
       return;
     }
-    if (url.includes("/sse")) {
+    if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
       res.writeHead(404);
       res.end("no mcp");
       return;
@@ -400,7 +400,7 @@ test("Synthesis token recording: prompt_eval_count in synthesis pass is recorded
       res.end(JSON.stringify({ models: [] }));
       return;
     }
-    if (url.includes("/sse")) {
+    if (url.includes("/sse") || url.includes("/mcp") || url.includes("/browser")) {
       res.writeHead(404);
       res.end("no mcp");
       return;
