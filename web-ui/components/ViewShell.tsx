@@ -11,7 +11,11 @@ import { SandboxGauge } from "@/components/SandboxGauge";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
-import { Thread, type ActiveTurnInfo } from "@/lib/threads/threadStore";
+import {
+  Thread,
+  type ActiveTurnInfo,
+  type ThreadCompactionBoundary,
+} from "@/lib/threads/threadStore";
 import { SimulationScenarioKey } from "@/lib/simulator";
 import {
   ArrowLeft,
@@ -77,6 +81,8 @@ export interface ViewShellProps {
   currentThread: Thread | null;
   activeTurn?: ActiveTurnInfo | null;
   threadUpdatedAt?: string | null;
+  threadCompaction?: ThreadCompactionBoundary | null;
+  onLocalSseOpenChange?: (open: boolean) => void;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   draftComposerPrompt: string | null;
@@ -172,6 +178,8 @@ export function ViewShell({
   currentThread,
   activeTurn,
   threadUpdatedAt,
+  threadCompaction,
+  onLocalSseOpenChange,
   messages,
   setMessages,
   draftComposerPrompt,
@@ -439,6 +447,8 @@ export function ViewShell({
                   onTracesUpdate={onTracesUpdate}
                   liveTraces={traces}
                   isActiveView={activeNavView === "sessions" && viewMode === "unified"}
+                  onLocalSseOpenChange={onLocalSseOpenChange}
+                  threadCompaction={threadCompaction}
                   activeModel={selectedModel}
                   agentMode={agentMode}
                   reasoningEffort={reasoningEffort}

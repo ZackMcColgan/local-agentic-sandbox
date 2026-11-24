@@ -894,9 +894,30 @@ export class ThreadStore {
     );
   }
 
-  private get summaryCache(): Map<string, { mtimeMs: number; summary: ThreadSummary }> {
+  private static readonly SEARCH_DIGEST_MAX_CHARS = 8192;
+
+  private get summaryCache(): Map<
+    string,
+    {
+      mtimeMs: number;
+      summary: ThreadSummary;
+      searchDigest?: string;
+      searchDigestComplete?: boolean;
+    }
+  > {
     const g = globalThis as unknown as {
-      __lasSummaryCache?: Map<string, Map<string, { mtimeMs: number; summary: ThreadSummary }>>;
+      __lasSummaryCache?: Map<
+        string,
+        Map<
+          string,
+          {
+            mtimeMs: number;
+            summary: ThreadSummary;
+            searchDigest?: string;
+            searchDigestComplete?: boolean;
+          }
+        >
+      >;
     };
     if (!g.__lasSummaryCache) {
       g.__lasSummaryCache = new Map();
@@ -910,6 +931,16 @@ export class ThreadStore {
   }
   private summaryIndexLoaded = false;
 
+  private get summaryIndexDirtyDirs(): Set<string> {
+    const g = globalThis as unknown as {
+      __lasSummaryIndexDirtyDirs?: Set<string>;
+    };
+    if (!g.__lasSummaryIndexDirtyDirs) {
+      g.__lasSummaryIndexDirtyDirs = new Set();
+    }
+    return g.__lasSummaryIndexDirtyDirs;
+  }
+
   private get summaryIndexPath(): string {
     return path.join(this.threadsDir, ".summaries-index.json");
   }
@@ -919,7 +950,15 @@ export class ThreadStore {
     this.summaryIndexLoaded = true;
     try {
       const raw = await fs.promises.readFile(this.summaryIndexPath, "utf8");
-      const parsed = JSON.parse(raw) as Record<string, { mtimeMs: number; summary: ThreadSummary }>;
+      const parsed = JSON.parse(raw) as Record<
+        string,
+        {
+          mtimeMs: number;
+          summary: ThreadSummary;
+          searchDigest?: string;
+          searchDigestComplete?: boolean;
+        }
+      >;
       if (parsed && typeof parsed === "object") {
         for (const [k, v] of Object.entries(parsed)) {
           if (v && typeof v.mtimeMs === "number" && v.summary && typeof v.summary.id === "string") {
@@ -934,7 +973,15 @@ export class ThreadStore {
 
   private async saveSummaryIndex(): Promise<void> {
     try {
-      const obj: Record<string, { mtimeMs: number; summary: ThreadSummary }> = {};
+      const obj: Record<
+        string,
+        {
+          mtimeMs: number;
+          summary: ThreadSummary;
+          searchDigest?: string;
+          searchDigestComplete?: boolean;
+        }
+      > = {};
       for (const [k, v] of this.summaryCache.entries()) {
         obj[k] = v;
       }
@@ -942,6 +989,90 @@ export class ThreadStore {
     } catch {
       // Best-effort sidecar persistence
     }
+  }
+
+  private buildSummaryAndDigest(t: Thread): {
+    summary: ThreadSummary;
+    searchDigest: string;
+    searchDigestComplete: boolean;
+  } {
+    const msgs = Array.isArray(t.messages) ? t.messages : [];
+    const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
+    const fallbackRoundNarration =
+      Array.isArray(lastMsg?.roundNarrations) && lastMsg.roundNarrations.length > 0
+        ? lastMsg.roundNarrations[lastMsg.roundNarrations.length - 1]?.text || ""
+        : "";
+    const rawPreview = (lastMsg?.content || fallbackRoundNarration).replace(/\s+/g, " ").trim();
+    const lastMessagePreview =
+      rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
+    const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
+    const hasStreamingMessage = msgs.some(
+      (m) => m.role === "assistant" && m.status === "streaming"
+    );
+    const traceCount = msgs.reduce(
+      (sum, m) => sum + (Array.isArray(m.traces) ? m.traces.length : 0),
+      0
+    );
+    const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
+    const title =
+      t.title && t.title !== "New session"
+        ? t.title
+        : firstUserMsg
+          ? deriveStoredThreadTitle(firstUserMsg.content)
+          : t.title || "New session";
+    const summary: ThreadSummary = {
+      id: t.id,
+      title,
+      status: t.status,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      ...(t.model !== undefined ? { model: t.model } : {}),
+      ...(t.reasoningEffort !== undefined ? { reasoningEffort: t.reasoningEffort } : {}),
+      ...(t.taskId !== undefined ? { taskId: t.taskId } : {}),
+      ...(t.boardItemId !== undefined ? { boardItemId: t.boardItemId } : {}),
+      ...((t as { error?: string }).error !== undefined
+        ? { error: (t as { error?: string }).error }
+        : {}),
+      ...((t as { parkedReason?: string }).parkedReason !== undefined
+        ? { parkedReason: (t as { parkedReason?: string }).parkedReason }
+        : {}),
+      ...(t.needsAttention !== undefined ? { needsAttention: t.needsAttention } : {}),
+      ...(t.stalledReason !== undefined ? { stalledReason: t.stalledReason } : {}),
+      ...(t.autoResumeCount !== undefined ? { autoResumeCount: t.autoResumeCount } : {}),
+      ...(t.scope !== undefined ? { scope: t.scope } : {}),
+      ...(t.hostAccess !== undefined ? { hostAccess: t.hostAccess } : {}),
+      traceCount,
+      messageCount: msgs.length,
+      lastMessagePreview,
+      hasDiffs,
+      hasStreamingMessage,
+      ...(t.queuedForExecution ? { queuedForExecution: true } : {}),
+    };
+
+    const digestParts: string[] = [];
+    let digestLen = 0;
+    let searchDigestComplete = true;
+    for (const m of msgs) {
+      if (typeof m.content !== "string" || !m.content) continue;
+      const lower = m.content.toLowerCase();
+      if (digestLen + lower.length <= ThreadStore.SEARCH_DIGEST_MAX_CHARS) {
+        digestParts.push(lower);
+        digestLen += lower.length + 1;
+      } else {
+        const remaining = Math.max(0, ThreadStore.SEARCH_DIGEST_MAX_CHARS - digestLen);
+        if (remaining > 0) {
+          digestParts.push(lower.slice(0, remaining));
+        }
+        searchDigestComplete = false;
+        break;
+      }
+    }
+
+    return {
+      summary,
+      searchDigest: digestParts.join("\n"),
+      searchDigestComplete,
+    };
   }
 
   private reconcileSummaryStatus(summary: ThreadSummary): ThreadSummary {
@@ -1051,7 +1182,8 @@ export class ThreadStore {
           cached &&
           cached.mtimeMs === stat.mtimeMs &&
           typeof cached.summary.hasStreamingMessage === "boolean" &&
-          typeof cached.summary.traceCount === "number"
+          typeof cached.summary.traceCount === "number" &&
+          typeof cached.searchDigest === "string"
         ) {
           summaries.push(this.reconcileSummaryStatus(cached.summary));
           continue;
@@ -1059,63 +1191,15 @@ export class ThreadStore {
         try {
           const raw = await fs.promises.readFile(fullPath, "utf8");
           const t = JSON.parse(raw) as Thread;
-          const msgs = Array.isArray(t.messages) ? t.messages : [];
-          const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
-          const fallbackRoundNarration =
-            Array.isArray(lastMsg?.roundNarrations) && lastMsg.roundNarrations.length > 0
-              ? lastMsg.roundNarrations[lastMsg.roundNarrations.length - 1]?.text || ""
-              : "";
-          const rawPreview = (lastMsg?.content || fallbackRoundNarration)
-            .replace(/\s+/g, " ")
-            .trim();
-          const lastMessagePreview =
-            rawPreview.length > 140 ? rawPreview.slice(0, 140) + "…" : rawPreview;
-          const hasDiffs = msgs.some((m) => Array.isArray(m.diffs) && m.diffs.length > 0);
-          const hasStreamingMessage = msgs.some(
-            (m) => m.role === "assistant" && m.status === "streaming"
-          );
-          const traceCount = msgs.reduce(
-            (sum, m) => sum + (Array.isArray(m.traces) ? m.traces.length : 0),
-            0
-          );
-          const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
-          const title =
-            t.title && t.title !== "New session"
-              ? t.title
-              : firstUserMsg
-                ? deriveStoredThreadTitle(firstUserMsg.content)
-                : t.title || "New session";
-          const summary: ThreadSummary = {
-            id: t.id,
-            title,
-            status: t.status,
-            createdAt: t.createdAt,
-            updatedAt: t.updatedAt,
-            ...(t.model !== undefined ? { model: t.model } : {}),
-            ...(t.reasoningEffort !== undefined ? { reasoningEffort: t.reasoningEffort } : {}),
-            ...(t.taskId !== undefined ? { taskId: t.taskId } : {}),
-            ...(t.boardItemId !== undefined ? { boardItemId: t.boardItemId } : {}),
-            ...((t as { error?: string }).error !== undefined
-              ? { error: (t as { error?: string }).error }
-              : {}),
-            ...((t as { parkedReason?: string }).parkedReason !== undefined
-              ? { parkedReason: (t as { parkedReason?: string }).parkedReason }
-              : {}),
-            ...(t.needsAttention !== undefined ? { needsAttention: t.needsAttention } : {}),
-            ...(t.stalledReason !== undefined ? { stalledReason: t.stalledReason } : {}),
-            ...(t.autoResumeCount !== undefined ? { autoResumeCount: t.autoResumeCount } : {}),
-            ...(t.scope !== undefined ? { scope: t.scope } : {}),
-            ...(t.hostAccess !== undefined ? { hostAccess: t.hostAccess } : {}),
-            traceCount,
-            messageCount: msgs.length,
-            lastMessagePreview,
-            hasDiffs,
-            hasStreamingMessage,
-            ...(t.queuedForExecution ? { queuedForExecution: true } : {}),
-          };
-          this.summaryCache.set(file, { mtimeMs: stat.mtimeMs, summary });
+          const built = this.buildSummaryAndDigest(t);
+          this.summaryCache.set(file, {
+            mtimeMs: stat.mtimeMs,
+            summary: built.summary,
+            searchDigest: built.searchDigest,
+            searchDigestComplete: built.searchDigestComplete,
+          });
           indexDirty = true;
-          summaries.push(this.reconcileSummaryStatus(summary));
+          summaries.push(this.reconcileSummaryStatus(built.summary));
         } catch {
           // ignore malformed thread file
         }
@@ -1126,28 +1210,81 @@ export class ThreadStore {
           indexDirty = true;
         }
       }
-      if (indexDirty) {
+      if (
+        indexDirty ||
+        this.summaryIndexDirtyDirs.has(this.threadsDir) ||
+        (files.length > 0 && !fs.existsSync(this.summaryIndexPath))
+      ) {
         await this.saveSummaryIndex();
+        this.summaryIndexDirtyDirs.delete(this.threadsDir);
       }
       summaries.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
       return summaries;
     }
 
-    // Search path (q present): two-stage async search without calling listThreads() or sync fs.
-    const allSummaries = await this.listThreadSummaries();
+    // Search path (q present): use indexed searchDigest first, and on disk fallback
+    // pre-check raw.toLowerCase().includes(q) BEFORE JSON.parse(raw).
+    if (!fs.existsSync(this.threadsDir)) return [];
+    await this.ensureSeeded();
+    await this.loadSummaryIndex();
+    const files = (await fs.promises.readdir(this.threadsDir)).filter(
+      (f) =>
+        f.endsWith(".json") &&
+        !f.startsWith(".") &&
+        f !== ".summaries-index.json" &&
+        !f.endsWith(".steer.json")
+    );
     const summaries: ThreadSummary[] = [];
+    const defaultTitleMatches = "new session".includes(q);
+    const hasJsonSpecial =
+      q.includes('"') ||
+      q.includes("\\") ||
+      q.includes("\n") ||
+      q.includes("\r") ||
+      q.includes("\t");
 
-    for (const s of allSummaries) {
-      const titleMatches = s.title.toLowerCase().includes(q);
-      let matchSnippet: string | undefined;
-      let matchIdx = -1;
+    for (const file of files) {
+      const fullPath = path.join(this.threadsDir, file);
+      let stat: fs.Stats;
+      try {
+        stat = await fs.promises.stat(fullPath);
+      } catch {
+        continue;
+      }
 
-      const fullPath = path.join(this.threadsDir, `${s.id}.json`);
+      const cached = this.summaryCache.get(file);
+      const cacheFresh = Boolean(
+        cached &&
+        cached.mtimeMs === stat.mtimeMs &&
+        typeof cached.summary.hasStreamingMessage === "boolean" &&
+        typeof cached.summary.traceCount === "number"
+      );
+
+      if (cacheFresh && cached && typeof cached.searchDigest === "string") {
+        const reconciled = this.reconcileSummaryStatus(cached.summary);
+        const titleMatches = reconciled.title.toLowerCase().includes(q);
+        const digestMatches = cached.searchDigest.includes(q);
+        if (!titleMatches && !digestMatches && cached.searchDigestComplete) {
+          continue;
+        }
+        if (titleMatches && !digestMatches && cached.searchDigestComplete) {
+          summaries.push(reconciled);
+          continue;
+        }
+      }
+
       try {
         const raw = await fs.promises.readFile(fullPath, "utf8");
+        if (!hasJsonSpecial && !defaultTitleMatches && !raw.toLowerCase().includes(q)) {
+          continue;
+        }
         const t = JSON.parse(raw) as Thread;
+        const built = this.buildSummaryAndDigest(t);
+        const reconciled = this.reconcileSummaryStatus(built.summary);
+        const titleMatches = reconciled.title.toLowerCase().includes(q);
         const msgs = Array.isArray(t.messages) ? t.messages : [];
         let bodyMatchContent: string | undefined;
+        let matchIdx = -1;
         for (const m of msgs) {
           if (typeof m.content === "string") {
             const idx = m.content.toLowerCase().indexOf(q);
@@ -1158,28 +1295,26 @@ export class ThreadStore {
             }
           }
         }
+        if (!titleMatches && matchIdx === -1) {
+          continue;
+        }
+        let matchSnippet: string | undefined;
         if (bodyMatchContent && matchIdx !== -1) {
           const start = Math.max(0, matchIdx - 32);
           const end = Math.min(bodyMatchContent.length, matchIdx + q.length + 48);
           const slice = bodyMatchContent.slice(start, end).replace(/\s+/g, " ").trim();
           matchSnippet = `${start > 0 ? "…" : ""}${slice}${end < bodyMatchContent.length ? "…" : ""}`;
         }
+        summaries.push({
+          ...reconciled,
+          ...(matchSnippet ? { matchSnippet } : {}),
+        });
       } catch {
-        if (!titleMatches && !s.lastMessagePreview.toLowerCase().includes(q)) {
-          continue;
-        }
+        // ignore malformed thread file
       }
-
-      if (!titleMatches && matchIdx === -1) {
-        continue;
-      }
-
-      summaries.push({
-        ...s,
-        ...(matchSnippet ? { matchSnippet } : {}),
-      });
     }
 
+    summaries.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
     return summaries;
   }
 
@@ -1307,6 +1442,21 @@ export class ThreadStore {
         fs.chmodSync(targetFile, 0o660);
       } catch {}
     }
+
+    try {
+      const stat = fs.statSync(targetFile);
+      const built = this.buildSummaryAndDigest(thread);
+      this.summaryCache.set(`${thread.id}.json`, {
+        mtimeMs: stat.mtimeMs,
+        summary: built.summary,
+        searchDigest: built.searchDigest,
+        searchDigestComplete: built.searchDigestComplete,
+      });
+      this.summaryIndexDirtyDirs.add(this.threadsDir);
+      if (this.summaryIndexLoaded) {
+        void this.saveSummaryIndex();
+      }
+    } catch {}
   }
 
   createThread(params: {
@@ -1533,6 +1683,11 @@ export class ThreadStore {
         fs.unlinkSync(filePath);
         deletedAny = true;
       } catch {}
+    }
+    this.summaryCache.delete(`${threadId}.json`);
+    this.summaryIndexDirtyDirs.add(this.threadsDir);
+    if (this.summaryIndexLoaded) {
+      void this.saveSummaryIndex();
     }
 
     // (1) Remove thread's <threadId>/ subdirectory recursively
