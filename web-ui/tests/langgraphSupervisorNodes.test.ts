@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { createOvernightGraph, FileCheckpointSaver } from "../lib/subagents/supervisor";
 import { WorkerPool } from "../lib/subagents/workerPool";
 import { Milestone } from "../lib/subagents/types";
@@ -15,20 +16,35 @@ import {
 
 process.env.FAST_GRAPH_TEST = "1";
 
+function createTempFixtureRepo(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lg-nodes-repo-"));
+  execFileSync("git", ["init"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.name", "LG Test Runner"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "lg-test@example.com"], {
+    cwd: dir,
+    stdio: "ignore",
+  });
+  fs.writeFileSync(path.join(dir, "README.md"), "# Temp LangGraph Test Repo\n", "utf8");
+  execFileSync("git", ["add", "README.md"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "chore: init fixture"], { cwd: dir, stdio: "ignore" });
+  return dir;
+}
+
 test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (t) => {
   const useRealOllama = await checkOllama();
   logServiceMode("ollama", useRealOllama);
   if (!useRealOllama) enableOllamaMock();
 
-  const testCheckpointDir = path.resolve(process.cwd(), ".tmp-lg-nodes-test");
-  if (!fs.existsSync(testCheckpointDir)) {
-    fs.mkdirSync(testCheckpointDir, { recursive: true });
-  }
+  const testCheckpointDir = fs.mkdtempSync(path.join(os.tmpdir(), "lg-nodes-ckpt-"));
+  const tempRepoDir = createTempFixtureRepo();
 
   t.after(() => {
     if (!useRealOllama) disableOllamaMock();
     try {
       fs.rmSync(testCheckpointDir, { recursive: true, force: true });
+    } catch {}
+    try {
+      fs.rmSync(tempRepoDir, { recursive: true, force: true });
     } catch {}
   });
 
@@ -42,6 +58,7 @@ test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (
       const graph = createOvernightGraph({
         checkpointer,
         workerPool,
+        repoRoot: tempRepoDir,
       });
       const app = graph.compile({ checkpointer });
 
@@ -93,11 +110,13 @@ test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (
 
         // 3. Assert every SHA appearing in checkpoints resolves via git log (no synthesized SHAs)
         const resolvedSha = execSync(`git rev-parse --verify ${m.commitSha}`, {
+          cwd: tempRepoDir,
           encoding: "utf8",
         }).trim();
         assert.strictEqual(resolvedSha, m.commitSha, "Commit SHA must resolve via git rev-parse");
 
         const logOutput = execSync(`git log -n 1 --format=%H ${m.commitSha}`, {
+          cwd: tempRepoDir,
           encoding: "utf8",
         }).trim();
         assert.strictEqual(logOutput, m.commitSha, "Commit SHA must be found in git log history");
@@ -136,6 +155,7 @@ test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (
       const graph = createOvernightGraph({
         checkpointer,
         workerPool,
+        repoRoot: tempRepoDir,
       });
       const app = graph.compile({ checkpointer });
 
@@ -194,6 +214,7 @@ test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (
 
       // 3. Verify git SHA resolution
       const verifiedSha = execSync(`git rev-parse --verify ${m1.commitSha}`, {
+        cwd: tempRepoDir,
         encoding: "utf8",
       }).trim();
       assert.strictEqual(verifiedSha, m1.commitSha);
@@ -210,6 +231,7 @@ test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (
       const graph1 = createOvernightGraph({
         checkpointer: checkpointer1,
         workerPool: workerPool1,
+        repoRoot: tempRepoDir,
       });
       const app1 = graph1.compile({ checkpointer: checkpointer1 });
 
@@ -251,6 +273,7 @@ test("Fix 1 — LangGraph Real Nodes & File-Backed Checkpointing Suite", async (
       const graph2 = createOvernightGraph({
         checkpointer: checkpointer2,
         workerPool: workerPool2,
+        repoRoot: tempRepoDir,
       });
       const app2 = graph2.compile({ checkpointer: checkpointer2 });
 

@@ -1291,6 +1291,15 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("host-bridge/manifest") ||
+      p.includes("host-bridge/replaceString") ||
+      p.includes("host-bridge/dialectGuard") ||
+      p.includes("host-bridge/multiRead") ||
+      p.includes("hostBridgePureModules.test.ts"),
+    tests: ["tests/hostBridgePureModules.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("lib/fsAtomic") ||
       p.includes("lib/ledger/sqliteConfig") ||
       p.includes("lib/board/boardStore") ||
