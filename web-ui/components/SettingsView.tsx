@@ -252,7 +252,9 @@ export function SettingsView({
         const json = await res.json();
         setHostSettingsState((prev) => ({
           ...prev,
-          allowedHostPaths: Array.isArray(json.allowedHostPaths) ? json.allowedHostPaths : parsedLines,
+          allowedHostPaths: Array.isArray(json.allowedHostPaths)
+            ? json.allowedHostPaths
+            : parsedLines,
         }));
       }
     } catch {

@@ -55,7 +55,11 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
       false,
       "Fresh state must default fileRestrictionEnabled to false (owner does NOT want it turned on)"
     );
-    assert.deepEqual(settings.allowedHostPaths, [], "Fresh state must default allowedHostPaths to []");
+    assert.deepEqual(
+      settings.allowedHostPaths,
+      [],
+      "Fresh state must default allowedHostPaths to []"
+    );
   });
 
   it("2. Toggle ON persists; toggle OFF bypasses at any time (server-side file store)", () => {
@@ -86,35 +90,56 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
 
   it("4. Folder containment is exact-directory scoped, case- and slash-insensitive", () => {
     const allowed = ["C:\\Users\\zackm\\Desktop\\repos"];
-    assert.equal(isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\repos\\ls\\a.ts", allowed), true);
+    assert.equal(
+      isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\repos\\ls\\a.ts", allowed),
+      true
+    );
     assert.equal(isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\repos", allowed), true);
-    assert.equal(isPathWithinAllowedFolders("c:\\users\\zackm\\desktop\\repos\\LS\\a.ts", allowed), true);
+    assert.equal(
+      isPathWithinAllowedFolders("c:\\users\\zackm\\desktop\\repos\\LS\\a.ts", allowed),
+      true
+    );
     assert.equal(isPathWithinAllowedFolders("C:/Users/zackm/Desktop/repos/ls/a.ts", allowed), true);
     // Sibling folder sharing a name prefix must NOT match (no naive string-prefix leak).
-    assert.equal(isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\reposX\\secret.txt", allowed), false);
-    assert.equal(isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\other\\a.ts", allowed), false);
+    assert.equal(
+      isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\reposX\\secret.txt", allowed),
+      false
+    );
+    assert.equal(
+      isPathWithinAllowedFolders("C:\\Users\\zackm\\Desktop\\other\\a.ts", allowed),
+      false
+    );
     assert.equal(isPathWithinAllowedFolders("C:\\Windows\\system32\\x.dll", allowed), false);
     // Empty allow-list restricts nothing when the toggle is off; predicate itself is pure.
     assert.equal(isPathWithinAllowedFolders("C:\\anything\\a.ts", []), false);
   });
 
   it("5. collectPathArguments extracts every path-bearing arg across host file tools", () => {
-    assert.deepEqual(collectPathArguments("host_read_file", { path: "C:\\a\\b.txt" }), ["C:\\a\\b.txt"]);
-    assert.deepEqual(
-      collectPathArguments("host_read_file", { paths: ["C:\\a", "C:\\b"] }),
-      ["C:\\a", "C:\\b"]
-    );
-    assert.deepEqual(
-      collectPathArguments("host_read_file", { path: "C:\\a", paths: ["C:\\b"] }),
-      ["C:\\a", "C:\\b"]
-    );
-    assert.deepEqual(collectPathArguments("host_write_file", { path: "C:\\a\\new.txt", content: "x" }), [
-      "C:\\a\\new.txt",
+    assert.deepEqual(collectPathArguments("host_read_file", { path: "C:\\a\\b.txt" }), [
+      "C:\\a\\b.txt",
     ]);
-    assert.deepEqual(collectPathArguments("host_replace_string", { path: "C:\\a\\f.txt" }), ["C:\\a\\f.txt"]);
+    assert.deepEqual(collectPathArguments("host_read_file", { paths: ["C:\\a", "C:\\b"] }), [
+      "C:\\a",
+      "C:\\b",
+    ]);
+    assert.deepEqual(collectPathArguments("host_read_file", { path: "C:\\a", paths: ["C:\\b"] }), [
+      "C:\\a",
+      "C:\\b",
+    ]);
+    assert.deepEqual(
+      collectPathArguments("host_write_file", { path: "C:\\a\\new.txt", content: "x" }),
+      ["C:\\a\\new.txt"]
+    );
+    assert.deepEqual(collectPathArguments("host_replace_string", { path: "C:\\a\\f.txt" }), [
+      "C:\\a\\f.txt",
+    ]);
     assert.deepEqual(collectPathArguments("host_list_dir", { path: "C:\\a" }), ["C:\\a"]);
-    assert.deepEqual(collectPathArguments("host_delete_path", { path: "C:\\a\\gone" }), ["C:\\a\\gone"]);
-    assert.deepEqual(collectPathArguments("host_run_powershell", { command: "ls", cwd: "C:\\a" }), ["C:\\a"]);
+    assert.deepEqual(collectPathArguments("host_delete_path", { path: "C:\\a\\gone" }), [
+      "C:\\a\\gone",
+    ]);
+    assert.deepEqual(collectPathArguments("host_run_powershell", { command: "ls", cwd: "C:\\a" }), [
+      "C:\\a",
+    ]);
     assert.deepEqual(collectPathArguments("host_run_powershell", { command: "ls" }), []);
     assert.deepEqual(collectPathArguments("host_git_status", {}), []);
   });
@@ -141,7 +166,10 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
     );
     assert.equal(onOutside.allowed, false);
     assert.ok(onOutside.reason && onOutside.reason.includes("C:\\elsewhere\\file.txt"));
-    assert.ok(onOutside.reason && /Settings/i.test(onOutside.reason), "reason must point at Settings");
+    assert.ok(
+      onOutside.reason && /Settings/i.test(onOutside.reason),
+      "reason must point at Settings"
+    );
   });
 
   it("7. executeHostTool enforces the gate: blocked calls never reach the runner", async () => {
@@ -170,7 +198,10 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
         path: "C:\\Users\\zackm\\Documents\\secret-notes.txt",
       });
       assert.equal(blocked.ok, false, "Blocked host file call must return ok:false");
-      assert.ok(blocked.error && blocked.error.includes("file restriction"), "error must name the restriction");
+      assert.ok(
+        blocked.error && blocked.error.includes("file restriction"),
+        "error must name the restriction"
+      );
       assert.equal(runnerHits, 0, "Blocked call must NOT reach the host runner");
 
       const allowed = await executeHostTool("host_read_file", {
@@ -204,6 +235,7 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
           recentActivity: [],
         },
         hostPresentation: {
+          stripLabel: "Connected",
           reasonText: "Host access is enabled and the host runner daemon is verified ready.",
           badgeClass: "border-emerald-200",
           badgeLabel: "Ready",
@@ -218,7 +250,10 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
         onToggleGitActivityExpanded: () => {},
       })
     );
-    assert.ok(html.includes("Host file restriction"), "Expected HostZone to display the restriction control");
+    assert.ok(
+      html.includes("Host file restriction"),
+      "Expected HostZone to display the restriction control"
+    );
     assert.ok(
       html.includes('data-testid="file-restriction-toggle-btn"'),
       "Expected file-restriction-toggle-btn testid"
@@ -242,8 +277,14 @@ describe("Board #132: Host File Restriction Opt-In Setting", () => {
       path.resolve(process.cwd(), "components", "SettingsView.tsx"),
       "utf8"
     );
-    assert.ok(src.includes("handleToggleFileRestriction"), "Expected handleToggleFileRestriction handler");
-    assert.ok(src.includes("fileRestrictionEnabled: nextState"), "Expected POST of fileRestrictionEnabled");
+    assert.ok(
+      src.includes("handleToggleFileRestriction"),
+      "Expected handleToggleFileRestriction handler"
+    );
+    assert.ok(
+      src.includes("fileRestrictionEnabled: nextState"),
+      "Expected POST of fileRestrictionEnabled"
+    );
     assert.ok(src.includes("handleSaveAllowedPaths"), "Expected handleSaveAllowedPaths handler");
     assert.ok(src.includes("allowedHostPaths: parsedLines"), "Expected POST of allowedHostPaths");
   });

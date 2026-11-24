@@ -51,7 +51,9 @@ export async function POST(req: Request) {
       updates.fileRestrictionEnabled = body.fileRestrictionEnabled;
     }
     if (Array.isArray(body.allowedHostPaths)) {
-      updates.allowedHostPaths = body.allowedHostPaths.filter((p) => typeof p === "string");
+      updates.allowedHostPaths = body.allowedHostPaths.filter(
+        (p: unknown): p is string => typeof p === "string"
+      );
     }
 
     if (Object.keys(updates).length > 0) {
