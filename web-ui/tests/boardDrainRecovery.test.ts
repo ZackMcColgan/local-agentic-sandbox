@@ -65,7 +65,7 @@ function makeTempEnv(): {
       else process.env.THREADS_DIR = prevThreadsDir;
       if (prevCheckpointDir === undefined) delete process.env.AGENT_CHECKPOINT_DIR;
       else process.env.AGENT_CHECKPOINT_DIR = prevCheckpointDir;
-      fs.rmSync(rootDir, { recursive: true, force: true });
+      fs.rmSync(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }
