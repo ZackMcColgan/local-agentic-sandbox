@@ -153,12 +153,12 @@ async function openMcpSession(
     await withTimeout(
       client.connect(transport as StreamableHTTPClientTransport),
       timeoutMs,
-      `MCP connect (${name} at ${mcpUrl})`
+      `MCP connect (${name} at ${sseUrl})`
     );
     const toolsResult = await withTimeout(
       client.listTools(),
       timeoutMs,
-      `MCP listTools (${name} at ${mcpUrl})`
+      `MCP listTools (${name} at ${sseUrl})`
     );
     log(
       `[Orchestrator] Connected to MCP (${name}) at ${sseUrl} with ${toolsResult.tools.length} tools`
