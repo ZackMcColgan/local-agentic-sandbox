@@ -212,4 +212,6 @@ export interface ActiveTurnInfo {
   startedAt: string;
   status: "streaming";
   queued?: boolean;
+  /** In-memory epoch timestamp (ms) refreshed by touchActiveTurn without disk writes. */
+  lastActivityAtMs?: number;
 }

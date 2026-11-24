@@ -65,9 +65,9 @@ import {
 export { TURN_STALL_WINDOW_MS, ZOMBIE_TURN_AGE_CAP_MS, isRecordStaleBeyond, isZombiePresence };
 
 /**
- * Derives liveness from the record's last-activity timestamp (updatedAt) against the
- * live-execution state. A live-but-stale turn is NEVER reconciled to completed here;
- * reconciliation stays owned by reconcileThread.
+ * Derives liveness from the record's last-activity timestamp (updatedAt or in-memory
+ * heartbeat) against the live-execution state. A live-but-stale turn is NEVER reconciled
+ * to completed here; reconciliation stays owned by reconcileThread.
  */
 export function computeTurnLiveness(thread: Thread, now: number = Date.now()): ThreadLiveness {
   const isLiveOverride = activeExecutionSet.has(thread.id) || Boolean(getActiveTurn(thread.id));
@@ -76,22 +76,35 @@ export function computeTurnLiveness(thread: Thread, now: number = Date.now()): T
       ? "alive"
       : "settled";
   }
+  const heartbeatMs = getActiveTurnHeartbeatMs(thread.id);
+  const recordUpdatedMs = Date.parse(thread.updatedAt || thread.createdAt || "");
+  if (
+    typeof heartbeatMs === "number" &&
+    heartbeatMs <= now &&
+    (!Number.isFinite(recordUpdatedMs) || heartbeatMs > recordUpdatedMs)
+  ) {
+    return computeTurnLivenessPure(
+      { ...thread, updatedAt: new Date(heartbeatMs).toISOString() },
+      now,
+      isLiveOverride
+    );
+  }
   return computeTurnLivenessPure(thread, now, isLiveOverride);
 }
 
 /**
- * TURN-LIVENESS heartbeat: refreshes the thread record's updatedAt without touching
- * messages or status, so a working round reads ALIVE even between snapshot writes.
+ * TURN-LIVENESS heartbeat: updates the in-memory last-activity timestamp in
+ * activeTurnRegistry without reading or rewriting the thread JSON file or
+ * invalidating .summaries-index.json mtimes.
  */
-export function touchActiveTurn(threadId: string, threadsDir?: string): void {
-  try {
-    const filePath = path.join(threadsDir ?? resolveThreadsDir(), `${threadId}.json`);
-    if (!fs.existsSync(filePath)) return;
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Thread;
-    if (!raw || raw.id !== threadId) return;
-    raw.updatedAt = new Date().toISOString();
-    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), { encoding: "utf8", mode: 0o660 });
-  } catch {}
+export function touchActiveTurn(threadId: string, _threadsDir?: string): void {
+  if (!threadId) return;
+  const nowMs = Date.now();
+  turnHeartbeatMsMap.set(threadId, nowMs);
+  const existing = activeTurnRegistry.get(threadId);
+  if (existing) {
+    existing.lastActivityAtMs = nowMs;
+  }
 }
 
 export function resolveThreadsDir(): string {
@@ -130,6 +143,7 @@ export function resolveThreadsDir(): string {
 const g = globalThis as {
   __sandboxActiveExecutionSet?: Set<string>;
   __sandboxActiveTurnRegistry?: Map<string, ActiveTurnInfo>;
+  __sandboxTurnHeartbeatMsMap?: Map<string, number>;
   __sandboxQueuedTurnSet?: Set<string>;
   __sandboxActiveTurnAbortControllers?: Map<string, AbortController>;
   __sandboxActiveRoundAbortControllers?: Map<string, AbortController>;
@@ -143,6 +157,18 @@ export const activeExecutionSet: Set<string> =
 const activeTurnRegistry: Map<string, ActiveTurnInfo> =
   g.__sandboxActiveTurnRegistry ||
   (g.__sandboxActiveTurnRegistry = new Map<string, ActiveTurnInfo>());
+const turnHeartbeatMsMap: Map<string, number> =
+  g.__sandboxTurnHeartbeatMsMap || (g.__sandboxTurnHeartbeatMsMap = new Map<string, number>());
+
+/** Returns the latest in-memory heartbeat timestamp (ms) recorded by touchActiveTurn, if any. */
+export function getActiveTurnHeartbeatMs(threadId: string): number | undefined {
+  const mapMs = turnHeartbeatMsMap.get(threadId);
+  const regMs = activeTurnRegistry.get(threadId)?.lastActivityAtMs;
+  if (typeof mapMs === "number" && typeof regMs === "number") {
+    return Math.max(mapMs, regMs);
+  }
+  return mapMs ?? regMs;
+}
 const queuedTurnSet: Set<string> =
   g.__sandboxQueuedTurnSet || (g.__sandboxQueuedTurnSet = new Set<string>());
 const activeTurnAbortControllers: Map<string, AbortController> =
@@ -213,6 +239,7 @@ export function getActiveTurn(threadId: string): ActiveTurnInfo | null {
 export function clearTurnActive(threadId: string): void {
   activeTurnRegistry.delete(threadId);
   queuedTurnSet.delete(threadId);
+  turnHeartbeatMsMap.delete(threadId);
 }
 
 /**
@@ -662,14 +689,22 @@ export class ThreadStore {
     // been untouched past the same cap.
     const now = Date.now();
     const presence = getActiveTurn(thread.id);
-    const presenceZombie = isZombiePresence(presence, thread, now);
+    const heartbeatMs = getActiveTurnHeartbeatMs(thread.id);
+    const diskUpdatedMs = Date.parse(thread.updatedAt || thread.createdAt || "");
+    const hasFreshHeartbeat =
+      typeof heartbeatMs === "number" &&
+      (!Number.isFinite(diskUpdatedMs) || heartbeatMs > diskUpdatedMs);
+    const effectiveThread = hasFreshHeartbeat
+      ? { ...thread, updatedAt: new Date(heartbeatMs).toISOString() }
+      : thread;
+    const presenceZombie = isZombiePresence(presence, effectiveThread, now);
     if (presenceZombie) {
       clearTurnActive(thread.id);
     }
     let executionLive =
       activeExecutionSet.has(thread.id) ||
       (thread.taskId ? activeExecutionSet.has(thread.taskId) : false);
-    if (executionLive && isRecordStaleBeyond(thread, now, ZOMBIE_TURN_AGE_CAP_MS)) {
+    if (executionLive && isRecordStaleBeyond(effectiveThread, now, ZOMBIE_TURN_AGE_CAP_MS)) {
       executionLive = false;
     }
 
@@ -758,6 +793,9 @@ export class ThreadStore {
 
     if (changed) {
       this.saveThread(thread);
+    } else if (isLive && hasFreshHeartbeat && typeof heartbeatMs === "number") {
+      // Apply the in-memory heartbeat timestamp on read without rewriting disk JSON.
+      thread.updatedAt = new Date(heartbeatMs).toISOString();
     }
 
     // TURN-LIVENESS: stamp the derived heartbeat state on the returned record. Derived
@@ -912,6 +950,17 @@ export class ThreadStore {
       activeExecutionSet.has(summary.id) ||
       hasActiveTurn ||
       (summary.taskId ? activeExecutionSet.has(summary.taskId) : false);
+    const heartbeatMs = getActiveTurnHeartbeatMs(summary.id);
+    const summaryUpdatedMs = Date.parse(summary.updatedAt || summary.createdAt || "");
+    const effectiveUpdatedAt =
+      (isActivelyRunning ||
+        summary.hasStreamingMessage ||
+        summary.status === "active" ||
+        summary.status === "running") &&
+      typeof heartbeatMs === "number" &&
+      (!Number.isFinite(summaryUpdatedMs) || heartbeatMs > summaryUpdatedMs)
+        ? new Date(heartbeatMs).toISOString()
+        : summary.updatedAt;
     const computeSummaryLiveness = (
       status: Thread["status"],
       isLiveOverride: boolean
@@ -922,7 +971,7 @@ export class ThreadStore {
           title: summary.title,
           status,
           createdAt: summary.createdAt,
-          updatedAt: summary.updatedAt,
+          updatedAt: effectiveUpdatedAt,
           model: summary.model || "",
           reasoningEffort: summary.reasoningEffort || "low",
           messages: [],
@@ -934,6 +983,7 @@ export class ThreadStore {
     if ((isActivelyRunning || summary.hasStreamingMessage) && summary.status !== "running") {
       return {
         ...summary,
+        updatedAt: effectiveUpdatedAt,
         status: "running",
         liveness: computeSummaryLiveness("running", true),
       };
@@ -963,6 +1013,7 @@ export class ThreadStore {
     }
     return {
       ...summary,
+      updatedAt: effectiveUpdatedAt,
       liveness: computeSummaryLiveness(
         summary.status,
         isActivelyRunning || summary.hasStreamingMessage

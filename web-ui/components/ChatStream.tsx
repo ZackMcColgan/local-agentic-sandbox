@@ -1254,44 +1254,6 @@ export function ChatStream({
                 ? "incomplete"
                 : undefined);
 
-            const effectiveThreadId = targetThreadId || activeThreadId || threadId;
-            if (effectiveThreadId && !activeSimulation) {
-              try {
-                fetch(`/api/threads/${effectiveThreadId}`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "addMessage",
-                    message: {
-                      id: assistantMsgId,
-                      role: "assistant",
-                      content: parsed.content,
-                      thought: finalThought,
-                      modelUsed: finalModel,
-                      selectedModel: activeModel,
-                      traces: event.traces || currentTraces,
-                      attachments: event.attachments,
-                      diffs: event.diffs,
-                      durationMs,
-                      thinkingDurationMs: event.thinkingDurationMs,
-                      phaseTimings: event.phaseTimings,
-                      roundPromptTokens: event.roundPromptTokens,
-                      roundGenerationMs: event.roundGenerationMs,
-                      thinkingSegments: event.thinkingSegments,
-                      roundNarrations: event.roundNarrations,
-                      outputTokens: event.outputTokens,
-                      timestamp: new Date().toISOString(),
-                      compactedThisTurn: finalCompacted || undefined,
-                      tokensBeforeCompaction: finalTokensBefore,
-                      tokensAfterCompaction: finalTokensAfter,
-                      compactionActions: event.compactionActions,
-                      status: finalStatus,
-                    },
-                  }),
-                }).catch((err) => console.warn("Failed to persist assistant message:", err));
-              } catch {}
-            }
-
             setMessages((prev) =>
               upsertAssistant(prev, (msg) => ({
                 ...msg,

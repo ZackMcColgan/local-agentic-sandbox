@@ -296,19 +296,18 @@ describe("TURN-LIVENESS — per-round progress persistence", () => {
       fs.readFileSync(path.resolve(__dirname, "../app/api/chat/route.ts"), "utf8") +
       "\n" +
       fs.readFileSync(path.resolve(__dirname, "../lib/chat/roundLoop.ts"), "utf8");
-    // Loose call-shape assertions: the call may wrap across lines, the traces
-    // accumulator may be camelCased (accumulatedTraces / roundTraces), and the
-    // options object may carry extra keys. Intent asserted unchanged:
-    // a traces argument plus force: true on a maybeWrite call.
+    // Round boundaries persist accumulated traces via streamSnapshot.maybeWrite
+    // on the 5s throttle cadence (avoiding forced per-round rewrites on fast rounds),
+    // while touchActiveTurn refreshes the in-memory heartbeat across tool waits and ticks.
     assert.match(
       src,
-      /streamSnapshot\s*\.\s*maybeWrite\s*\([^)]*[Tt]races[^)]*\{[^}]*\bforce\s*:\s*true\b[^}]*\}/,
-      "round boundary must force-persist accumulated traces"
+      /streamSnapshot\s*\.\s*maybeWrite\s*\([^)]*[Tt]races/,
+      "round boundary must pass accumulated traces to streamSnapshot.maybeWrite"
     );
     assert.match(
       src,
-      /touchActiveTurn\s*\(\s*activeThreadId\s*\)/,
-      "round boundary must refresh the turn heartbeat"
+      /touchActiveTurn\s*\(\s*activeThreadId\b/,
+      "turn loop must refresh the turn heartbeat via touchActiveTurn"
     );
     assert.equal(typeof TURN_STALL_WINDOW_MS, "number");
     assert.ok(TURN_STALL_WINDOW_MS > 0, "TURN_STALL_WINDOW_MS must be positive");
