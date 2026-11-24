@@ -297,6 +297,14 @@ export function BuildsView({
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
               <button
                 type="button"
+                disabled
+                title="No previous deploy available to roll back"
+                className="min-h-[44px] py-1.5 px-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-semibold opacity-50 cursor-not-allowed transition-colors"
+              >
+                Rollback (Previous)
+              </button>
+              <button
+                type="button"
                 data-testid="merge-deploy-btn"
                 disabled={!activeTask || !onDeployRun || activeTask.status !== "completed"}
                 onClick={() => onDeployRun && activeTask && onDeployRun(activeTask.taskId)}

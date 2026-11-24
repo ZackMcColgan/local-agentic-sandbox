@@ -759,12 +759,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             </div>
           )}
 
-          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline);
-              suppressed only when the timeline already renders this turn's
-              persisted diffs. Trace-only turns keep the card: ChatStream
-              always passes onOpenCanvasDiff, so gating on it suppressed the
-              card for every file-write turn (Phase Omega test). */}
-          {fileDiffCards.length > 0 && !(Array.isArray(m.diffs) && m.diffs.length > 0) && (
+          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline).
+              No suppression gate: the suite requires the card for both
+              trace-only turns (Phase Omega) and persisted-diff turns
+              (Free Run diff persistence), and the branch's gate broke both. */}
+          {fileDiffCards.length > 0 && (
             <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
               <CanvasDiffCard diffs={fileDiffCards} />
             </div>
