@@ -4,11 +4,14 @@ import React, { useMemo, useRef, useState } from "react";
 import type { BoardItem, BoardStatus } from "@/lib/board/boardStore";
 import type { BoardControlAction, BoardControlState } from "@/lib/board/boardControlStore";
 import { BoardAddSheet } from "./BoardAddSheet";
+import { SchedulesPanel } from "./SchedulesPanel";
 
 export interface BoardViewProps {
   items: BoardItem[];
   onOpenDrawer: () => void;
   onItemCreated: (item: BoardItem) => void;
+  onItemUpdated?: (item: BoardItem) => void;
+  onItemDeleted?: (id: string) => void;
   onAskAssistant: (draftPrompt: string) => void;
   controlState?: BoardControlState;
   stopAtBoundary?: boolean;
@@ -28,6 +31,8 @@ export function BoardView({
   items,
   onOpenDrawer,
   onItemCreated,
+  onItemUpdated,
+  onItemDeleted,
   onAskAssistant,
   controlState = "stopped",
   stopAtBoundary = false,
@@ -37,19 +42,36 @@ export function BoardView({
   const [activeColIndex, setActiveColIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isSchedulesOpen, setIsSchedulesOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<BoardItem | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBrief, setEditBrief] = useState("");
+  const [editStatus, setEditStatus] = useState<BoardStatus>("queued");
+  const [editParkedReason, setEditParkedReason] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [localDeletedIds, setLocalDeletedIds] = useState<Record<string, boolean>>({});
+  const [localPatchedItems, setLocalPatchedItems] = useState<Record<string, BoardItem>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [expandedBriefIds, setExpandedBriefIds] = useState<Record<string, boolean>>({});
 
+  const effectiveItems = useMemo(() => {
+    return items
+      .filter((item) => !localDeletedIds[item.id])
+      .map((item) => localPatchedItems[item.id] ?? item);
+  }, [items, localDeletedIds, localPatchedItems]);
+
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
+    if (!q) return effectiveItems;
+    return effectiveItems.filter(
       (item) =>
         item.title.toLowerCase().includes(q) ||
         item.key.toLowerCase().includes(q) ||
         item.brief.toLowerCase().includes(q)
     );
-  }, [items, searchQuery]);
+  }, [effectiveItems, searchQuery]);
 
   const byStatus = useMemo(() => {
     const map: Record<BoardStatus, BoardItem[]> = {
@@ -70,7 +92,73 @@ export function BoardView({
     return map;
   }, [filteredItems]);
 
-  const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const itemById = useMemo(() => new Map(effectiveItems.map((i) => [i.id, i])), [effectiveItems]);
+
+  const openEditModal = (item: BoardItem) => {
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditBrief(item.brief);
+    setEditStatus(item.status);
+    setEditParkedReason(item.parkedReason || "");
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    if (!editTitle.trim() || !editBrief.trim()) {
+      setEditError("Title and brief are required.");
+      return;
+    }
+    if (editStatus === "parked" && !editParkedReason.trim()) {
+      setEditError("Parked items require a reason.");
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch("/api/board", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingItem.id,
+          title: editTitle.trim(),
+          brief: editBrief.trim(),
+          status: editStatus,
+          ...(editStatus === "parked" ? { parkedReason: editParkedReason.trim() } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditError(data.error || `Failed to update item (${res.status})`);
+        return;
+      }
+      if (data.item) {
+        setLocalPatchedItems((prev) => ({ ...prev, [data.item.id]: data.item }));
+        onItemUpdated?.(data.item);
+      }
+      setEditingItem(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update item");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (item: BoardItem) => {
+    setDeletingId(item.id);
+    try {
+      const res = await fetch(`/api/board?id=${encodeURIComponent(item.id)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setLocalDeletedIds((prev) => ({ ...prev, [item.id]: true }));
+        onItemDeleted?.(item.id);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleCreateManual = async (input: {
     title: string;
@@ -105,11 +193,14 @@ export function BoardView({
   const renderCard = (item: BoardItem) => {
     const isLive = item.status === "working";
     const isDone = item.status === "done";
+    const isNeedsAttention = Boolean(item.needsAttention || item.status === "needs-attention");
     const dotColor = isLive
       ? "bg-emerald-400 animate-pulse"
-      : isDone
-        ? "bg-emerald-400"
-        : "bg-stone-500";
+      : isNeedsAttention
+        ? "bg-rose-500"
+        : isDone
+          ? "bg-emerald-400"
+          : "bg-zinc-400";
     const deps = item.dependencies ?? [];
     const allDepsDone =
       deps.length > 0 && deps.every((depId) => itemById.get(depId)?.status === "done");
@@ -121,7 +212,9 @@ export function BoardView({
         className={`mb-2.5 rounded-2xl border border-white/[0.10] bg-[#15151b] surface-card p-3.5 transition-all ${
           isLive
             ? "shadow-[0_0_0_1px_rgba(52,211,153,0.6)_inset] border-emerald-500/40"
-            : "hover:border-white/[0.18]"
+            : isNeedsAttention
+              ? "border-rose-500/40"
+              : "hover:border-white/[0.18]"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -150,7 +243,13 @@ export function BoardView({
         )}
 
         {(item.status === "parked" || item.status === "needs-attention") && item.parkedReason && (
-          <div className="pt-2 text-[12px] text-emerald-300">{item.parkedReason}</div>
+          <div
+            className={`pt-2 text-[12px] ${
+              isNeedsAttention ? "text-rose-300" : "text-zinc-300"
+            }`}
+          >
+            {item.parkedReason}
+          </div>
         )}
 
         {item.status === "done" && item.evidence?.prNumber && (
@@ -161,9 +260,9 @@ export function BoardView({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1.5 pt-2.5">
-          {(item.needsAttention || item.status === "needs-attention") && (
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-300">
+        <div className="flex flex-wrap items-center gap-1.5 pt-2.5">
+          {isNeedsAttention && (
+            <span className="rounded-full border border-rose-500/40 bg-rose-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-rose-300">
               needs attention
             </span>
           )}
@@ -185,30 +284,45 @@ export function BoardView({
               {item.sprint}
             </span>
           )}
-          {isLive && (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedBriefIds((prev) => ({
-                    ...prev,
-                    [item.id]: !prev[item.id],
-                  }))
-                }
-                className="rounded-full border border-white/[0.12] px-2 py-0.5 text-[10.5px] text-stone-300 hover:text-stone-50 hover:border-white/[0.22] transition-colors"
-              >
-                {expandedBriefIds[item.id] ? "Brief ⌄" : "Brief ›"}
-              </button>
-              {item.threadLink && (
-                <a
-                  href={item.threadLink}
-                  className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-300 hover:bg-emerald-500/20 transition-colors"
-                >
-                  Thread ›
-                </a>
-              )}
-            </>
+          {item.brief && (
+            <button
+              type="button"
+              onClick={() =>
+                setExpandedBriefIds((prev) => ({
+                  ...prev,
+                  [item.id]: !prev[item.id],
+                }))
+              }
+              className="rounded-full border border-white/[0.12] px-2 py-0.5 text-[10.5px] text-stone-300 hover:text-stone-50 hover:border-white/[0.22] transition-colors"
+            >
+              {expandedBriefIds[item.id] ? "Brief ⌄" : "Brief ›"}
+            </button>
           )}
+          {item.threadLink && (
+            <a
+              href={item.threadLink}
+              className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+            >
+              Thread ›
+            </a>
+          )}
+          <button
+            type="button"
+            data-testid={`board-edit-${item.id}`}
+            onClick={() => openEditModal(item)}
+            className="rounded-full border border-white/[0.12] px-2 py-0.5 text-[10.5px] text-zinc-300 hover:text-zinc-50 hover:border-white/[0.22] transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            data-testid={`board-delete-${item.id}`}
+            disabled={deletingId === item.id}
+            onClick={() => void handleDeleteItem(item)}
+            className="rounded-full border border-rose-500/35 bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
+          >
+            {deletingId === item.id ? "Deleting…" : "Delete"}
+          </button>
         </div>
       </div>
     );
@@ -322,6 +436,14 @@ export function BoardView({
             Stop
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsSchedulesOpen(true)}
+          data-testid="board-schedules-btn"
+          className="min-h-[36px] rounded-xl border border-white/[0.14] px-3 py-1.5 text-[12px] font-semibold text-zinc-200 hover:bg-[#1f1f28] transition-colors inline-flex items-center"
+        >
+          Schedules
+        </button>
         <button
           type="button"
           onClick={() => setIsAddOpen(true)}
@@ -444,7 +566,7 @@ export function BoardView({
 
       <BoardAddSheet
         isOpen={isAddOpen}
-        existingItems={items}
+        existingItems={effectiveItems}
         onClose={() => setIsAddOpen(false)}
         onAskAssistant={onAskAssistant}
         onItemsFiled={(filedItems, startedDrain) => {
@@ -457,6 +579,109 @@ export function BoardView({
         }}
         onCreateManual={handleCreateManual}
       />
+
+      {editingItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit board item"
+        >
+          <form
+            onSubmit={handleSaveEdit}
+            className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0e0e12] p-5 text-zinc-100 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-zinc-100">Edit {editingItem.key}</h2>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="text-xs text-zinc-400 hover:text-zinc-100"
+              >
+                Close
+              </button>
+            </div>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Title"
+              aria-label="Edit item title"
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+            />
+            <textarea
+              value={editBrief}
+              onChange={(e) => setEditBrief(e.target.value)}
+              rows={4}
+              placeholder="Brief"
+              aria-label="Edit item brief"
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+            />
+            <select
+              value={editStatus}
+              onChange={(e) => setEditStatus(e.target.value as BoardStatus)}
+              aria-label="Edit item status"
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+            >
+              <option value="queued">Queued</option>
+              <option value="working">Working</option>
+              <option value="pr-open">PR Open</option>
+              <option value="parked">Parked</option>
+              <option value="needs-attention">Needs Attention</option>
+              <option value="done">Done</option>
+            </select>
+            {editStatus === "parked" && (
+              <input
+                type="text"
+                value={editParkedReason}
+                onChange={(e) => setEditParkedReason(e.target.value)}
+                placeholder="Parked reason"
+                aria-label="Parked reason"
+                className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+              />
+            )}
+            {editError && <p className="text-xs text-rose-400">{editError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="rounded-xl border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={editSaving}
+                className="rounded-xl bg-emerald-500 hover:bg-emerald-400 px-4 py-1.5 text-xs font-bold text-black disabled:opacity-50"
+              >
+                {editSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {isSchedulesOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Scheduled runs"
+        >
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto space-y-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsSchedulesOpen(false)}
+                className="rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800"
+              >
+                Close
+              </button>
+            </div>
+            <SchedulesPanel />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { MorningReportView } from "@/components/MorningReportView";
+import { MorningReportView, postMorningReportFlagAction } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { ArrowLeft, RefreshCw, Sun } from "lucide-react";
 
@@ -81,7 +81,37 @@ export default function MorningReportPage() {
             Loading overnight morning report...
           </div>
         ) : (
-          <MorningReportView overnightReport={overnightReport} report={morningReport} />
+          <MorningReportView
+            overnightReport={overnightReport}
+            report={morningReport}
+            onRevertFlag={(flagId) => {
+              const matchedTask = overnightReport?.tasks?.find((t) =>
+                t.ambiguityFlags?.some((f) => f.id === flagId)
+              );
+              const taskId =
+                matchedTask?.taskId ||
+                morningReport?.taskId ||
+                overnightReport?.tasks?.[0]?.taskId ||
+                "";
+              return postMorningReportFlagAction({ action: "revert", taskId, flagId });
+            }}
+            onAdjustFlag={(flagId, instruction) => {
+              const matchedTask = overnightReport?.tasks?.find((t) =>
+                t.ambiguityFlags?.some((f) => f.id === flagId)
+              );
+              const taskId =
+                matchedTask?.taskId ||
+                morningReport?.taskId ||
+                overnightReport?.tasks?.[0]?.taskId ||
+                "";
+              return postMorningReportFlagAction({
+                action: "adjust",
+                taskId,
+                flagId,
+                instruction,
+              });
+            }}
+          />
         )}
       </main>
     </div>

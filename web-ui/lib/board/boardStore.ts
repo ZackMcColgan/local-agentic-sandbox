@@ -350,6 +350,17 @@ export class BoardStore {
     this.writeAll(items);
     return updated;
   }
+
+  remove(id: string): BoardItem {
+    const items = this.readAll();
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx === -1) {
+      throw new Error(`Board item not found: ${id}`);
+    }
+    const [removed] = items.splice(idx, 1);
+    this.writeAll(items);
+    return removed;
+  }
 }
 
 let defaultStore: BoardStore | null = null;

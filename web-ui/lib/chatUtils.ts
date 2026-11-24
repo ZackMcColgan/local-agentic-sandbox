@@ -254,6 +254,10 @@ export function formatHumanReadableTrace(trace: {
       const p = trace.args?.path || trace.args?.filePath || "";
       const filename = p ? p.split(/[\\/]/).pop() || p : "";
       title = filename ? `Host Wrote ${filename}` : "Host Wrote File";
+    } else if (tool === "host_replace_string") {
+      const p = trace.args?.path || trace.args?.filePath || "";
+      const filename = p ? p.split(/[\\/]/).pop() || p : "";
+      title = filename ? `Host Edited ${filename}` : "Host Edited File";
     } else if (tool === "host_list_dir") {
       title = "Host List Dir";
     } else if (tool === "host_delete_path") {

@@ -25,7 +25,11 @@ export function ModelBottomSheet({
   onReasoningEffortChange,
   installedModels = [],
 }: ModelBottomSheetProps) {
-  const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting">("running");
+  const [engineStatus, setEngineStatus] = useState<"running" | "stopped" | "starting" | "unknown">(
+    "unknown"
+  );
+  const [engineVramMb, setEngineVramMb] = useState<number | null>(null);
+  const [engineModel, setEngineModel] = useState<string | null>(null);
   const [engineLoading, setEngineLoading] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
 
@@ -45,11 +49,20 @@ export function ModelBottomSheet({
   useEffect(() => {
     let mounted = true;
     fetch("/api/engine", { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (mounted && d.status) setEngineStatus(d.status);
+        if (!mounted || !d) return;
+        if (d.status === "running" || d.status === "stopped" || d.status === "starting") {
+          setEngineStatus(d.status);
+        } else {
+          setEngineStatus("unknown");
+        }
+        setEngineVramMb(typeof d.vram_mb === "number" ? d.vram_mb : null);
+        setEngineModel(typeof d.model === "string" && d.model.trim() ? d.model : null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (mounted) setEngineStatus("unknown");
+      });
 
     return () => {
       mounted = false;
@@ -306,16 +319,26 @@ export function ModelBottomSheet({
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <span
-                  className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`}
+                  className={`h-2.5 w-2.5 rounded-full ${engineStatus === "running" ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`}
                 />
                 <span className="text-xs font-bold text-stone-900 dark:text-stone-100">
-                  Strata Engine (host GPU)
+                  Inference Engine
                 </span>
               </div>
               <span className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
                 {engineStatus === "running"
-                  ? "Running · 16 GB VRAM · Flash-Next (Gyro-S)"
-                  : "Stopped · 0 MB VRAM"}
+                  ? `Running · ${
+                      typeof engineVramMb === "number"
+                        ? engineVramMb >= 1024
+                          ? `${(engineVramMb / 1024).toFixed(1)} GB VRAM`
+                          : `${engineVramMb} MB VRAM`
+                        : "VRAM Unknown"
+                    } · ${engineModel || selectedModel || "Unknown"}`
+                  : engineStatus === "starting"
+                    ? "Starting…"
+                    : engineStatus === "stopped"
+                      ? "Stopped · 0 MB VRAM"
+                      : "Status Unknown"}
               </span>
             </div>
             {engineStatus !== "running" && (

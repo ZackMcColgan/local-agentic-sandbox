@@ -148,6 +148,7 @@ export interface ThreadSummary {
   scope?: TaskScope;
   hostAccess?: boolean;
   traceCount?: number;
+  streamingChars?: number;
   messageCount: number;
   lastMessagePreview: string;
   hasDiffs: boolean;

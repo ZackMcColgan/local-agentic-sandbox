@@ -46,7 +46,11 @@ import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
 import { StintCard } from "../StintCard";
 import { sumRoundGenerationMs } from "../../lib/turnSpeed";
-import { mergeLiveAndSettledTraces, type TimelineWriteDiff } from "../../lib/activityTimeline";
+import {
+  extractWriteDiffFromTrace,
+  mergeLiveAndSettledTraces,
+  type TimelineWriteDiff,
+} from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
@@ -367,6 +371,7 @@ export function ChatMessageItem({
                       thinkingSegments={m.thinkingSegments}
                       roundNarrations={m.roundNarrations}
                       roundGenerationMs={m.roundGenerationMs}
+                      persistedDiffs={m.diffs}
                       isStreaming={isStreamingThis}
                       hasContent={Boolean(m.content && m.content.trim())}
                       onOpenCanvasDiff={onOpenCanvasDiff}
@@ -712,9 +717,20 @@ export function ChatMessageItem({
             </div>
           )}
 
-          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline) */}
+          {/* Chat Diff Cards fallback when ActivityTimeline did not render write diffs */}
           {(() => {
             if (isUser) return null;
+            const isStreamingThis = Boolean(
+              m.status === "streaming" || (isLoading && m.id === activeAssistantMsgId)
+            );
+            const turnTraces = mergeLiveAndSettledTraces(
+              m.traces,
+              isStreamingThis ? liveTurnTraces : undefined
+            );
+            const timelineHandlesDiffs =
+              Boolean(onOpenCanvasDiff) &&
+              turnTraces.some((t) => Boolean(extractWriteDiffFromTrace(t)));
+            if (timelineHandlesDiffs) return null;
 
             type TurnDiffEntry = {
               path: string;

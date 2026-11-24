@@ -20,6 +20,7 @@ import { MemoryZone } from "./settings/MemoryZone";
 import { AboutZone } from "./settings/AboutZone";
 import { TracesZone } from "./settings/TracesZone";
 import { DangerZone } from "./settings/DangerZone";
+import { SchedulesPanel } from "./SchedulesPanel";
 
 export {
   getHostCardPresentation,
@@ -525,6 +526,11 @@ export function SettingsView({
             onMemoryTextChange={setMemoryText}
             onSaveMemory={handleSaveMemory}
           />
+        </div>
+
+        {/* Section: Scheduled Runs */}
+        <div data-testid="settings-zone-schedules">
+          <SchedulesPanel />
         </div>
 
         {/* About: product identity + version (single source: web-ui package.json); zone labels use text-zinc-100 */}

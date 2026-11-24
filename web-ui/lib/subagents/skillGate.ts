@@ -195,3 +195,73 @@ export function listActiveSkills(skillsDir?: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter((f) => f.startsWith("skill-") && f.endsWith(".md"));
 }
+
+/**
+ * Reads a candidate's SKILL.md markdown from disk when present, falling back to
+ * formatting the persisted candidate metadata without fabricated fields.
+ */
+export function readCandidateSkillMarkdown(
+  candidate: SkillCandidate,
+  skillsDir?: string
+): { markdown: string; filePath: string; fromDisk: boolean } {
+  const dir = getSkillsBasePath(skillsDir);
+  const safeId = /^[A-Za-z0-9._-]+$/.test(candidate.id) ? candidate.id : "";
+  const safeName = (candidate.title || candidate.id)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-");
+
+  if (safeId) {
+    const candidates: Array<{ abs: string; rel: string }> = [
+      {
+        abs: path.join(dir, "pending", `${safeId}.md`),
+        rel: `skills/pending/${safeId}.md`,
+      },
+      {
+        abs: path.join(dir, "pending", safeId, "SKILL.md"),
+        rel: `skills/pending/${safeId}/SKILL.md`,
+      },
+      {
+        abs: path.join(dir, safeId, "SKILL.md"),
+        rel: `skills/${safeId}/SKILL.md`,
+      },
+      {
+        abs: path.join(dir, `${safeId}.md`),
+        rel: `skills/${safeId}.md`,
+      },
+      {
+        abs: path.join(dir, `skill-${safeId}-${safeName}.md`),
+        rel: `skills/skill-${safeId}-${safeName}.md`,
+      },
+    ];
+
+    for (const entry of candidates) {
+      try {
+        if (fs.existsSync(entry.abs) && fs.statSync(entry.abs).isFile()) {
+          return {
+            markdown: fs.readFileSync(entry.abs, "utf8"),
+            filePath: entry.rel,
+            fromDisk: true,
+          };
+        }
+      } catch {
+        // Ignore unreadable candidate file and check next location
+      }
+    }
+  }
+
+  const fallbackMarkdown = `---
+id: ${candidate.id}
+status: ${candidate.status || "pending"}
+pattern: ${candidate.pattern}
+occurrences: ${candidate.occurrences}
+---
+
+## Directive
+${candidate.solutionSummary}`;
+
+  return {
+    markdown: fallbackMarkdown,
+    filePath: `skills/pending/${candidate.id || "candidate"}.md`,
+    fromDisk: false,
+  };
+}

@@ -6,6 +6,7 @@ import {
   approveSkillCandidate,
   rejectSkillCandidate,
   listActiveSkills,
+  readCandidateSkillMarkdown,
   SkillCandidate,
 } from "@/lib/subagents/skillGate";
 import { FlywheelSkillsStore } from "@/lib/flywheel/skillsStore";
@@ -14,9 +15,17 @@ export async function GET(_req: NextRequest) {
   let flywheelStore: FlywheelSkillsStore | null = null;
   try {
     const queue = loadPendingQueue();
-    const allCandidates = Object.values(queue.candidates || {});
+    const allCandidates = Object.values(queue.candidates || {}).map((c: SkillCandidate) => {
+      const md = readCandidateSkillMarkdown(c);
+      return {
+        ...c,
+        skillMd: md.markdown,
+        skillMdPath: md.filePath,
+        skillMdFromDisk: md.fromDisk,
+      };
+    });
     const pendingCandidates = allCandidates.filter(
-      (c: SkillCandidate) => c.status === "pending" && c.occurrences >= 3
+      (c) => c.status === "pending" && c.occurrences >= 3
     );
     const activeSkills = listActiveSkills();
 

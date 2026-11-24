@@ -1071,6 +1071,10 @@ export default function Home() {
       boardStopAtBoundary={boardStopAtBoundary}
       isBoardControlPending={isBoardControlPending}
       onBoardItemCreated={(item) => setBoardItems((prev) => [...prev, item])}
+      onBoardItemUpdated={(item) =>
+        setBoardItems((prev) => prev.map((b) => (b.id === item.id ? item : b)))
+      }
+      onBoardItemDeleted={(id) => setBoardItems((prev) => prev.filter((b) => b.id !== id))}
       onBoardControlAction={handleBoardControlAction}
       onAskAssistantFromBoard={handleAskAssistantFromBoard}
       projects={projects}

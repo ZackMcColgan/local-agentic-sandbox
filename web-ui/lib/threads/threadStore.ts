@@ -1051,7 +1051,8 @@ export class ThreadStore {
           cached &&
           cached.mtimeMs === stat.mtimeMs &&
           typeof cached.summary.hasStreamingMessage === "boolean" &&
-          typeof cached.summary.traceCount === "number"
+          typeof cached.summary.traceCount === "number" &&
+          typeof cached.summary.streamingChars === "number"
         ) {
           summaries.push(this.reconcileSummaryStatus(cached.summary));
           continue;
@@ -1076,6 +1077,11 @@ export class ThreadStore {
           );
           const traceCount = msgs.reduce(
             (sum, m) => sum + (Array.isArray(m.traces) ? m.traces.length : 0),
+            0
+          );
+          const streamingChars = msgs.reduce(
+            (sum, m) =>
+              sum + (typeof m.content === "string" ? m.content.replace(/\s/g, "").length : 0),
             0
           );
           const firstUserMsg = msgs.find((m) => m.role === "user" && m.content?.trim());
@@ -1107,6 +1113,7 @@ export class ThreadStore {
             ...(t.scope !== undefined ? { scope: t.scope } : {}),
             ...(t.hostAccess !== undefined ? { hostAccess: t.hostAccess } : {}),
             traceCount,
+            streamingChars,
             messageCount: msgs.length,
             lastMessagePreview,
             hasDiffs,

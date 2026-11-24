@@ -188,6 +188,38 @@ export class UnattendedScheduler {
     this.saveSchedules(filtered);
   }
 
+  async updateSchedule(
+    id: ScheduleId,
+    patch: { enabled?: boolean; cronExpression?: string; taskDescription?: string }
+  ): Promise<Schedule | null> {
+    const schedules = this.loadSchedules();
+    const idx = schedules.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+
+    const current = { ...schedules[idx] };
+    if (typeof patch.cronExpression === "string") {
+      const expr = patch.cronExpression.trim();
+      current.nextRun = calculateNextRun(expr).toISOString();
+      current.cronExpression = expr;
+    }
+    if (typeof patch.taskDescription === "string" && patch.taskDescription.trim()) {
+      current.taskDescription = patch.taskDescription.trim();
+    }
+    if (typeof patch.enabled === "boolean") {
+      const reEnabling = !current.enabled && patch.enabled;
+      current.enabled = patch.enabled;
+      if (reEnabling) {
+        current.failureCount = 0;
+        delete current.backoffUntil;
+        current.nextRun = calculateNextRun(current.cronExpression).toISOString();
+      }
+    }
+
+    schedules[idx] = current;
+    this.saveSchedules(schedules);
+    return current;
+  }
+
   async listSchedules(): Promise<Schedule[]> {
     return this.loadSchedules();
   }
@@ -511,6 +543,14 @@ export async function scheduleTask(
 
 export async function cancelSchedule(id: ScheduleId, options?: SchedulerOptions): Promise<void> {
   return await getGlobalScheduler(options).cancelSchedule(id);
+}
+
+export async function updateSchedule(
+  id: ScheduleId,
+  patch: { enabled?: boolean; cronExpression?: string; taskDescription?: string },
+  options?: SchedulerOptions
+): Promise<Schedule | null> {
+  return await getGlobalScheduler(options).updateSchedule(id, patch);
 }
 
 export async function listSchedules(options?: SchedulerOptions): Promise<Schedule[]> {
