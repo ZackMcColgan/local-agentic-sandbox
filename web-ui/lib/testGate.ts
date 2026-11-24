@@ -629,7 +629,13 @@ const MAPPING_RULES: MappingRule[] = [
       "tests/hostGitSafetyBattery.test.ts",
       "tests/unattendedGitOps.test.ts",
       "tests/unattendedGitToolAdmission.test.ts",
+      "tests/approvalTokenBinding.test.ts",
     ],
+  },
+  // Approval token binding (Board #131): tokens bound to exact tool + payload
+  {
+    match: (p) => p.includes("approvalToken"),
+    tests: ["tests/approvalTokenBinding.test.ts"],
   },
   // Progressive tool registry (patch tool registration)
   {
