@@ -1,8 +1,8 @@
-import path from "path";
 import {
   handleLiveTurnChunkBudget,
   resolveThreadChunkBudget,
   resolveChunkHandoffTarget,
+  resolveChunkRunlogPath,
 } from "@/lib/jobChunking";
 import {
   ThreadStore,
@@ -768,12 +768,20 @@ export async function runChatTurn(
     const chunkLoopStartMs = Date.now();
     const chunkBudget = resolveThreadChunkBudget(threadData ?? undefined);
     const chunkWorkspaceRoot = _worktree?.path || resolveJobRepoRoot() || process.cwd();
-    const { jobId: chunkJobId, handoffPath: chunkHandoffPath } = resolveChunkHandoffTarget({
+    const {
+      jobId: chunkJobId,
+      checkpointDir: chunkCheckpointDir,
+      handoffPath: chunkHandoffPath,
+    } = resolveChunkHandoffTarget({
       taskId: threadData?.taskId,
       threadId: activeThreadId || _job.threadId,
       fallbackJobId: _job.id,
     });
-    const chunkRunlogPath = path.join(chunkWorkspaceRoot, "docs/internal/queue-steer-runlog.md");
+    const chunkRunlogPath = resolveChunkRunlogPath({
+      worktreePath: _worktree?.path ?? null,
+      jobId: chunkJobId,
+      checkpointDir: chunkCheckpointDir,
+    });
     let nextMicroElisionFloorTokens = 0;
 
     while (true) {

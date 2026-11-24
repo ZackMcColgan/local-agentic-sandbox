@@ -1075,3 +1075,316 @@ test("R2: evaluateSettledThreadOutcome fails closed when thread is missing or ha
     assert.match(deletedMidRun.error, /Thread missing at settlement/);
   }
 });
+
+test("R7: concurrent POST /api/board/drain calls deduplicate via shared globalThis.__boardDrainInFlight mutex", async () => {
+  const env = makeTempEnv();
+  const g = globalThis as typeof globalThis & { __boardDrainInFlight?: Promise<unknown> | null };
+  const prevMutex = g.__boardDrainInFlight;
+  try {
+    const store = new BoardStore(env.boardDir);
+    store.create({
+      key: "#91",
+      title: "Mutex test item",
+      brief: "Verify concurrent drains deduplicate.",
+      status: "queued",
+      author: "Owner",
+      source: "manual",
+    });
+    fs.writeFileSync(
+      path.join(env.boardDir, "board.meta.json"),
+      JSON.stringify({ version: 2, control: makeControl("running") }, null, 2),
+      "utf8"
+    );
+
+    const { POST: drainPost } = await import("../app/api/board/drain/route");
+    const { NextRequest } = await import("next/server");
+
+    // 1. Simulate an in-flight daemon/leader drain via globalThis.__boardDrainInFlight
+    let releaseLeader!: () => void;
+    const leaderGate = new Promise<void>((resolve) => {
+      releaseLeader = resolve;
+    });
+    const sharedReport = {
+      drainId: "drain-shared-leader",
+      startedAt: "2026-11-24T00:00:00.000Z",
+      completedAt: "2026-11-24T00:00:01.000Z",
+      durationMs: 1000,
+      stopReason: "idle",
+      completedCount: 0,
+      failedCount: 0,
+      inProgressCount: 0,
+      requeuedCount: 0,
+      surfacedCount: 0,
+      itemsProcessed: 0,
+      outcomes: [],
+      surfacedIssues: [],
+      slotUtilization: {
+        generatingMs: 0,
+        waitingToolMs: 0,
+        waitingCiMs: 0,
+        idleGapMs: 0,
+        totalObservedMs: 0,
+        slotUtilizationPct: 0,
+        preemptionsCount: 0,
+        ownerWaitMs: { p50: 0, p95: 0, count: 0 },
+        completedJobs: 0,
+        jobsPerHour: 0,
+      },
+    };
+    g.__boardDrainInFlight = (async () => {
+      await leaderGate;
+      return sharedReport;
+    })();
+
+    const req = new NextRequest("http://localhost/api/board/drain", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dryRun: true, maxItems: 1 }),
+    });
+    const pendingRes = drainPost(req);
+    await new Promise((r) => setTimeout(r, 15));
+    releaseLeader();
+    const res = await pendingRes;
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { report?: { drainId?: string }; deduplicated?: boolean };
+    assert.equal(
+      body.report?.drainId,
+      "drain-shared-leader",
+      "POST /api/board/drain must coalesce onto globalThis.__boardDrainInFlight"
+    );
+    assert.equal(body.deduplicated, true);
+
+    // 2. Also verify SchedulerDaemon skips tick when globalThis.__boardDrainInFlight is active
+    const { SchedulerDaemon } = await import("../lib/subagents/schedulerDaemon");
+    const { UnattendedScheduler } = await import("../lib/subagents/scheduler");
+    let daemonDrainCalls = 0;
+    let releaseDaemonGate!: () => void;
+    const daemonGate = new Promise<void>((resolve) => {
+      releaseDaemonGate = resolve;
+    });
+    g.__boardDrainInFlight = daemonGate;
+    const daemon = new SchedulerDaemon({
+      workspaceDir: env.rootDir,
+      scheduler: new UnattendedScheduler({ workspaceDir: env.rootDir }),
+      registerSignalHandlers: false,
+      boardDrain: {
+        isRunning: () => true,
+        drain: async () => {
+          daemonDrainCalls += 1;
+        },
+      },
+    });
+    await daemon.tick();
+    assert.equal(
+      daemonDrainCalls,
+      0,
+      "SchedulerDaemon must skip drain when globalThis.__boardDrainInFlight is active"
+    );
+    releaseDaemonGate();
+  } finally {
+    if (prevMutex === undefined) delete g.__boardDrainInFlight;
+    else g.__boardDrainInFlight = prevMutex;
+    env.cleanup();
+  }
+});
+
+test("R7: POST /api/threads/[id] re-reads thread JSON after awaits instead of writing stale snapshots", async () => {
+  const env = makeTempEnv();
+  try {
+    const threadStore = new ThreadStore(env.threadsDir);
+    threadStore.stopSupervisorSweep();
+    const created = threadStore.createThread({
+      id: "thread-rmw-1",
+      title: "Original title",
+    });
+
+    const { POST: threadPost } = await import("../app/api/threads/[id]/route");
+
+    // Simulate a concurrent message write happening while await req.json() yields
+    const req = {
+      json: async () => {
+        threadStore.addMessage(created.id, {
+          id: "msg-concurrent",
+          role: "assistant",
+          content: "Concurrent streamed message",
+          status: "completed",
+          timestamp: new Date().toISOString(),
+        });
+        return { action: "rename", title: "Renamed title" };
+      },
+    } as unknown as Request;
+
+    const res = await threadPost(req, { params: Promise.resolve({ id: created.id }) });
+    assert.equal(res.status, 200);
+
+    const onDisk = await threadStore.getThread(created.id);
+    assert.equal(onDisk?.title, "Renamed title");
+    assert.ok(
+      onDisk?.messages.some((m) => m.id === "msg-concurrent"),
+      "concurrently appended message must not be erased by stale RMW"
+    );
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("R8: non-live paused/running/needs_input threads are treated as orphaned, ThreadStore reconciles running, and host_git_pr_create + git_commit match evidence", async () => {
+  const env = makeTempEnv();
+  try {
+    for (const status of ["paused", "running", "needs_input"] as const) {
+      const check = createProductionWorkingItemLivenessCheck({
+        threadStore: {
+          createThread: () => {
+            throw new Error("unexpected");
+          },
+          getThread: async () =>
+            makeThreadRecord({
+              id: `t-nonlive-${status}`,
+              status,
+              messages: [
+                {
+                  id: "m1",
+                  role: "assistant",
+                  content: "Executed host_git_pr_create before interruption.",
+                  status: "incomplete",
+                  timestamp: "2026-11-24T00:00:00.000Z",
+                  traces: [
+                    {
+                      tool: "host_git_pr_create",
+                      args: {},
+                      result: "Created PR #355",
+                    } as never,
+                  ],
+                },
+              ],
+            }),
+        },
+        isThreadLive: () => false,
+      });
+
+      const liveness = await check({
+        id: `item-${status}`,
+        key: "#92",
+        title: `Non-live ${status}`,
+        brief: "Work",
+        dependencies: [],
+        status: "working",
+        threadLink: `/?thread=t-nonlive-${status}`,
+        author: "Owner",
+        source: "manual",
+        createdAt: "2026-11-24T00:00:00.000Z",
+        updatedAt: "2026-11-24T00:00:00.000Z",
+      });
+      assert.equal(
+        liveness.status,
+        "orphaned",
+        `non-live thread with status '${status}' must be orphaned, not live`
+      );
+      if (liveness.status === "orphaned") {
+        assert.equal(
+          liveness.evidence?.hasPrOrCommitEvidence,
+          true,
+          "host_git_pr_create trace must count as PR/commit evidence"
+        );
+        assert.match(liveness.evidence?.evidenceSummary ?? "", /PR #355/);
+      }
+    }
+
+    // Also verify git_commit trace matches evidence
+    const checkGitCommit = createProductionWorkingItemLivenessCheck({
+      threadStore: {
+        createThread: () => {
+          throw new Error("unexpected");
+        },
+        getThread: async () =>
+          makeThreadRecord({
+            id: "t-git-commit-trace",
+            status: "stopped",
+            messages: [
+              {
+                id: "m1",
+                role: "assistant",
+                content: "Committed changes.",
+                status: "incomplete",
+                timestamp: "2026-11-24T00:00:00.000Z",
+                traces: [
+                  {
+                    tool: "git_commit",
+                    args: {},
+                    result: { ok: true },
+                  } as never,
+                ],
+              },
+            ],
+          }),
+      },
+      isThreadLive: () => false,
+    });
+    const gitCommitLiveness = await checkGitCommit({
+      id: "item-git-commit",
+      key: "#93",
+      title: "git_commit trace",
+      brief: "Work",
+      dependencies: [],
+      status: "working",
+      threadLink: "/?thread=t-git-commit-trace",
+      author: "Owner",
+      source: "manual",
+      createdAt: "2026-11-24T00:00:00.000Z",
+      updatedAt: "2026-11-24T00:00:00.000Z",
+    });
+    assert.equal(gitCommitLiveness.status, "orphaned");
+    if (gitCommitLiveness.status === "orphaned") {
+      assert.equal(gitCommitLiveness.evidence?.hasPrOrCommitEvidence, true);
+    }
+
+    // ThreadStore.reconcileThread reconciles dead "running" threads
+    const ts = new ThreadStore(env.threadsDir);
+    ts.stopSupervisorSweep();
+    const deadRunning = makeThreadRecord({ id: "t-dead-running", status: "running" });
+    const changed = ts.reconcileThread(deadRunning);
+    assert.equal(changed, true);
+    assert.equal(deadRunning.status, "stopped");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("R8: resolveChunkRunlogPath writes under PVC AGENT_CHECKPOINT_DIR when worktree is null", async () => {
+  const env = makeTempEnv();
+  try {
+    const jobChunking = await import("../lib/jobChunking");
+    const resolveChunkRunlogPath = (
+      jobChunking as {
+        resolveChunkRunlogPath?: (opts: {
+          worktreePath?: string | null;
+          jobId: string;
+          checkpointDir?: string;
+        }) => string;
+      }
+    ).resolveChunkRunlogPath;
+    assert.ok(
+      typeof resolveChunkRunlogPath === "function",
+      "resolveChunkRunlogPath must be exported"
+    );
+
+    const runlogNoWorktree = resolveChunkRunlogPath({
+      worktreePath: null,
+      jobId: "job-pvc-1",
+      checkpointDir: env.checkpointDir,
+    });
+    assert.ok(
+      runlogNoWorktree.startsWith(env.checkpointDir),
+      `expected runlog path under AGENT_CHECKPOINT_DIR (${env.checkpointDir}), got ${runlogNoWorktree}`
+    );
+
+    const runlogWithWorktree = resolveChunkRunlogPath({
+      worktreePath: "/tmp/wt-1",
+      jobId: "job-wt-1",
+      checkpointDir: env.checkpointDir,
+    });
+    assert.equal(runlogWithWorktree, path.join("/tmp/wt-1", "docs/internal/queue-steer-runlog.md"));
+  } finally {
+    env.cleanup();
+  }
+});
