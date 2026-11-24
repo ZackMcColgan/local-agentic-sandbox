@@ -499,6 +499,11 @@ export function normalizeOpenAIMessages(messages: LLMChatMessage[]): LLMChatMess
   return reordered.map((msg, msgIdx) => {
     let currentMsg = msg;
 
+    if ("isDirective" in currentMsg) {
+      const { isDirective: _omitDirective, ...rest } = currentMsg;
+      currentMsg = rest;
+    }
+
     // Convert Ollama-format images array into OpenAI multimodal content parts
     if (Array.isArray(currentMsg?.images) && currentMsg.images.length > 0) {
       const parts: unknown[] = [];
