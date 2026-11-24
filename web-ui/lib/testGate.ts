@@ -442,11 +442,11 @@ const MAPPING_RULES: MappingRule[] = [
   {
     match: (p) => p.includes("BuildsView.tsx") || p.includes("buildsViewBoard.test.ts"),
     tests: ["tests/buildsViewBoard.test.ts"],
+  },
   // Client-safe board thread-link helper (components import it; server stores re-export it)
   {
     match: (p) => p.includes("lib/board/threadLink"),
     tests: ["tests/buildsViewBoard.test.ts", "tests/boardStore.test.ts"],
-  },
   },
   {
     match: (p) => p.includes("dialectGuard") || p.includes("dialectGuardWiring.test.ts"),
