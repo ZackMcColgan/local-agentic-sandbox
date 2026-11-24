@@ -335,6 +335,8 @@ export function ThreadsSidebar({
               (n, m) => n + (m.content ? m.content.replace(/\s/g, "").length : 0),
               0
             );
+            const projectedChars =
+              (thread as { streamingChars?: number }).streamingChars ?? progressChars;
             const progressTraces = (thread.messages || []).reduce(
               (n, m) => n + (m.traces ? m.traces.length : 0),
               0
@@ -517,7 +519,7 @@ export function ThreadsSidebar({
                     )}
                     {livenessBadge ? (
                       <span data-testid={`thread-progress-${thread.id}`}>
-                        {`${progressChars} chars · ${projectedTraceCount} total traces`}
+                        {`${projectedChars} chars · ${projectedTraceCount} total traces`}
                       </span>
                     ) : projectedTraceCount > 0 ? (
                       <span data-testid={`thread-progress-${thread.id}`}>

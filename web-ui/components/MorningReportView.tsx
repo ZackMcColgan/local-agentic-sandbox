@@ -100,14 +100,37 @@ export function computeMorningReportKpis(tasks: OvernightTaskEntry[]): MorningRe
   };
 }
 
+export async function postMorningReportFlagAction(payload: {
+  action: "revert" | "adjust";
+  taskId: string;
+  flagId: string;
+  instruction?: string;
+}): Promise<void> {
+  const res = await fetch("/api/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(errJson.error || `Failed to ${payload.action} flag (${res.status})`);
+  }
+}
+
 export function MorningReportView({
   report,
   overnightReport: propOvernightReport,
   onRevertFlag,
   onAdjustFlag,
 }: MorningReportViewProps) {
-  const [flags, setFlags] = useState<AmbiguityFlag[]>(report?.ambiguityFlags || []);
+  const [flags, setFlags] = useState<AmbiguityFlag[]>(() =>
+    report?.ambiguityFlags && report.ambiguityFlags.length > 0
+      ? report.ambiguityFlags
+      : propOvernightReport?.tasks?.flatMap((t) => t.ambiguityFlags || []) || []
+  );
   const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [adjustingId, setAdjustingId] = useState<string | null>(null);
+  const [flagActionError, setFlagActionError] = useState<string | null>(null);
   const [expandedFlagId, setExpandedFlagId] = useState<string | null>(null);
   const [expandedTaskDetails, setExpandedTaskDetails] = useState<Record<string, boolean>>({});
   const [adjustInputs, setAdjustInputs] = useState<Record<string, string>>({});
@@ -212,12 +235,19 @@ export function MorningReportView({
     return list;
   }, [overnight?.tasks]);
 
-  // Segmented window filter: Overnight | Last 24h | All Runs (defaults to "24h" if overnight has 0 entries)
+  // Segmented window filter: Overnight | Last 24h | All Runs
   const [windowFilter, setWindowFilter] = useState<"overnight" | "24h" | "all">(() => {
     const overnightEntries = (uniqueTasks || []).filter((t) =>
       isWithinOvernightWindow(t.startedAt || new Date().toISOString())
     );
-    return overnightEntries.length === 0 && (uniqueTasks || []).length > 0 ? "24h" : "overnight";
+    if (overnightEntries.length > 0) return "overnight";
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const recentEntries = (uniqueTasks || []).filter((t) => {
+      const ts = new Date(t.startedAt || "").getTime();
+      return !Number.isNaN(ts) && ts >= oneDayAgo;
+    });
+    if (recentEntries.length > 0) return "24h";
+    return (uniqueTasks || []).length > 0 ? "all" : "overnight";
   });
 
   const filteredTasks = React.useMemo(() => {
@@ -236,7 +266,7 @@ export function MorningReportView({
     );
   }, [uniqueTasks, windowFilter]);
 
-  const displayTasks = filteredTasks.length > 0 ? filteredTasks : uniqueTasks;
+  const displayTasks = filteredTasks;
 
   const kpis = React.useMemo(() => computeMorningReportKpis(displayTasks), [displayTasks]);
 
@@ -299,13 +329,29 @@ export function MorningReportView({
     }
   };
 
+  const resolveTaskIdForFlag = (flagId: string): string => {
+    const matchedTask = overnight?.tasks?.find(
+      (t) => Array.isArray(t.ambiguityFlags) && t.ambiguityFlags.some((f) => f.id === flagId)
+    );
+    return matchedTask?.taskId || report?.taskId || overnight?.tasks?.[0]?.taskId || "";
+  };
+
   const handleRevert = async (flag: AmbiguityFlag) => {
     setRevertingId(flag.id);
+    setFlagActionError(null);
     try {
       if (onRevertFlag) {
         await onRevertFlag(flag.id);
+      } else {
+        await postMorningReportFlagAction({
+          action: "revert",
+          taskId: resolveTaskIdForFlag(flag.id),
+          flagId: flag.id,
+        });
       }
       setFlags((prev) => prev.map((f) => (f.id === flag.id ? { ...f, reviewed: true } : f)));
+    } catch (err) {
+      setFlagActionError(err instanceof Error ? err.message : "Failed to revert flag");
     } finally {
       setRevertingId(null);
     }
@@ -315,11 +361,26 @@ export function MorningReportView({
     const text = adjustInputs[flagId];
     if (!text?.trim()) return;
 
-    if (onAdjustFlag) {
-      await onAdjustFlag(flagId, text.trim());
+    setAdjustingId(flagId);
+    setFlagActionError(null);
+    try {
+      if (onAdjustFlag) {
+        await onAdjustFlag(flagId, text.trim());
+      } else {
+        await postMorningReportFlagAction({
+          action: "adjust",
+          taskId: resolveTaskIdForFlag(flagId),
+          flagId,
+          instruction: text.trim(),
+        });
+      }
+      setFlags((prev) => prev.map((f) => (f.id === flagId ? { ...f, reviewed: true } : f)));
+      setExpandedFlagId(null);
+    } catch (err) {
+      setFlagActionError(err instanceof Error ? err.message : "Failed to apply guidance");
+    } finally {
+      setAdjustingId(null);
     }
-    setFlags((prev) => prev.map((f) => (f.id === flagId ? { ...f, reviewed: true } : f)));
-    setExpandedFlagId(null);
   };
 
   return (
@@ -560,6 +621,15 @@ export function MorningReportView({
                 </span>
               </div>
 
+              {flagActionError && (
+                <div
+                  data-testid="morning-report-flag-error"
+                  className="p-2.5 rounded-xl border border-rose-300 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-xs text-rose-700 dark:text-rose-300"
+                >
+                  {flagActionError}
+                </div>
+              )}
+
               <div className="space-y-3">
                 {flags.map((flag) => {
                   const isExpanded = expandedFlagId === flag.id;
@@ -651,10 +721,11 @@ export function MorningReportView({
                             />
                             <button
                               type="button"
+                              disabled={adjustingId === flag.id}
                               onClick={() => handleAdjustSubmit(flag.id)}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-semibold transition-colors shadow-sm"
+                              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#052e16] text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
                             >
-                              Submit
+                              {adjustingId === flag.id ? "Submitting…" : "Submit"}
                             </button>
                           </div>
                         </div>

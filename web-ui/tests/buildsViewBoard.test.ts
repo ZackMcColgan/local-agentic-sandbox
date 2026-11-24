@@ -43,3 +43,31 @@ describe("UI-051: BuildsView consumes /api/board", () => {
     );
   });
 });
+
+describe("client import boundary: components never value-import server board stores", () => {
+  it("no component value-imports boardStore or boardControlStore (node:fs/crypto leak into the client bundle)", () => {
+    const componentsDir = path.resolve(__dirname, "../components");
+    const serverModules = ["@/lib/board/boardStore", "@/lib/board/boardControlStore"];
+    for (const file of fs.readdirSync(componentsDir)) {
+      if (!file.endsWith(".tsx") && !file.endsWith(".ts")) continue;
+      const src = fs.readFileSync(path.join(componentsDir, file), "utf8");
+      for (const mod of serverModules) {
+        const valueImport = new RegExp(
+          `import\\s+(?!type\\b)[^;]*from\\s+["']${mod.replace(/\//g, "\\/")}["']`
+        );
+        assert.ok(
+          !valueImport.test(src),
+          `${file} must not value-import ${mod}; use import type or a client-safe module`
+        );
+      }
+    }
+  });
+
+  it("BuildsView reads thread ids through the client-safe threadLink module", () => {
+    const src = fs.readFileSync(path.resolve(__dirname, "../components/BuildsView.tsx"), "utf8");
+    assert.ok(
+      src.includes('from "@/lib/board/threadLink"'),
+      "BuildsView.tsx must import extractThreadIdFromLink from lib/board/threadLink"
+    );
+  });
+});

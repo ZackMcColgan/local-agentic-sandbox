@@ -60,3 +60,22 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    let id = req.nextUrl.searchParams.get("id");
+    if (!id) {
+      const body = (await req.json().catch(() => null)) as { id?: string } | null;
+      id = body?.id ?? null;
+    }
+    if (!id || typeof id !== "string" || !id.trim()) {
+      return NextResponse.json({ error: "Missing item id" }, { status: 400 });
+    }
+    const removed = getBoardStore().remove(id.trim());
+    return NextResponse.json({ success: true, removed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to delete board item";
+    const status = message.includes("not found") ? 404 : 400;
+    return NextResponse.json({ error: message }, { status });
+  }
+}

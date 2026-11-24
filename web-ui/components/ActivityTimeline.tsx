@@ -13,6 +13,7 @@ import {
   type TimelineWriteDiff,
 } from "../lib/activityTimeline";
 import { formatElapsedDuration, resolveFileOpenUrl } from "../lib/chatUtils";
+import { coalesceTurnDiffs, type TurnFileDiff } from "../lib/chatDiffs";
 
 export interface ThinkingPreviewInput {
   isStreaming: boolean;
@@ -157,6 +158,7 @@ export interface ActivityTimelineProps {
   thinkingSegments?: ThinkingSegment[];
   roundNarrations?: RoundNarrationSegment[];
   roundGenerationMs?: number[];
+  persistedDiffs?: TurnFileDiff[];
   isStreaming?: boolean;
   hasContent?: boolean;
   onOpenCanvasDiff?: (diff: TimelineWriteDiff, allTurnDiffs: TimelineWriteDiff[]) => void;
@@ -487,16 +489,64 @@ function TimelineRowView({
   );
 }
 
+function normalizeDiffPathKey(p: string): string {
+  const s = p.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  return /^[A-Za-z]:\//.test(s) ? (s[0].toLowerCase() + s.slice(1)).toLowerCase() : s.toLowerCase();
+}
+
+function findMatchingPersistedDiff(
+  filePath: string,
+  coalesced: TurnFileDiff[]
+): TurnFileDiff | undefined {
+  const target = normalizeDiffPathKey(filePath);
+  const exact = coalesced.find((d) => normalizeDiffPathKey(d.path) === target);
+  if (exact) return exact;
+  return coalesced.find((d) => {
+    const k = normalizeDiffPathKey(d.path);
+    return target.endsWith(`/${k}`) || k.endsWith(`/${target}`);
+  });
+}
+
+function mergePersistedDiffsIntoRows(
+  rows: TimelineRow[],
+  persistedDiffs?: TurnFileDiff[]
+): TimelineRow[] {
+  if (!Array.isArray(persistedDiffs) || persistedDiffs.length === 0) return rows;
+  const coalesced = coalesceTurnDiffs(persistedDiffs);
+  if (coalesced.length === 0) return rows;
+
+  return rows.map((row) => {
+    if (!row.writeDiff) return row;
+    const match = findMatchingPersistedDiff(row.writeDiff.filePath, coalesced);
+    if (!match) return row;
+    const hasPreImage = match.removedLines > 0 || /^@@\s+-(?!0,0\b)\d+/m.test(match.diff);
+    if (!hasPreImage && !row.writeDiff.synthesized && row.writeDiff.diffText) {
+      return row;
+    }
+    return {
+      ...row,
+      writeDiff: {
+        filePath: row.writeDiff.filePath || match.path,
+        addedLines: match.addedLines,
+        removedLines: match.removedLines,
+        diffText: match.diff,
+        synthesized: false,
+      },
+    };
+  });
+}
+
 export const ActivityTimeline = React.memo(function ActivityTimeline({
   traces,
   thinkingSegments,
   roundNarrations,
   roundGenerationMs,
+  persistedDiffs,
   isStreaming = false,
   hasContent = false,
   onOpenCanvasDiff,
 }: ActivityTimelineProps) {
-  const rows = useMemo(
+  const baseRows = useMemo(
     () =>
       buildActivityTimeline(traces, undefined, {
         thinkingSegments,
@@ -506,6 +556,7 @@ export const ActivityTimeline = React.memo(function ActivityTimeline({
       }),
     [traces, thinkingSegments, roundNarrations, roundGenerationMs, isStreaming]
   );
+  const rows = mergePersistedDiffsIntoRows(baseRows, persistedDiffs);
   const allTurnDiffs = useMemo(() => {
     const rawTurnDiffs: TimelineWriteDiff[] = [];
     for (const r of rows) {

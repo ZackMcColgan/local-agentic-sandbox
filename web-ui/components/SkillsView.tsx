@@ -10,6 +10,21 @@ interface SkillCandidateItem {
   occurrences: number;
   solutionSummary: string;
   status: "pending" | "approved" | "rejected";
+  skillMd?: string;
+  skillMdPath?: string;
+  skillMdFromDisk?: boolean;
+}
+
+function formatFallbackCandidateMarkdown(candidate: SkillCandidateItem): string {
+  return `---
+id: ${candidate.id}
+status: ${candidate.status || "pending"}
+pattern: ${candidate.pattern}
+occurrences: ${candidate.occurrences}
+---
+
+## Directive
+${candidate.solutionSummary}`;
 }
 
 interface FlywheelSkillItem {
@@ -322,20 +337,11 @@ export function SkillsView({
             <div className="p-5 overflow-y-auto space-y-4 flex-1">
               <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-black overflow-hidden">
                 <div className="px-3.5 py-2 bg-slate-100 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-xs font-mono font-semibold text-slate-700 dark:text-zinc-300">
-                  {`skills/pending/${previewCandidate.id || "candidate"}.md`}
+                  {previewCandidate.skillMdPath ||
+                    `skills/pending/${previewCandidate.id || "candidate"}.md`}
                 </div>
                 <pre className="p-4 font-mono text-xs text-slate-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
-                  {`---
-id: ${previewCandidate.id}
-status: ${previewCandidate.status || "pending"}
-confidence: ${(previewCandidate as { confidence?: number }).confidence ?? 0.94}
-pattern: ${previewCandidate.pattern}
-occurrences: ${previewCandidate.occurrences}
----
-
-## Directive
-1. Write module & test files via \`workspace_write_file\`.
-2. ${previewCandidate.solutionSummary}`}
+                  {previewCandidate.skillMd ?? formatFallbackCandidateMarkdown(previewCandidate)}
                 </pre>
               </div>
             </div>

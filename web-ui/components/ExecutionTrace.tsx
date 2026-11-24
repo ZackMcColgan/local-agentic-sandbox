@@ -22,16 +22,21 @@ export interface ExecutionTraceItem {
   durationMs: number;
   timestamp: string;
   model?: string;
-  tier?: "sandbox" | "browser";
+  tier?: "sandbox" | "browser" | "host";
   round?: number;
   isError?: boolean;
 }
 
 interface ExecutionTraceProps {
   traces: ExecutionTraceItem[];
+  hostAccess?: boolean;
 }
 
-export function ExecutionTrace({ traces }: ExecutionTraceProps) {
+function isHostExecutionTrace(trace: ExecutionTraceItem): boolean {
+  return trace.tier === "host" || (trace.tool || "").startsWith("host_");
+}
+
+export function ExecutionTrace({ traces, hostAccess }: ExecutionTraceProps) {
   const [openIndexes, setOpenIndexes] = useState<Record<number, boolean>>({ 0: true });
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -72,7 +77,9 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
           </h3>
         </div>
         <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/20 px-2 py-0.5 rounded font-medium">
-          Sandboxed Boundary Active
+          {hostAccess || traces.some(isHostExecutionTrace)
+            ? "Host Bridge Active"
+            : "Sandboxed Boundary Active"}
         </span>
       </div>
 
@@ -184,7 +191,20 @@ export function ExecutionTrace({ traces }: ExecutionTraceProps) {
 
                   {/* Dynamic Security Boundary Badges */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    {trace.tier === "browser" ? (
+                    {isHostExecutionTrace(trace) ? (
+                      <>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
+                          <ShieldCheck className="h-3 w-3" />
+                          Host Execution (Host Bridge)
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700">
+                          Boundary: Host Checkout
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700">
+                          Tier: host
+                        </span>
+                      </>
+                    ) : trace.tier === "browser" ? (
                       <>
                         <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30">
                           <ShieldCheck className="h-3 w-3" />

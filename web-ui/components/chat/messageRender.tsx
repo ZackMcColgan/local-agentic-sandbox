@@ -46,7 +46,11 @@ import { CompactionPill } from "./compactionPill";
 import { ThinkingPreviewBlock, ActivityTimeline } from "../ActivityTimeline";
 import { StintCard } from "../StintCard";
 import { sumRoundGenerationMs } from "../../lib/turnSpeed";
-import { mergeLiveAndSettledTraces, type TimelineWriteDiff } from "../../lib/activityTimeline";
+import {
+  extractWriteDiffFromTrace,
+  mergeLiveAndSettledTraces,
+  type TimelineWriteDiff,
+} from "../../lib/activityTimeline";
 import type { ChatMessage } from "../ChatStream";
 
 // UI-014: long user briefs (>320 chars or >6 lines) collapse behind a
@@ -411,6 +415,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                       thinkingSegments={m.thinkingSegments}
                       roundNarrations={m.roundNarrations}
                       roundGenerationMs={m.roundGenerationMs}
+                      persistedDiffs={m.diffs}
                       isStreaming={isStreamingThis}
                       hasContent={Boolean(m.content && m.content.trim())}
                       onOpenCanvasDiff={onOpenCanvasDiff}
@@ -758,12 +763,23 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             </div>
           )}
 
-          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline) */}
-          {fileDiffCards.length > 0 && (
-            <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
-              <CanvasDiffCard diffs={fileDiffCards} />
-            </div>
-          )}
+          {/* Chat Diff Cards for File Writes & Patches (single coalesced diff pipeline).
+              Suppressed only when the turn carries BOTH persisted diffs and
+              trace write diffs: then the timeline already renders the
+              persisted diff and the card would duplicate it (uiClosures).
+              Either source alone keeps the card: trace-only turns
+              (Phase Omega) and persisted-only turns (Free Run) both
+              require it. */}
+          {fileDiffCards.length > 0 &&
+            !(
+              Array.isArray(m.diffs) &&
+              m.diffs.length > 0 &&
+              turnTraces.some((t) => Boolean(extractWriteDiffFromTrace(t)))
+            ) && (
+              <div className="flex flex-col gap-2 pt-1 w-full max-w-xl">
+                <CanvasDiffCard diffs={fileDiffCards} />
+              </div>
+            )}
 
           {/* Stint card on completed turns */}
           {!isTaskHostMessage &&

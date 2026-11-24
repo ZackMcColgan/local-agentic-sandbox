@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { TaskManifest } from "@/lib/subagents/types";
+import { extractThreadIdFromLink } from "@/lib/board/threadLink";
 import { LiveRunBlock } from "./LiveRunBlock";
 
 interface BuildsViewProps {
@@ -25,6 +26,7 @@ interface BuildsViewProps {
   onSelectThread: (threadId: string) => void;
   onDeployRun?: (taskId: string) => Promise<void> | void;
   onNavigateToProjects?: () => void;
+  buildTierStatus?: "ready" | "degraded" | "offline" | "unknown";
 }
 
 export function BuildsView({
@@ -35,8 +37,42 @@ export function BuildsView({
   onSelectThread,
   onDeployRun,
   onNavigateToProjects,
+  buildTierStatus: propBuildTierStatus,
 }: BuildsViewProps) {
   const [internalTasks, setInternalTasks] = useState<TaskManifest[]>([]);
+  const [liveTierStatus, setLiveTierStatus] = useState<
+    "ready" | "degraded" | "offline" | "unknown"
+  >(propBuildTierStatus ?? "unknown");
+
+  useEffect(() => {
+    if (propBuildTierStatus !== undefined) {
+      setLiveTierStatus(propBuildTierStatus);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    let mounted = true;
+    fetch("/api/sandbox-status", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!mounted || !data?.services) return;
+        const llm = data.services.llm?.status || data.services.ollama?.status;
+        const mcp = data.services.mcp_server?.status;
+        if (llm === "HEALTHY" && mcp === "HEALTHY") {
+          setLiveTierStatus("ready");
+        } else if (
+          (llm === "OFFLINE" || llm === "UNREACHABLE") &&
+          (mcp === "OFFLINE" || mcp === "UNREACHABLE")
+        ) {
+          setLiveTierStatus("offline");
+        } else if (llm || mcp) {
+          setLiveTierStatus("degraded");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [propBuildTierStatus]);
 
   useEffect(() => {
     if (tasks && tasks.length > 0) {
@@ -59,24 +95,28 @@ export function BuildsView({
           taskId?: string;
           id?: string;
           threadId?: string;
+          threadLink?: string;
           title?: string;
           goal?: string;
           brief?: string;
           status?: string;
           toolchain?: string;
           branchName?: string;
+          branch?: string;
+          handoff?: { branch?: string };
           milestones?: TaskManifest["milestones"];
           createdAt?: string;
           updatedAt?: string;
         }
         const boardTasks: TaskManifest[] = (rawItems as BoardItemRaw[]).map((t) => ({
           taskId: t.taskId || t.id || t.threadId || "",
+          threadId: t.threadId || extractThreadIdFromLink(t.threadLink) || undefined,
           goal: t.title || t.goal || t.brief || "Board Item",
           status: (t.status === "working"
             ? "active"
             : t.status || "paused") as TaskManifest["status"],
           toolchain: (t.toolchain || "node:22") as TaskManifest["toolchain"],
-          branchName: t.branchName || "main",
+          branchName: t.branchName || t.handoff?.branch || t.branch || "",
           milestones: Array.isArray(t.milestones) ? t.milestones : [],
           currentMilestoneIndex: 0,
           checkpoints: [],
@@ -134,9 +174,33 @@ export function BuildsView({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="hidden sm:inline">Build Tier </span>Ready
+            <span
+              data-testid="builds-tier-status"
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                liveTierStatus === "ready"
+                  ? "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
+                  : liveTierStatus === "offline"
+                    ? "bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                    : "bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  liveTierStatus === "ready"
+                    ? "bg-emerald-500 animate-pulse"
+                    : liveTierStatus === "offline"
+                      ? "bg-rose-500"
+                      : "bg-zinc-400"
+                }`}
+              />
+              <span className="hidden sm:inline">Build Tier </span>
+              {liveTierStatus === "ready"
+                ? "Ready"
+                : liveTierStatus === "offline"
+                  ? "Offline"
+                  : liveTierStatus === "degraded"
+                    ? "Degraded"
+                    : "Unknown"}
             </span>
           </div>
         </div>
@@ -217,7 +281,7 @@ export function BuildsView({
                   <span>
                     Branch{" "}
                     <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-slate-700 dark:text-zinc-300">
-                      {pipelineTask.branchName || "feat/task"}
+                      {pipelineTask.branchName || "Unassigned"}
                     </code>{" "}
                     ({pipelineTask.status}) ·{" "}
                     {pipelineTask.status === "completed"
@@ -355,7 +419,9 @@ export function BuildsView({
                     <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-zinc-400 flex-wrap pt-1 border-t border-slate-50 dark:border-zinc-800/60">
                       <div className="flex items-center gap-1">
                         <GitBranch className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
-                        <span className="font-mono">{t.branchName || t.branch || "feat/task"}</span>
+                        <span className="font-mono">
+                          {t.branchName || t.branch || "Unassigned"}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />

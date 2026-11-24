@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { BOARD_SEED_ITEMS } from "./boardSeed";
+import { extractThreadIdFromLink } from "./threadLink";
 import { atomicWriteFileSync } from "../fsAtomic";
+
+export { extractThreadIdFromLink };
 
 export type BoardStatus = "queued" | "working" | "pr-open" | "parked" | "needs-attention" | "done";
 export type BoardSource = "assistant" | "manual";
@@ -92,24 +95,6 @@ export interface UpdateBoardItemInput {
   autoResumeCount?: number | null;
   chunkRequeueCount?: number | null;
   sprint?: string;
-}
-
-export function extractThreadIdFromLink(threadLink?: string): string | null {
-  if (typeof threadLink !== "string") return null;
-  const trimmed = threadLink.trim();
-  if (!trimmed) return null;
-  const queryMatch = /[?&]thread=([^&#]+)/.exec(trimmed);
-  if (queryMatch) {
-    try {
-      return decodeURIComponent(queryMatch[1]);
-    } catch {
-      return queryMatch[1];
-    }
-  }
-  if (!trimmed.includes("/") && !trimmed.includes("?")) {
-    return trimmed;
-  }
-  return null;
 }
 
 /**
@@ -420,6 +405,17 @@ export class BoardStore {
     items[idx] = updated;
     this.writeAll(items);
     return updated;
+  }
+
+  remove(id: string): BoardItem {
+    const items = this.readAll();
+    const idx = items.findIndex((i) => i.id === id);
+    if (idx === -1) {
+      throw new Error(`Board item not found: ${id}`);
+    }
+    const [removed] = items.splice(idx, 1);
+    this.writeAll(items);
+    return removed;
   }
 }
 

@@ -4,6 +4,7 @@ import React from "react";
 import { ShieldCheck, Lock, HardDrive, UserCheck, Zap, Activity } from "lucide-react";
 
 interface SandboxGaugeProps {
+  hostAccess?: boolean;
   securityPosture?: {
     execution_uid: string;
     root_filesystem: string;
@@ -13,63 +14,120 @@ interface SandboxGaugeProps {
   };
 }
 
-export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
-  const securityRules = [
-    {
-      title: "Network Egress",
-      value: "Zero Egress (air-gapped)",
-      detail: "ai-mesh (internal: true)",
-      icon: Lock,
-      status: "enforced",
-      accent:
-        "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-    {
-      title: "Root Filesystem",
-      value: "Read-Only Enforced",
-      detail: "read_only: true",
-      icon: HardDrive,
-      status: "enforced",
-      accent:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-    {
-      title: "Linux Capabilities",
-      value: "cap_drop: ALL",
-      detail: "no-new-privileges: true",
-      icon: ShieldCheck,
-      status: "enforced",
-      accent:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-    {
-      title: "Execution User",
-      value: securityPosture?.execution_uid || "10001:10001",
-      detail: "Unprivileged non-root",
-      icon: UserCheck,
-      status: "enforced",
-      accent:
-        "text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
-    },
-    {
-      title: "Ephemeral Buffer",
-      value: "/tmp (tmpfs: 64MB)",
-      detail: "rw,noexec,nosuid",
-      icon: Zap,
-      status: "enforced",
-      accent:
-        "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
-    },
-    {
-      title: "Supply-Chain Trust",
-      value: securityPosture?.provenance_level || "SLSA-3 Verified",
-      detail: "SPDX 2.3 SBOM Validated",
-      icon: Activity,
-      status: "enforced",
-      accent:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
-    },
-  ];
+export function SandboxGauge({ hostAccess = false, securityPosture }: SandboxGaugeProps) {
+  const securityRules = hostAccess
+    ? [
+        {
+          title: "Execution Mode",
+          value: "Host Bridge Enabled",
+          detail: "Host-side tool execution via bridge",
+          icon: ShieldCheck,
+          status: "active",
+          accent:
+            "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Host Filesystem",
+          value: "Host Checkout (Read/Write)",
+          detail: "Direct host repo path",
+          icon: HardDrive,
+          status: "active",
+          accent:
+            "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Execution User",
+          value: "Host OS User",
+          detail: "Host Bridge session identity",
+          icon: UserCheck,
+          status: "active",
+          accent:
+            "text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-700",
+        },
+        {
+          title: "Command Guard",
+          value: "Dialect & Destructive Guard",
+          detail: "Pre-execution classifier active",
+          icon: Lock,
+          status: "enforced",
+          accent:
+            "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Ephemeral Buffer",
+          value: "Host temp directory",
+          detail: "Standard host runtime",
+          icon: Zap,
+          status: "active",
+          accent:
+            "text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-700",
+        },
+        {
+          title: "Supply-Chain Trust",
+          value: securityPosture?.provenance_level || "Unverified on Host",
+          detail: "Container posture applies to sandbox tier",
+          icon: Activity,
+          status: "active",
+          accent:
+            "text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-700",
+        },
+      ]
+    : [
+        {
+          title: "Network Egress",
+          value: "Zero Egress (air-gapped)",
+          detail: "ai-mesh (internal: true)",
+          icon: Lock,
+          status: "enforced",
+          accent:
+            "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Root Filesystem",
+          value: "Read-Only Enforced",
+          detail: "read_only: true",
+          icon: HardDrive,
+          status: "enforced",
+          accent:
+            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Linux Capabilities",
+          value: "cap_drop: ALL",
+          detail: "no-new-privileges: true",
+          icon: ShieldCheck,
+          status: "enforced",
+          accent:
+            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+        {
+          title: "Execution User",
+          value: securityPosture?.execution_uid || "10001:10001",
+          detail: "Unprivileged non-root",
+          icon: UserCheck,
+          status: "enforced",
+          accent:
+            "text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
+        },
+        {
+          title: "Ephemeral Buffer",
+          value: "/tmp (tmpfs: 64MB)",
+          detail: "rw,noexec,nosuid",
+          icon: Zap,
+          status: "enforced",
+          accent:
+            "text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-500/20",
+        },
+        {
+          title: "Supply-Chain Trust",
+          value: securityPosture?.provenance_level || "SLSA-3 Verified",
+          detail: "SPDX 2.3 SBOM Validated",
+          icon: Activity,
+          status: "enforced",
+          accent:
+            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/20",
+        },
+      ];
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 space-y-4 shadow-sm">
@@ -78,12 +136,12 @@ export function SandboxGauge({ securityPosture }: SandboxGaugeProps) {
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100 tracking-tight">
-            Sandbox Isolation Matrix
+            {hostAccess ? "Execution Boundary Matrix" : "Sandbox Isolation Matrix"}
           </h3>
         </div>
         <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-mono font-medium">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          100% ZERO-TRUST
+          {hostAccess ? "Host Bridge" : "100% ZERO-TRUST"}
         </div>
       </div>
 

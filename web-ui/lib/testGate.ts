@@ -443,6 +443,11 @@ const MAPPING_RULES: MappingRule[] = [
     match: (p) => p.includes("BuildsView.tsx") || p.includes("buildsViewBoard.test.ts"),
     tests: ["tests/buildsViewBoard.test.ts"],
   },
+  // Client-safe board thread-link helper (components import it; server stores re-export it)
+  {
+    match: (p) => p.includes("lib/board/threadLink"),
+    tests: ["tests/buildsViewBoard.test.ts", "tests/boardStore.test.ts"],
+  },
   {
     match: (p) => p.includes("dialectGuard") || p.includes("dialectGuardWiring.test.ts"),
     tests: ["tests/dialectGuardWiring.test.ts"],
@@ -1727,6 +1732,36 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("components/ChatStream") ||
       p.includes("heartbeatWrites.test.ts"),
     tests: ["tests/heartbeatWrites.test.ts"],
+  },
+  {
+    match: (p) =>
+      p.includes("lib/threads/types") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("components/ThreadsSidebar") ||
+      p.includes("components/chat/messageRender") ||
+      p.includes("components/ActivityTimeline") ||
+      p.includes("lib/chatUtils") ||
+      p.includes("components/SchedulesPanel") ||
+      p.includes("app/api/schedules") ||
+      p.includes("app/api/scheduler/health") ||
+      p.includes("lib/subagents/scheduler") ||
+      p.includes("lib/board/boardStore") ||
+      p.includes("app/api/board/route") ||
+      p.includes("components/BoardView") ||
+      p.includes("components/BuildsView") ||
+      p.includes("components/ExecutionTrace") ||
+      p.includes("components/SandboxGauge") ||
+      p.includes("components/ModelBottomSheet") ||
+      p.includes("components/MorningReportView") ||
+      p.includes("components/ViewShell") ||
+      p.includes("app/morning-report/page") ||
+      p.includes("components/SkillsView") ||
+      p.includes("app/api/skills/route") ||
+      p.includes("lib/subagents/skillGate") ||
+      p.includes("components/SettingsView") ||
+      p.includes("app/page.tsx") ||
+      p.includes("uiClosures.test.ts"),
+    tests: ["tests/uiClosures.test.ts"],
   },
   {
     match: (p) =>

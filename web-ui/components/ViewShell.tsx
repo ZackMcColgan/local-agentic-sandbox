@@ -8,7 +8,7 @@ import { ModelBottomSheet } from "@/components/ModelBottomSheet";
 import { ExecutionTrace, ExecutionTraceItem } from "@/components/ExecutionTrace";
 import { TraceWaterfall } from "@/components/TraceWaterfall";
 import { SandboxGauge } from "@/components/SandboxGauge";
-import { MorningReportView } from "@/components/MorningReportView";
+import { MorningReportView, postMorningReportFlagAction } from "@/components/MorningReportView";
 import { MorningReport, OvernightMorningReport } from "@/lib/subagents/morningReport";
 import { TaskManifest, TaskScope } from "@/lib/subagents/types";
 import {
@@ -131,6 +131,8 @@ export interface ViewShellProps {
   boardStopAtBoundary: boolean;
   isBoardControlPending: boolean;
   onBoardItemCreated: (item: BoardItem) => void;
+  onBoardItemUpdated?: (item: BoardItem) => void;
+  onBoardItemDeleted?: (id: string) => void;
   onBoardControlAction: (action: BoardControlAction) => void;
   onAskAssistantFromBoard: (draftPrompt: string) => void;
 
@@ -212,6 +214,8 @@ export function ViewShell({
   boardStopAtBoundary,
   isBoardControlPending,
   onBoardItemCreated,
+  onBoardItemUpdated,
+  onBoardItemDeleted,
   onBoardControlAction,
   onAskAssistantFromBoard,
   projects,
@@ -743,6 +747,8 @@ export function ViewShell({
             items={boardItems}
             onOpenDrawer={() => onSetDrawerOpen(true)}
             onItemCreated={onBoardItemCreated}
+            onItemUpdated={onBoardItemUpdated}
+            onItemDeleted={onBoardItemDeleted}
             controlState={boardControlState}
             stopAtBoundary={boardStopAtBoundary}
             isControlPending={isBoardControlPending}
@@ -808,7 +814,37 @@ export function ViewShell({
                 </a>
               </div>
               {overnightReport || morningReport ? (
-                <MorningReportView overnightReport={overnightReport} report={morningReport} />
+                <MorningReportView
+                  overnightReport={overnightReport}
+                  report={morningReport}
+                  onRevertFlag={(flagId) => {
+                    const matchedTask = overnightReport?.tasks?.find((t) =>
+                      t.ambiguityFlags?.some((f) => f.id === flagId)
+                    );
+                    const taskId =
+                      matchedTask?.taskId ||
+                      morningReport?.taskId ||
+                      overnightReport?.tasks?.[0]?.taskId ||
+                      "";
+                    return postMorningReportFlagAction({ action: "revert", taskId, flagId });
+                  }}
+                  onAdjustFlag={(flagId, instruction) => {
+                    const matchedTask = overnightReport?.tasks?.find((t) =>
+                      t.ambiguityFlags?.some((f) => f.id === flagId)
+                    );
+                    const taskId =
+                      matchedTask?.taskId ||
+                      morningReport?.taskId ||
+                      overnightReport?.tasks?.[0]?.taskId ||
+                      "";
+                    return postMorningReportFlagAction({
+                      action: "adjust",
+                      taskId,
+                      flagId,
+                      instruction,
+                    });
+                  }}
+                />
               ) : (
                 <div className="p-8 text-center text-slate-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-slate-200 dark:border-zinc-800">
                   No overnight report generated yet. Reports synthesize at completion of overnight
@@ -841,7 +877,10 @@ export function ViewShell({
             </div>
 
             <section>
-              <SandboxGauge securityPosture={securityPosture} />
+              <SandboxGauge
+                hostAccess={currentThread?.hostAccess}
+                securityPosture={securityPosture}
+              />
             </section>
 
             <section>
@@ -849,7 +888,7 @@ export function ViewShell({
             </section>
 
             <section>
-              <ExecutionTrace traces={traces} />
+              <ExecutionTrace traces={traces} hostAccess={currentThread?.hostAccess} />
             </section>
           </div>
         )}
