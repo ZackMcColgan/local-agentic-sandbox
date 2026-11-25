@@ -138,11 +138,6 @@ local-agentic-sandbox/
 ├── docker-compose.yml                  # Docker Compose multi-container deployment
 ├── Makefile                            # Make orchestration targets (up, down, test, pull)
 ├── deploy/
-│   ├── helm/
-│   │   └── local-agentic-sandbox/      # Helm chart for Kubernetes deployment
-│   │       ├── Chart.yaml
-│   │       ├── values.yaml             # Configurable values (GitHub CIDRs, replicas, ports)
-│   │       └── templates/              # Kubernetes templates (deployments, services, network policies)
 │   └── k8s/
 │       ├── kustomization.yaml          # Kustomize manifest for Docker Desktop Kubernetes
 │       ├── namespace.yaml              # Namespace definition: local-agentic-sandbox
@@ -247,9 +242,8 @@ All platform workloads reside inside the dedicated `local-agentic-sandbox` names
 # 1. Automated build, containerd import, rollout, and verification (recommended)
 node scripts/deploy-cluster.js web-ui
 
-# OR: Apply manifests via Kustomize / Helm
+# OR: Apply manifests via Kustomize (single installable manifest set)
 kubectl apply -k deploy/k8s
-helm install local-agentic-sandbox deploy/helm/local-agentic-sandbox -n local-agentic-sandbox --create-namespace
 
 # 2. Verify all pods and services in the local-agentic-sandbox namespace
 kubectl get all -n local-agentic-sandbox

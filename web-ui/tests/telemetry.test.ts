@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TelemetryTracer, getTraceSession } from "../lib/telemetry";
+import {
+  TelemetryTracer,
+  getTraceSession,
+  getAllTraceSessions,
+  getTraceStoreSize,
+  MAX_TRACE_SESSIONS,
+} from "../lib/telemetry";
 
 test("OpenTelemetry Distributed Tracing Suite", async (t) => {
   await t.test("creates root agent.turn span and child spans with correct hierarchy", () => {
@@ -139,4 +145,62 @@ test("OpenTelemetry Distributed Tracing Suite", async (t) => {
       assert.equal(critSpan.parentSpanId, workSpan.spanId);
     }
   );
+
+  await t.test(
+    "trace store enforces the documented cap of 50 sessions, evicting oldest first",
+    () => {
+      // Insert well beyond the documented cap with strictly increasing start
+      // times so eviction order is deterministic regardless of sessions created
+      // by earlier subtests in this file.
+      const sessionIds: string[] = [];
+      const base = Date.now() + 1_000_000;
+      for (let i = 0; i < MAX_TRACE_SESSIONS + 12; i++) {
+        const id = `cap_session_${i}`;
+        sessionIds.push(id);
+        const tracer = new TelemetryTracer(id, undefined, base + i);
+        tracer.startSpan("agent.turn");
+      }
+
+      assert.equal(getTraceStoreSize(), MAX_TRACE_SESSIONS, "store must never exceed the cap");
+
+      // The oldest inserted sessions must be evicted.
+      assert.equal(getTraceSession(sessionIds[0]), undefined, "oldest session must be evicted");
+      assert.equal(getTraceSession(sessionIds[11]), undefined, "12th-oldest must be evicted");
+
+      // The newest MAX_TRACE_SESSIONS inserted sessions must survive.
+      const survivors = sessionIds.slice(sessionIds.length - MAX_TRACE_SESSIONS);
+      for (const id of survivors) {
+        assert.ok(getTraceSession(id), `${id} must be retained`);
+      }
+      const newest = getTraceSession(sessionIds[sessionIds.length - 1]);
+      assert.ok(newest, "newest session must be retained");
+      assert.equal(newest.sessionId, sessionIds[sessionIds.length - 1]);
+
+      // getAllTraceSessions must reflect the bounded store, newest first.
+      const all = getAllTraceSessions();
+      assert.equal(all.length, MAX_TRACE_SESSIONS);
+      assert.ok(all[0].startTime >= all[all.length - 1].startTime, "sorted newest first");
+    }
+  );
+
+  await t.test("an evicted session lookup behaves sanely", () => {
+    // Explicit start times keep eviction order deterministic.
+    const base = Date.now() + 2_000_000;
+    const tracer = new TelemetryTracer("evict_me", undefined, base);
+    tracer.startSpan("agent.turn").end("ok");
+    // Push the store past the cap so the oldest session (this one) is evicted.
+    for (let i = 1; i <= MAX_TRACE_SESSIONS + 1; i++) {
+      const t2 = new TelemetryTracer(`overflow_${i}`, undefined, base + i);
+      t2.startSpan("agent.turn");
+    }
+
+    assert.equal(getTraceStoreSize(), MAX_TRACE_SESSIONS);
+    const evicted = getTraceSession("evict_me");
+    assert.equal(evicted, undefined, "evicted session must not be returned");
+
+    // A tracer whose session was evicted must degrade without throwing.
+    const stale = new TelemetryTracer("evict_me", undefined, base);
+    assert.equal(stale.getSpanHierarchy().length, 0, "evicted session yields empty hierarchy");
+    assert.ok(stale.getTraceparent(), "traceparent still derivable from the tracer");
+  });
 });

@@ -26,7 +26,7 @@ functional bugs and feature requests only.
 What to include in a report:
 
 - The affected component (`web-ui/`, `host-bridge/`, `mcp-server/`, `browser-mcp/`,
-  `deploy/helm/`, or a container image tag).
+  `deploy/k8s/`, or a container image tag).
 - The attack path: which boundary is crossed (container isolation, egress mesh,
   host-bridge RPC, MCP tool surface, Kubernetes RBAC).
 - The exact reproduction steps and the version/commit.
