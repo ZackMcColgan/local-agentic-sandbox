@@ -31,6 +31,82 @@ export interface DestructiveCheckResult {
   reason?: string;
 }
 
+const ENCODED_COMMAND_SWITCH_PATTERN =
+  /(?:^|[;|&(\r\n\s])(?:powershell(?:\.exe)?|pwsh(?:\.exe)?)\b[^\r\n;|&]*?\s-(?:e|en|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)(?=\s|$|[;|&)])/i;
+
+const ENCODED_COMMAND_ARG_PATTERN =
+  /(?:powershell(?:\.exe)?|pwsh(?:\.exe)?)\b[^\r\n;|&]*?\s-(?:e|en|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)\s+['"]?([A-Za-z0-9+/=]{4,})['"]?/i;
+
+const DOTNET_DELETE_PATTERN =
+  /\[\s*(?:system\s*\.\s*)?io\s*\.\s*(?:file|directory)\s*\]\s*::\s*delete\s*\(/i;
+
+const CMD_INDIRECTION_PATTERN = /(?:^|[;|&(\r\n])\s*(?:&\s+)?cmd(?:\.exe)?\s+\/[ck]\s+([\s\S]+)$/i;
+
+function unquoteOuter(text: string): string {
+  const trimmed = text.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function matchDestructivePatterns(strippedCmd: string): RegExp | undefined {
+  return DESTRUCTIVE_POWERSHELL_PATTERNS.find((pattern) => pattern.test(strippedCmd));
+}
+
+function evaluatePowerShellCommand(rawCmd: string, depth = 0): DestructiveCheckResult {
+  const strippedCmd = stripQuotedStrings(rawCmd);
+
+  if (ENCODED_COMMAND_SWITCH_PATTERN.test(strippedCmd)) {
+    const argMatch = ENCODED_COMMAND_ARG_PATTERN.exec(rawCmd);
+    if (argMatch?.[1]) {
+      const decoded = Buffer.from(argMatch[1], "base64").toString("utf16le");
+      const decodedMatch = matchDestructivePatterns(stripQuotedStrings(decoded));
+      if (decodedMatch) {
+        return {
+          isDestructive: true,
+          reason: `Encoded PowerShell command decoded match: ${decodedMatch.source}`,
+        };
+      }
+    }
+    return {
+      isDestructive: true,
+      reason: "Opaque encoded PowerShell command (-EncodedCommand)",
+    };
+  }
+
+  if (DOTNET_DELETE_PATTERN.test(strippedCmd)) {
+    return {
+      isDestructive: true,
+      reason: "High-risk .NET static Delete call",
+    };
+  }
+
+  if (depth < 4) {
+    const cmdMatch = CMD_INDIRECTION_PATTERN.exec(rawCmd);
+    if (cmdMatch?.[1]) {
+      const innerCmd = unquoteOuter(cmdMatch[1]);
+      const innerResult = evaluatePowerShellCommand(innerCmd, depth + 1);
+      if (innerResult.isDestructive) {
+        return innerResult;
+      }
+    }
+  }
+
+  const matchedPattern = matchDestructivePatterns(strippedCmd);
+  if (matchedPattern) {
+    return {
+      isDestructive: true,
+      reason: `High-risk PowerShell command matched: ${matchedPattern.source}`,
+    };
+  }
+
+  return { isDestructive: false };
+}
+
 /**
  * Evaluates whether a host tool action is destructive according to PR #44 audited behavior.
  */
@@ -46,17 +122,7 @@ export function isDestructiveHostAction(
   }
 
   if (tool === "host_run_powershell") {
-    const rawCmd = String(args?.command || "");
-    const strippedCmd = stripQuotedStrings(rawCmd);
-
-    for (const pattern of DESTRUCTIVE_POWERSHELL_PATTERNS) {
-      if (pattern.test(strippedCmd)) {
-        return {
-          isDestructive: true,
-          reason: `High-risk PowerShell command matched: ${pattern.source}`,
-        };
-      }
-    }
+    return evaluatePowerShellCommand(String(args?.command || ""));
   }
 
   return { isDestructive: false };
