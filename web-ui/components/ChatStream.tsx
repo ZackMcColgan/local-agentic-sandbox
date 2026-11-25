@@ -28,6 +28,8 @@ import { ExecutionTraceItem } from "./ExecutionTrace";
 import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
+import { deriveContextSegments, countCompactions } from "../lib/contextSegments";
+import { ContextSheet } from "./ContextSheet";
 import {
   RECONCILE_POLL_MAX_ATTEMPTS,
   reconcilePollDelayMs,
@@ -526,6 +528,14 @@ export function ChatStream({
   } | null>(null);
   const [isCompactingManually, setIsCompactingManually] = useState(false);
   const [showCompactionModal, setShowCompactionModal] = useState(false);
+  // #138: the context sheet opened by tapping the header meter pill on all
+  // surfaces (bottom sheet on mobile, centered dialog on desktop).
+  const [showContextSheet, setShowContextSheet] = useState(false);
+  const contextSegments = useMemo(
+    () => deriveContextSegments(messages, liveTurnTraces),
+    [messages, liveTurnTraces]
+  );
+  const contextCompactionCount = useMemo(() => countCompactions(messages), [messages]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -2155,6 +2165,24 @@ export function ChatStream({
             </div>
           )}
 
+          {/* #138 Context sheet: opened by tapping the header meter pill on all
+              surfaces — bottom sheet on mobile, centered dialog on desktop. */}
+          <ContextSheet
+            open={showContextSheet}
+            onClose={() => setShowContextSheet(false)}
+            usedTokens={displayContextTokens}
+            budgetTokens={contextStats.budgetTokens}
+            triggerTokens={85000}
+            segments={contextSegments}
+            lastRoundPromptTokens={recordContextTokens}
+            compactionCount={contextCompactionCount}
+            compaction={threadCompaction}
+            isStreaming={isTurnLive}
+            isCompacting={isCompactingManually}
+            onCompact={handleManualCompact}
+            onRestore={handleRestoreCompaction}
+          />
+
           {/* Image Lightbox Modal */}
           {previewModalImage && (
             <div
@@ -2266,10 +2294,15 @@ export function ChatStream({
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-              {/* Context Meter Pill - visible on both mobile and desktop */}
-              <div
+              {/* Context Meter Pill - tappable button on ALL surfaces (#138).
+                  Tap opens the Context sheet (bottom sheet on mobile, centered
+                  dialog on desktop). Desktop overflow item stays as is. */}
+              <button
+                type="button"
                 data-testid="context-meter-pill"
-                className="flex items-center gap-2 shrink-0"
+                onClick={() => setShowContextSheet(true)}
+                aria-label="Open context details"
+                className="flex items-center gap-2 shrink-0 min-h-[44px] px-1 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
                 title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
               >
                 <div className="flex flex-col gap-1">
@@ -2301,7 +2334,7 @@ export function ChatStream({
                     />
                   </div>
                 </div>
-              </div>
+              </button>
 
               {/* Model Chip Button: opens ModelBottomSheet on tap (Form A / Form B toggle — OWNER DECISION) */}
               <div className="flex items-center gap-1">
