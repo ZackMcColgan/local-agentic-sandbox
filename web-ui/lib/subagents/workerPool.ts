@@ -1203,8 +1203,6 @@ export class Semaphore {
   }
 }
 
-export const singleFlightSemaphore = new Semaphore(1);
-
 export class WorkerPool {
   private readonly maxConcurrency: number;
   private readonly semaphore: Semaphore;

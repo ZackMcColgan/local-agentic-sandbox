@@ -31,6 +31,12 @@ export const MAX_ASYNC_TIMEOUT_SECONDS = 3600;
 export const DEFAULT_ASYNC_TIMEOUT_SECONDS = 3600;
 const MAX_SPOOL_READ_BYTES = 256 * 1024;
 
+// Bounded retention for completed host job records and their spool logs:
+// terminal records older than this window are dropped and their spool files
+// deleted, so the jobs directory never grows without bound across restarts.
+export const COMPLETED_JOB_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const MAX_COMPLETED_JOB_RECORDS = 200;
+
 export function resolveAsyncTimeoutSeconds(
   args: Record<string, unknown> | undefined | null
 ): number {
@@ -72,7 +78,46 @@ export class JobStore {
       }
       this.records.set(rec.id, rec);
     }
-    if (changed) this.persist();
+    // Bounded retention: drop terminal records past the retention window and
+    // delete their spool logs so the jobs directory never grows without bound.
+    const pruned = this.pruneCompleted();
+    if (changed || pruned > 0) this.persist();
+  }
+
+  /**
+   * Drops terminal (done/failed/interrupted) records older than the retention
+   * window and enforces a hard cap on retained terminal records, deleting the
+   * corresponding spool files. Pending/running records are never touched.
+   * Returns the number of records removed.
+   */
+  pruneCompleted(now: number = Date.now()): number {
+    const terminal = Array.from(this.records.values())
+      .filter((r) => r.status === "done" || r.status === "failed" || r.status === "interrupted")
+      .sort((a, b) => (a.finishedAt ?? a.createdAt) - (b.finishedAt ?? b.createdAt));
+
+    const expired = terminal.filter(
+      (r) => (r.finishedAt ?? r.createdAt) < now - COMPLETED_JOB_RETENTION_MS
+    );
+    const survivors = terminal.filter((r) => !expired.includes(r));
+    // Cap: keep the newest MAX_COMPLETED_JOB_RECORDS terminal records.
+    const overCap =
+      survivors.length > MAX_COMPLETED_JOB_RECORDS
+        ? survivors.slice(0, survivors.length - MAX_COMPLETED_JOB_RECORDS)
+        : [];
+
+    let removed = 0;
+    for (const rec of [...expired, ...overCap]) {
+      this.records.delete(rec.id);
+      this.killFns.delete(rec.id);
+      for (const stream of ["stdout", "stderr"] as const) {
+        try {
+          fs.rmSync(this.spoolPath(rec.id, stream), { force: true });
+        } catch {}
+      }
+      removed++;
+    }
+    if (removed > 0) this.persist();
+    return removed;
   }
 
   registerKill(id: string, kill: () => void): void {
@@ -223,6 +268,7 @@ function runPowershellJob(store: JobStore, rec: JobRecord, effectiveCwd: string)
 
     proc.on("error", (err) => {
       clearTimeout(timer);
+      store.unregisterKill(rec.id);
       store.update(rec.id, {
         status: "failed",
         finishedAt: Date.now(),

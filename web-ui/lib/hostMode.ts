@@ -116,17 +116,6 @@ export function consumePendingApproval(
   return { status: decision, approval: entry };
 }
 
-export function resolvePendingApproval(
-  approvalId: string,
-  action: "approved" | "rejected"
-): HostApprovalRequest | null {
-  const res = consumePendingApproval(approvalId, action);
-  if (res.status === "approved" || res.status === "rejected") {
-    return res.approval;
-  }
-  return null;
-}
-
 export function recordContinuationEntry(
   entry: Omit<HostContinuationEntry, "createdAt" | "expiresAt">,
   now: number = Date.now()
@@ -166,7 +155,6 @@ export function consumeContinuationEntry(
 }
 
 export {
-  stripQuotedStrings,
   DESTRUCTIVE_POWERSHELL_PATTERNS,
   isDestructiveHostAction,
   type DestructiveCheckResult,
@@ -175,8 +163,6 @@ export {
 export function getHostRunnerBaseUrl(): string {
   return process.env.HOST_RUNNER_URL || "http://127.0.0.1:8765";
 }
-
-export const HOST_RUNNER_BASE_URL = process.env.HOST_RUNNER_URL || "http://127.0.0.1:8765";
 
 export async function checkHostRunnerHealth(): Promise<boolean> {
   try {

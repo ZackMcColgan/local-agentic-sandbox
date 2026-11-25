@@ -48,7 +48,7 @@ _Figure 2.1: Full-stack zero-trust architecture across Kubernetes namespace `loc
 │   │   Web UI & Agent Orchestrator (Deployment / Service: web-ui:3000 / NodePort 30300)        │   │
 │   │   - Next.js 15 / React 19 / TypeScript / Tailwind CSS                                     │   │
 │   │   - Model & Thinking Effort: [ Flash-Next / Swift-1.5 · Fast / Balanced / Deep ]          │   │
-│   │   - Multimodal Vision Ingestion Pipeline (visionProcessor.ts -> Strata vision)            │   │
+│   │   - Multimodal Vision Ingestion (image parts via LLM provider on chat route)                │   │
 │   │   - Durable Server-Side Persistence (threadStore.ts + SQLite runLedger.ts)                │   │
 │   │   - OpenTelemetry Instrumentation SDK (telemetry.ts -> Jaeger trace waterfall)            │   │
 │   │   - Local Inference via Host Strata Engine (ROCm/HIP, 128K Context)                       │   │
@@ -230,7 +230,7 @@ local-agentic-sandbox/
 │   │   ├── subagents/llmClient.ts      # Scoped context scaling & <think> stream parser
 │   │   ├── telemetry.ts                # OpenTelemetry SDK span generation & Jaeger export
 │   │   ├── toolParser.ts               # XML/JSON tool call extractor & tag cleaner
-│   │   └── visionProcessor.ts          # Multimodal diagram ingestion pipeline
+│   │   └── subagents/morningReport.ts  # Morning report & drain report markdown formatting
 │   └── tests/                          # 1,930 unit and contract tests across 283 files
 └── workspace/                          # Sandboxed host directory mounted to /workspace:rw
 ```

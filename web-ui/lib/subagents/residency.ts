@@ -122,11 +122,6 @@ export function evictionOrder(plan: ResidencyPlan, loaded: string[], incoming: s
   return [...transientLoaded, ...nonRoster, ...pinnedLoaded];
 }
 
-export function resolveVramBudgetBytes(): number {
-  const gb = Number(process.env.MODEL_RESIDENCY_VRAM_GB);
-  return Math.round((Number.isFinite(gb) && gb > 0 ? gb : 16) * 1024 ** 3);
-}
-
 /** Reads model sizes from Ollama /api/tags or LlamaCpp /v1/models. Normalizes model names by stripping :latest. */
 export async function fetchModelSizes(
   baseUrl: string,

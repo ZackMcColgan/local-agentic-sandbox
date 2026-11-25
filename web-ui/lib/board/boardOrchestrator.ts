@@ -1242,7 +1242,3 @@ export function extractJobOutcomeMetadata(
 
   return result;
 }
-
-export async function runBoardDrain(deps: BoardOrchestratorDeps): Promise<DrainReport> {
-  return new BoardOrchestrator(deps).drain();
-}

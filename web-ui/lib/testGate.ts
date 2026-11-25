@@ -1206,6 +1206,15 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/chatTurnEngine.test.ts"],
   },
   {
+    // Board #62: dead-code removal (visionProcessor.ts + zero-caller exports) and
+    // JobStore spawn-error unregisterKill + bounded completed-record/spool pruning.
+    match: (p) =>
+      p.includes("lib/visionProcessor") ||
+      p.includes("host-bridge/jobStore") ||
+      p.includes("deadCodeCleanupJobStoreRetention.test.ts"),
+    tests: ["tests/deadCodeCleanupJobStoreRetention.test.ts"],
+  },
+  {
     match: (p) =>
       p.includes("host-bridge/multiRead") ||
       p.includes("host-bridge/server") ||
@@ -1541,7 +1550,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/retryAfter.test.ts"],
   },
   {
-    match: (p) => p.includes("lib/fileParser") || p.includes("lib/visionProcessor"),
+    match: (p) => p.includes("lib/fileParser"),
     tests: ["tests/fileParser.test.ts"],
   },
   // Ingestion
