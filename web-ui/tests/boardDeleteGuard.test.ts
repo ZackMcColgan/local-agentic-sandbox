@@ -257,7 +257,8 @@ describe("Board item delete UI — inline confirmation", () => {
       await flushEffects();
       assert.ok(
         calls.some(
-          (c) => c.method === "DELETE" && c.url.includes("/api/board") && c.url.includes("item-done")
+          (c) =>
+            c.method === "DELETE" && c.url.includes("/api/board") && c.url.includes("item-done")
         ),
         "Confirming must send DELETE for the item"
       );
