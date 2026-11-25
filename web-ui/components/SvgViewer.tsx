@@ -505,19 +505,6 @@ export function SvgViewer({
 }
 
 /**
- * File link card for markdown links pointing to SVG files
- */
-export function SvgFileCard({ src, alt, title }: { src: string; alt?: string; title?: string }) {
-  const displayTitle = title || alt || src.split("/").pop() || "Vector Graphic";
-
-  return (
-    <div className="my-3">
-      <SvgViewer url={src} title={displayTitle} initialTab="preview" allowFullscreen={true} />
-    </div>
-  );
-}
-
-/**
  * Interactive chip/link for markdown links pointing to SVG files
  */
 export function SvgFileLink({

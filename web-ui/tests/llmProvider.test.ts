@@ -942,19 +942,6 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       );
     });
 
-    it("web-ui/lib/visionProcessor.ts uses getLLMProvider().chat instead of raw /api/chat", () => {
-      const visionPath = path.resolve(__dirname, "../lib/visionProcessor.ts");
-      const content = fs.readFileSync(visionPath, "utf8");
-      assert.ok(
-        !content.includes("/api/chat"),
-        "web-ui/lib/visionProcessor.ts must not contain raw /api/chat calls"
-      );
-      assert.ok(
-        content.includes("getLLMProvider().chat("),
-        "extractArchitectureSpec must delegate to getLLMProvider().chat"
-      );
-    });
-
     it("residency helpers (fetchModelSizes, fetchLoadedModels, unloadAllModels) avoid /api/tags and /api/ps when LLM_ENGINE=llamacpp", async () => {
       process.env.LLM_ENGINE = "llamacpp";
       const calledUrls: string[] = [];

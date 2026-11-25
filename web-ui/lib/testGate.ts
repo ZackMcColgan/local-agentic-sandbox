@@ -1541,7 +1541,7 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/retryAfter.test.ts"],
   },
   {
-    match: (p) => p.includes("lib/fileParser") || p.includes("lib/visionProcessor"),
+    match: (p) => p.includes("lib/fileParser"),
     tests: ["tests/fileParser.test.ts"],
   },
   // Ingestion

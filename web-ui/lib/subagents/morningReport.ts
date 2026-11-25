@@ -520,10 +520,6 @@ export function formatOvernightMorningReportMarkdown(report: OvernightMorningRep
 
 let cachedCanonicalDir: string | null = null;
 
-export function resetCanonicalCheckpointDirCache(): void {
-  cachedCanonicalDir = null;
-}
-
 export function getCanonicalCheckpointDir(): string {
   if (process.env.AGENT_CHECKPOINT_DIR) return path.resolve(process.env.AGENT_CHECKPOINT_DIR);
   if (process.env.CHECKPOINT_DIR) return path.resolve(process.env.CHECKPOINT_DIR);
