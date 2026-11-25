@@ -220,3 +220,67 @@ describe("#138 segment derivation from existing estimates", () => {
     assert.equal(countCompactions([]), 0);
   });
 });
+
+describe("#138 follow-ups (UI-109/UI-110): fresh-chat coherence and compact feedback", () => {
+  function renderSheet(props: React.ComponentProps<typeof ContextSheet>) {
+    return renderToString(React.createElement(ContextSheet, props));
+  }
+
+  const baseFresh = {
+    open: true,
+    onClose: () => {},
+    usedTokens: 1900,
+    budgetTokens: 100000,
+    triggerTokens: 85000,
+    segments: { toolResults: 0, conversation: 0, system: 0 },
+    lastRoundPromptTokens: 0,
+    compactionCount: 0,
+    compaction: null,
+    isStreaming: false,
+    isCompacting: false,
+    onCompact: () => {},
+    onRestore: () => {},
+  };
+
+  it("UI-109: the unaccounted baseline lands in System so the breakdown sums to the total", () => {
+    const html = renderSheet(baseFresh);
+    const sysIdx = html.indexOf("System");
+    assert.ok(sysIdx > 0, "system row must render");
+    assert.ok(
+      html.slice(sysIdx, sysIdx + 400).includes("1.9K"),
+      "system row must carry the residual (total minus raw segments)"
+    );
+  });
+
+  it("UI-109: the Last round chip is hidden until a round exists", () => {
+    const html = renderSheet(baseFresh);
+    assert.ok(!html.includes("Last round"), "no last-round chip on a fresh chat");
+  });
+
+  it("UI-110: a successful compact shows the before -> after verdict in the sheet", () => {
+    const html = renderSheet({
+      ...baseFresh,
+      usedTokens: 12100,
+      lastRoundPromptTokens: 12100,
+      compactResult: { ok: true, tokensBefore: 31400, tokensAfter: 12100 },
+    });
+    assert.ok(html.includes("context-sheet-compact-result"), "result line must render");
+    assert.ok(html.includes("Compacted:"), "success verdict label");
+    assert.ok(html.includes("31.4K"), "tokens before");
+    assert.ok(html.includes("12.1K"), "tokens after");
+  });
+
+  it("UI-110: a failed compact shows the error in the sheet, not only the console", () => {
+    const html = renderSheet({
+      ...baseFresh,
+      compactResult: { ok: false, error: "Nothing to compact yet" },
+    });
+    assert.ok(html.includes("context-sheet-compact-result"), "result line must render");
+    assert.ok(html.includes("Nothing to compact yet"), "error text must be visible");
+  });
+
+  it("UI-110: no result line before the first compact run", () => {
+    const html = renderSheet(baseFresh);
+    assert.ok(!html.includes("context-sheet-compact-result"), "no verdict before any run");
+  });
+});

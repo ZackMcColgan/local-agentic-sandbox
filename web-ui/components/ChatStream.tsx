@@ -531,6 +531,15 @@ export function ChatStream({
   // #139: in-place composer notice for the /compact slash command (tokens
   // before -> after on success, error text on failure). Cleared on next send.
   const [compactCommandNotice, setCompactCommandNotice] = useState<string | null>(null);
+  // UI-110: verdict of the sheet's own Compact action, rendered inside the
+  // sheet (the handler previously discarded it — failures were console-only
+  // and success changed nothing visible).
+  const [sheetCompactResult, setSheetCompactResult] = useState<{
+    ok: boolean;
+    tokensBefore?: number;
+    tokensAfter?: number;
+    error?: string;
+  } | null>(null);
   const [showCompactionModal, setShowCompactionModal] = useState(false);
   // #138: the context sheet opened by tapping the header meter pill on all
   // surfaces (bottom sheet on mobile, centered dialog on desktop).
@@ -1029,6 +1038,7 @@ export function ChatStream({
 
   const handleManualCompact = async () => {
     const result = await runManualCompaction();
+    setSheetCompactResult(result);
     if (!result.ok) {
       console.error("Manual compaction failed:", result.error);
     }
@@ -2237,7 +2247,10 @@ export function ChatStream({
               surfaces — bottom sheet on mobile, centered dialog on desktop. */}
           <ContextSheet
             open={showContextSheet}
-            onClose={() => setShowContextSheet(false)}
+            onClose={() => {
+              setShowContextSheet(false);
+              setSheetCompactResult(null);
+            }}
             usedTokens={displayContextTokens}
             budgetTokens={contextStats.budgetTokens}
             triggerTokens={85000}
@@ -2249,6 +2262,7 @@ export function ChatStream({
             isCompacting={isCompactingManually}
             onCompact={handleManualCompact}
             onRestore={handleRestoreCompaction}
+            compactResult={sheetCompactResult}
           />
 
           {/* Image Lightbox Modal */}
@@ -2368,7 +2382,10 @@ export function ChatStream({
               <button
                 type="button"
                 data-testid="context-meter-pill"
-                onClick={() => setShowContextSheet(true)}
+                onClick={() => {
+                  setSheetCompactResult(null);
+                  setShowContextSheet(true);
+                }}
                 aria-label="Open context details"
                 className="flex items-center gap-2 shrink-0 min-h-[44px] px-1 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
                 title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}

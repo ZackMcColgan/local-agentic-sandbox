@@ -19,6 +19,14 @@ export interface ContextSheetCompaction {
   tokensAfter: number;
 }
 
+/** Outcome of the sheet's own Compact action, surfaced in place (UI-110). */
+export interface ContextSheetCompactResult {
+  ok: boolean;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  error?: string;
+}
+
 interface ContextSheetProps {
   open: boolean;
   onClose: () => void;
@@ -36,6 +44,8 @@ interface ContextSheetProps {
   isCompacting: boolean;
   onCompact: () => void;
   onRestore: () => void;
+  /** Verdict of the last Compact run from this sheet; null before the first. */
+  compactResult?: ContextSheetCompactResult | null;
 }
 
 function SegmentRow({ label, tokens, budget }: { label: string; tokens: number; budget: number }) {
@@ -74,7 +84,15 @@ export function ContextSheet(props: ContextSheetProps) {
     isCompacting,
     onCompact,
     onRestore,
+    compactResult,
   } = props;
+
+  // UI-109: the meter total includes the system prompt + tool definitions,
+  // which never appear as messages, so the raw segments under-count on fresh
+  // chats (all-zero rows under a nonzero total). Attribute the unaccounted
+  // residual to System so the breakdown sums to the displayed total.
+  const rawSegmentSum = segments.toolResults + segments.conversation + segments.system;
+  const systemDisplayTokens = segments.system + Math.max(0, usedTokens - rawSegmentSum);
 
   const percent = budgetTokens > 0 ? Math.round((usedTokens / budgetTokens) * 100) : 0;
   const freeTokens = Math.max(0, budgetTokens - usedTokens);
@@ -148,14 +166,16 @@ export function ContextSheet(props: ContextSheetProps) {
         <div className="space-y-2 pt-2">
           <SegmentRow label="Tool results" tokens={segments.toolResults} budget={budgetTokens} />
           <SegmentRow label="Conversation" tokens={segments.conversation} budget={budgetTokens} />
-          <SegmentRow label="System" tokens={segments.system} budget={budgetTokens} />
+          <SegmentRow label="System" tokens={systemDisplayTokens} budget={budgetTokens} />
         </div>
 
         {/* Row 7: chips — last round, compactions */}
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
-            Last round {formatContextK(lastRoundPromptTokens)}
-          </span>
+          {lastRoundPromptTokens > 0 && (
+            <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
+              Last round {formatContextK(lastRoundPromptTokens)}
+            </span>
+          )}
           <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
             Compactions{" "}
             <span className="font-mono text-slate-900 dark:text-zinc-100">{compactionCount}</span>
@@ -208,6 +228,24 @@ export function ContextSheet(props: ContextSheetProps) {
         {compactReason && (
           <p className="text-[11px] text-slate-600 dark:text-zinc-300">{compactReason}</p>
         )}
+        {compactResult &&
+          (compactResult.ok ? (
+            <p
+              data-testid="context-sheet-compact-result"
+              className="text-[11px] font-semibold text-emerald-600 dark:text-[#10b981]"
+            >
+              {compactResult.tokensBefore != null && compactResult.tokensAfter != null
+                ? `Compacted: ${formatContextK(compactResult.tokensBefore)} \u2192 ${formatContextK(compactResult.tokensAfter)} tokens`
+                : "History compacted"}
+            </p>
+          ) : (
+            <p
+              data-testid="context-sheet-compact-result"
+              className="text-[11px] font-semibold text-rose-600 dark:text-[#f87171]"
+            >
+              {compactResult.error ?? "Compaction failed"}
+            </p>
+          ))}
       </div>
     </div>
   );
