@@ -5,7 +5,11 @@ import path from "path";
 import React from "react";
 import { renderToString } from "react-dom/server";
 import { ContextSheet } from "../components/ContextSheet";
-import { deriveContextSegments, countCompactions } from "../lib/contextSegments";
+import {
+  deriveContextSegments,
+  countCompactions,
+  fitSegmentsToTotal,
+} from "../lib/contextSegments";
 
 // Board #138 (owner directive, Nov 25 2026): the header context meter pill is
 // a TAP TARGET on every surface. Tapping opens one Context sheet (bottom sheet
@@ -282,5 +286,30 @@ describe("#138 follow-ups (UI-109/UI-110): fresh-chat coherence and compact feed
   it("UI-110: no result line before the first compact run", () => {
     const html = renderSheet(baseFresh);
     assert.ok(!html.includes("context-sheet-compact-result"), "no verdict before any run");
+  });
+});
+
+describe("fitSegmentsToTotal: the breakdown always sums to the displayed total", () => {
+  it("under-count (fresh chat): residual lands in System", () => {
+    const fitted = fitSegmentsToTotal({ toolResults: 0, conversation: 0, system: 0 }, 1900);
+    assert.equal(fitted.system, 1900);
+    assert.equal(fitted.toolResults + fitted.conversation + fitted.system, 1900);
+  });
+
+  it("exact match: segments pass through unchanged", () => {
+    const seg = { toolResults: 40000, conversation: 28000, system: 4400 };
+    assert.deepEqual(fitSegmentsToTotal(seg, 72400), seg);
+  });
+
+  it("over-count (long thread): proportional scale-down, exact sum", () => {
+    const fitted = fitSegmentsToTotal({ toolResults: 50100, conversation: 1400, system: 0 }, 31400);
+    assert.equal(fitted.toolResults + fitted.conversation + fitted.system, 31400);
+    assert.ok(fitted.toolResults < 50100, "tool results scale down below the raw size");
+    assert.ok(fitted.toolResults > 30000, "the largest segment keeps its dominance");
+  });
+
+  it("zero total: segments pass through (nothing to fit to)", () => {
+    const seg = { toolResults: 10, conversation: 5, system: 1 };
+    assert.deepEqual(fitSegmentsToTotal(seg, 0), seg);
   });
 });

@@ -3,7 +3,7 @@
 import React from "react";
 import { X, Sparkles } from "lucide-react";
 import { formatContextK } from "../lib/tokenEconomics";
-import type { ContextSegments } from "../lib/contextSegments";
+import { fitSegmentsToTotal, type ContextSegments } from "../lib/contextSegments";
 
 // Board #138 (owner directive, Nov 25 2026): the context sheet. ONE component
 // that renders as a bottom sheet on mobile (< md:) and a centered dialog on
@@ -87,12 +87,11 @@ export function ContextSheet(props: ContextSheetProps) {
     compactResult,
   } = props;
 
-  // UI-109: the meter total includes the system prompt + tool definitions,
-  // which never appear as messages, so the raw segments under-count on fresh
-  // chats (all-zero rows under a nonzero total). Attribute the unaccounted
-  // residual to System so the breakdown sums to the displayed total.
-  const rawSegmentSum = segments.toolResults + segments.conversation + segments.system;
-  const systemDisplayTokens = segments.system + Math.max(0, usedTokens - rawSegmentSum);
+  // UI-109 + owner ruling (Nov 25 2026): the breakdown must sum to the
+  // displayed total in both directions — residual to System when the raw
+  // segments under-count (fresh chats), proportional scale-down when they
+  // over-count (fitted/elided long threads).
+  const fittedSegments = fitSegmentsToTotal(segments, usedTokens);
 
   const percent = budgetTokens > 0 ? Math.round((usedTokens / budgetTokens) * 100) : 0;
   const freeTokens = Math.max(0, budgetTokens - usedTokens);
@@ -164,9 +163,17 @@ export function ContextSheet(props: ContextSheetProps) {
 
         {/* Rows 4-6: segment bars, one idea per row */}
         <div className="space-y-2 pt-2">
-          <SegmentRow label="Tool results" tokens={segments.toolResults} budget={budgetTokens} />
-          <SegmentRow label="Conversation" tokens={segments.conversation} budget={budgetTokens} />
-          <SegmentRow label="System" tokens={systemDisplayTokens} budget={budgetTokens} />
+          <SegmentRow
+            label="Tool results"
+            tokens={fittedSegments.toolResults}
+            budget={budgetTokens}
+          />
+          <SegmentRow
+            label="Conversation"
+            tokens={fittedSegments.conversation}
+            budget={budgetTokens}
+          />
+          <SegmentRow label="System" tokens={fittedSegments.system} budget={budgetTokens} />
         </div>
 
         {/* Row 7: chips — last round, compactions */}

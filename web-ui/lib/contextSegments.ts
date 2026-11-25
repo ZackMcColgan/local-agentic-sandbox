@@ -51,6 +51,38 @@ export function deriveContextSegments(
 }
 
 /**
+ * Fits the raw segments to the displayed context total so the sheet's
+ * breakdown always sums to the number at the top (owner ruling, Nov 25
+ * 2026: the total must match the sub-sections). Two directions:
+ * - Raw sum BELOW the total (fresh chats): the meter total includes the
+ *   system prompt + tool definitions, which never appear as messages; the
+ *   unaccounted residual belongs to System.
+ * - Raw sum ABOVE the total (long threads): the raw per-message estimates
+ *   exceed the last round's actual prompt tokens (the served context is
+ *   fitted/elided), so each segment scales down proportionally; rounding
+ *   remainder lands on the largest segment so the fit is exact.
+ */
+export function fitSegmentsToTotal(segments: ContextSegments, usedTokens: number): ContextSegments {
+  const rawSum = segments.toolResults + segments.conversation + segments.system;
+  if (usedTokens <= 0 || rawSum === usedTokens) return { ...segments };
+  if (rawSum < usedTokens) {
+    return { ...segments, system: segments.system + (usedTokens - rawSum) };
+  }
+  const factor = usedTokens / rawSum;
+  const fitted = {
+    toolResults: Math.floor(segments.toolResults * factor),
+    conversation: Math.floor(segments.conversation * factor),
+    system: Math.floor(segments.system * factor),
+  };
+  let remainder = usedTokens - (fitted.toolResults + fitted.conversation + fitted.system);
+  const largest = (Object.keys(fitted) as Array<keyof ContextSegments>).sort(
+    (a, b) => fitted[b] - fitted[a]
+  )[0];
+  fitted[largest] += remainder;
+  return fitted;
+}
+
+/**
  * Compaction count from the records the client already holds: per-message
  * compactedThisTurn flags plus the per-turn tokenEconomics rollups.
  */
