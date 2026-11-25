@@ -1,6 +1,6 @@
 /**
- * Board #139: /compact composer slash command (industry-standard, Claude Code
- * and peers). Matches ONLY the trimmed, case-insensitive exact token
+ * Board #139: /compact composer slash command (industry-standard). Matches
+ * ONLY the trimmed, case-insensitive exact token
  * "/compact" — anything longer (e.g. "/compact please", "run /compact now")
  * is a normal chat message and must send byte-identical.
  */
