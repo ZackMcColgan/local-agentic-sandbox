@@ -7,7 +7,8 @@ import type { ContextSegments } from "../lib/contextSegments";
 
 // Board #138 (owner directive, Nov 25 2026): the context sheet. ONE component
 // that renders as a bottom sheet on mobile (< md:) and a centered dialog on
-// desktop. Design locks: pure #000000 canvas, emerald #10b981 as the only
+// desktop. Design locks: follows the app theme (dark canvas pure #000000,
+// light canvas white), emerald #10b981 as the only
 // accent, rose reserved for the 85K auto-compact trigger tick, text zinc-400
 // or brighter, 44px minimum touch targets, one idea per row.
 
@@ -41,14 +42,16 @@ function SegmentRow({ label, tokens, budget }: { label: string; tokens: number; 
   const pct = budget > 0 ? Math.min(100, Math.round((tokens / budget) * 100)) : 0;
   return (
     <div className="flex items-center gap-3">
-      <span className="w-24 shrink-0 text-xs font-medium text-zinc-300">{label}</span>
-      <div className="h-[6px] flex-1 rounded-[3px] bg-zinc-800">
+      <span className="w-24 shrink-0 text-xs font-medium text-slate-700 dark:text-zinc-300">
+        {label}
+      </span>
+      <div className="h-[6px] flex-1 rounded-[3px] bg-slate-200 dark:bg-zinc-800">
         <div
           className="h-full rounded-[3px] bg-[#10b981]"
           style={{ width: `${pct}%`, minWidth: tokens > 0 ? "4px" : "0px" }}
         />
       </div>
-      <span className="w-14 shrink-0 text-right font-mono text-[11px] text-zinc-300">
+      <span className="w-14 shrink-0 text-right font-mono text-[11px] text-slate-600 dark:text-zinc-300">
         {formatContextK(tokens)}
       </span>
     </div>
@@ -92,17 +95,17 @@ export function ContextSheet(props: ContextSheetProps) {
         aria-modal="true"
         aria-label="Context"
         data-testid="context-sheet"
-        className="relative w-full md:w-[420px] md:max-w-full bg-black border border-zinc-800 rounded-t-2xl md:rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+        className="relative w-full md:w-[420px] md:max-w-full bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 rounded-t-2xl md:rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Row 1: title + close */}
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-          <h3 className="text-sm font-bold text-zinc-100">Context</h3>
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-3">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">Context</h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close context sheet"
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-zinc-300 hover:text-zinc-100"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 dark:text-zinc-300 dark:hover:text-zinc-100"
           >
             <X className="h-4 w-4" />
           </button>
@@ -110,10 +113,10 @@ export function ContextSheet(props: ContextSheetProps) {
 
         {/* Row 2: big used / budget readout */}
         <div className="flex items-baseline justify-between">
-          <span className="font-mono text-2xl font-semibold text-zinc-100">
+          <span className="font-mono text-2xl font-semibold text-slate-900 dark:text-zinc-100">
             {formatContextK(usedTokens)}
           </span>
-          <span className="font-mono text-sm text-zinc-300">
+          <span className="font-mono text-sm text-slate-600 dark:text-zinc-300">
             {`/ ${Math.round(budgetTokens / 1000)}K · ${percent}% · ${formatContextK(freeTokens)} free`}
           </span>
         </div>
@@ -121,7 +124,7 @@ export function ContextSheet(props: ContextSheetProps) {
         {/* Row 3: bar with the rose 85K trigger tick */}
         <div
           data-testid="context-sheet-bar"
-          className="relative h-[8px] w-full rounded-[4px] bg-zinc-800"
+          className="relative h-[8px] w-full rounded-[4px] bg-slate-200 dark:bg-zinc-800"
         >
           <div
             className="h-full rounded-[4px] bg-[#10b981]"
@@ -150,35 +153,38 @@ export function ContextSheet(props: ContextSheetProps) {
 
         {/* Row 7: chips — last round, compactions */}
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-full border border-zinc-800 text-xs font-medium text-zinc-300">
+          <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
             Last round {formatContextK(lastRoundPromptTokens)}
           </span>
-          <span className="px-3 py-1.5 rounded-full border border-zinc-800 text-xs font-medium text-zinc-300">
-            Compactions <span className="font-mono text-zinc-100">{compactionCount}</span>
+          <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
+            Compactions{" "}
+            <span className="font-mono text-slate-900 dark:text-zinc-100">{compactionCount}</span>
           </span>
         </div>
 
         {/* Row 8: last-compaction card (only when a boundary exists) */}
         {compaction && (
-          <div className="rounded-xl border border-zinc-800 p-3 space-y-2">
+          <div className="rounded-xl border border-slate-200 dark:border-zinc-800 p-3 space-y-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-3.5 w-3.5 text-[#10b981]" />
-              <span className="text-xs font-semibold text-zinc-200">Last compaction</span>
+              <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                Last compaction
+              </span>
             </div>
-            <div className="flex justify-between font-mono text-[11px] text-zinc-300">
+            <div className="flex justify-between font-mono text-[11px] text-slate-600 dark:text-zinc-300">
               <span>
                 {compaction.tokensBefore} → {compaction.tokensAfter} tokens
               </span>
               <span>{new Date(compaction.compactedAt).toLocaleString()}</span>
             </div>
-            <pre className="max-h-40 overflow-y-auto p-2 rounded-lg bg-zinc-900 font-mono text-[11px] whitespace-pre-wrap text-zinc-300 border border-zinc-800">
+            <pre className="max-h-40 overflow-y-auto p-2 rounded-lg bg-slate-100 dark:bg-zinc-900 font-mono text-[11px] whitespace-pre-wrap text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-800">
               {compaction.summary}
             </pre>
           </div>
         )}
 
         {/* Row 9: actions */}
-        <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+        <div className="flex items-center gap-2 pt-2 border-t border-slate-200 dark:border-zinc-800">
           <button
             type="button"
             data-testid="context-sheet-compact"
@@ -199,7 +205,9 @@ export function ContextSheet(props: ContextSheetProps) {
             </button>
           )}
         </div>
-        {compactReason && <p className="text-[11px] text-zinc-300">{compactReason}</p>}
+        {compactReason && (
+          <p className="text-[11px] text-slate-600 dark:text-zinc-300">{compactReason}</p>
+        )}
       </div>
     </div>
   );
