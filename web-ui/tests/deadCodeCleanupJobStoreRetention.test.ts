@@ -21,7 +21,20 @@ describe("dead code removal (Phase 1.2 census)", () => {
 
   it("no production or gate references to visionProcessor remain", () => {
     const gate = read("lib/testGate.ts");
-    assert.ok(!gate.includes("visionProcessor"), "testGate.ts must not reference visionProcessor");
+    // The old fileParser/visionProcessor coupling must be gone; the only remaining
+    // gate reference is the dedicated #62 dead-code rule mapping to this suite.
+    assert.ok(
+      !gate.includes('p.includes("lib/fileParser") || p.includes("lib/visionProcessor")'),
+      "testGate.ts must not couple fileParser to visionProcessor"
+    );
+    assert.ok(
+      gate.includes('p.includes("lib/visionProcessor")'),
+      "testGate.ts must map the deleted visionProcessor.ts to the #62 suite"
+    );
+    assert.ok(
+      gate.includes("tests/deadCodeCleanupJobStoreRetention.test.ts"),
+      "testGate.ts must map #62 changes to the dead-code/retention suite"
+    );
     const llmTest = read("tests/llmProvider.test.ts");
     assert.ok(
       !llmTest.includes("visionProcessor"),
