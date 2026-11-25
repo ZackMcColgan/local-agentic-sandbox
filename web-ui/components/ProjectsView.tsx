@@ -1003,8 +1003,8 @@ export function ProjectsView({
                         >
                           <option value="node:22">node:22</option>
                           <option value="python:3.12">python:3.12</option>
-                          <option value="golang:1.23">golang:1.23</option>
-                          <option value="rust:1.80">rust:1.80</option>
+                          <option value="golang:1.24">golang:1.24</option>
+                          <option value="rust:1.88">rust:1.88</option>
                         </select>
                       </div>
 
@@ -1065,8 +1065,8 @@ export function ProjectsView({
                     >
                       <option value="node:22">node:22</option>
                       <option value="python:3.12">python:3.12</option>
-                      <option value="golang:1.23">golang:1.23</option>
-                      <option value="rust:1.80">rust:1.80</option>
+                      <option value="golang:1.24">golang:1.24</option>
+                      <option value="rust:1.88">rust:1.88</option>
                     </select>
                   </div>
 
@@ -1145,8 +1145,8 @@ export function ProjectsView({
                       >
                         <option value="node:22">node:22</option>
                         <option value="python:3.12">python:3.12</option>
-                        <option value="golang:1.23">golang:1.23</option>
-                        <option value="rust:1.80">rust:1.80</option>
+                        <option value="golang:1.24">golang:1.24</option>
+                        <option value="rust:1.88">rust:1.88</option>
                       </select>
                     </div>
                   </div>

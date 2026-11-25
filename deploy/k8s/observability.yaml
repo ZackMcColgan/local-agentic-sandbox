@@ -18,6 +18,10 @@ spec:
         app: otel-collector
         tier: observability
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: otel-collector
           image: jaegertracing/all-in-one:1.53

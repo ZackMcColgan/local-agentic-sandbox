@@ -1086,6 +1086,19 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("tests/kustomizeManifests"),
     tests: ["tests/kustomizeManifests.test.ts"],
   },
+  // Dockerfile base-image digest pinning & k8s manifest hardening (board #60):
+  // every FROM line pinned to @sha256, Go >= 1.24 / Rust >= 1.85 builders,
+  // Node aligned to .nvmrc, root .dockerignore, hardened otel-collector pod
+  // securityContext, digest-pinned qdrant initContainer.
+  {
+    match: (p) =>
+      p.includes("Dockerfile") ||
+      p.includes(".dockerignore") ||
+      p.includes("deploy/k8s/observability") ||
+      p.includes("deploy/k8s/qdrant") ||
+      p.includes("dockerBaseImagePinning"),
+    tests: ["tests/dockerBaseImagePinning.test.ts"],
+  },
   // Artifact canvas (uir-2): core logic, pane, and its card affordances
   {
     match: (p) =>

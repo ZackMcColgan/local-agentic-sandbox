@@ -1,0 +1,12 @@
+# Docker build context hygiene: keep local build/test artifacts out of every
+# image build. Dependencies are installed inside the image (npm ci), so the
+# host node_modules tree must never cross into the build context.
+node_modules
+.git
+test-results
+playwright-report
+playwright-live-report
+.agent
+docs
+*.tmp
+coverage

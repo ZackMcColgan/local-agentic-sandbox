@@ -312,7 +312,7 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
       }
     });
 
-    it("ProjectsView toolchain options match the repo builder Dockerfiles (node:22, python:3.12, golang:1.23, rust:1.80)", () => {
+    it("ProjectsView toolchain options match the repo builder Dockerfiles (node:22, python:3.12, golang:1.24, rust:1.88)", () => {
       const sourcePath = fs.existsSync(
         path.resolve(process.cwd(), "web-ui/components/ProjectsView.tsx")
       )
@@ -327,12 +327,12 @@ describe("PHASE 1: Projects Registry, Allowlist Gate & Read-Only Explorer", () =
         "Expected python:3.12 matching deploy/builder-python/Dockerfile"
       );
       assert.ok(
-        src.includes("golang:1.23"),
-        "Expected golang:1.23 matching deploy/builder-go/Dockerfile"
+        src.includes("golang:1.24"),
+        "Expected golang:1.24 matching deploy/builder-go/Dockerfile"
       );
       assert.ok(
-        src.includes("rust:1.80"),
-        "Expected rust:1.80 matching deploy/builder-rust/Dockerfile"
+        src.includes("rust:1.88"),
+        "Expected rust:1.88 matching deploy/builder-rust/Dockerfile"
       );
     });
   });
