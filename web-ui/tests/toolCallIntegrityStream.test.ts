@@ -151,8 +151,7 @@ describe("tool-call integrity: stubbed-stream round-loop behavior", () => {
       { content: `Let me search. ${markup}` },
       { content: markup },
       {
-        content:
-          "SHOULD NEVER BE REACHED — a second consecutive markup failure must end the turn.",
+        content: "SHOULD NEVER BE REACHED — a second consecutive markup failure must end the turn.",
       },
     ]);
     server = mock.server;
@@ -164,11 +163,7 @@ describe("tool-call integrity: stubbed-stream round-loop behavior", () => {
     );
 
     // Exactly two LLM rounds: offense 1 -> repair re-prompt; offense 2 -> end turn.
-    assert.equal(
-      mock.requestBodies.length,
-      2,
-      "must re-prompt once and end on the second offense"
-    );
+    assert.equal(mock.requestBodies.length, 2, "must re-prompt once and end on the second offense");
 
     // The repair directive must be present in the second request's messages.
     const secondMessages = mock.requestBodies[1].messages as Array<{
@@ -185,10 +180,7 @@ describe("tool-call integrity: stubbed-stream round-loop behavior", () => {
       .filter((e) => e.type === "token")
       .map((e) => String(e.content ?? ""))
       .join("");
-    assert.ok(
-      streamedText.includes(TURN_TOOL_MARKUP_MARKER),
-      "marker must be streamed live"
-    );
+    assert.ok(streamedText.includes(TURN_TOOL_MARKUP_MARKER), "marker must be streamed live");
 
     const assistant = thread?.messages.find((m) => m.role === "assistant");
     assert.ok(assistant, "assistant message must be persisted");
@@ -196,11 +188,7 @@ describe("tool-call integrity: stubbed-stream round-loop behavior", () => {
       assistant.content.includes(TURN_TOOL_MARKUP_MARKER),
       "marker must be in persisted content"
     );
-    assert.equal(
-      assistant.status,
-      "incomplete",
-      "markup-failed turn must be stamped incomplete"
-    );
+    assert.equal(assistant.status, "incomplete", "markup-failed turn must be stamped incomplete");
   });
 
   it("a normal tool round is untouched by the markup fence", async () => {
@@ -214,10 +202,7 @@ describe("tool-call integrity: stubbed-stream round-loop behavior", () => {
     server = mock.server;
     process.env.LLM_BASE_URL = mock.baseUrl;
 
-    const { events, thread } = await runTurn(
-      "thread-normal-round",
-      "Inspect the workspace tree."
-    );
+    const { events, thread } = await runTurn("thread-normal-round", "Inspect the workspace tree.");
 
     assert.equal(
       mock.requestBodies.length,
@@ -251,10 +236,7 @@ describe("tool-call integrity: stubbed-stream round-loop behavior", () => {
     server = mock.server;
     process.env.LLM_BASE_URL = mock.baseUrl;
 
-    const { thread } = await runTurn(
-      "thread-zero-trace",
-      "Summarize the fix you made."
-    );
+    const { thread } = await runTurn("thread-zero-trace", "Summarize the fix you made.");
 
     const assistant = thread?.messages.find((m) => m.role === "assistant");
     assert.ok(assistant, "assistant message must be persisted");

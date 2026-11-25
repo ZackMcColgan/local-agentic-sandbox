@@ -352,4 +352,3 @@ docs/queue-steer-runlog.md` -> clean.
 - Gap per brief: stubbed-stream integration test. Added `web-ui/tests/toolCallIntegrityStream.test.ts` (4 tests): markup-as-text -> exactly one repair re-prompt then honest marker + status `incomplete`; normal tool round untouched (no repair directive); zero-trace claim stamped `completed-unverified` with `zero_traces` gap; traced turn never stamped unverified (direct `runChatTurn` harness with fake tool client).
 - Env note: fresh worktree had no node_modules; `npm install` failed on root husky `prepare` hook -> used `npm install --ignore-scripts`.
 - Verification: `tsx --test tests/toolCallIntegrityStream.test.ts` 4 pass; `toolCallIntegrity.test.ts` + `invariantNetA3.test.ts` 21 pass; `tsc --noEmit` clean.
-
