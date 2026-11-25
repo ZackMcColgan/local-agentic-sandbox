@@ -980,7 +980,7 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("lib/toolCallIntegrity") ||
       p.includes("app/api/chat/route") ||
       p.includes("components/ChatStream"),
-    tests: ["tests/toolCallIntegrity.test.ts"],
+    tests: ["tests/toolCallIntegrity.test.ts", "tests/toolCallIntegrityStream.test.ts"],
   },
   // UI-003/UI-011b: live tool-call trace rows during a turn (live strip in
   // ChatStream, LiveRunBlock liveTraces prop, page wiring of live trace state)
