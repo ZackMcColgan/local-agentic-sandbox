@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Install dependencies
 # ==========================================
-FROM node:22-alpine AS deps
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /build
 
@@ -21,7 +21,7 @@ RUN npm ci --workspaces --ignore-scripts
 # ==========================================
 # Stage 2: Build Next.js application
 # ==========================================
-FROM node:22-alpine AS builder
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS builder
 WORKDIR /build
 
 COPY --from=deps /build/node_modules ./node_modules
@@ -41,7 +41,7 @@ RUN npm run build
 # ==========================================
 # Stage 3: Production Runner (Lean Standalone)
 # ==========================================
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS runner
 RUN apk update && \
     apk upgrade --no-cache && \
     apk add --no-cache git && \

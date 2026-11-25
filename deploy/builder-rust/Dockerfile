@@ -1,6 +1,6 @@
-# Pre-baked Builder Toolchain: Rust
+# Pre-baked Builder Toolchain: Rust 1.88
 # Deterministic build environment with Crates.io allowlist
-FROM rust:1.80-slim-bookworm
+FROM rust:1.88-slim-bookworm@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \

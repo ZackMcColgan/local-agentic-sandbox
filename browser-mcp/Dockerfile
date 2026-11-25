@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Builder
 # ==========================================
-FROM node:22-alpine AS builder
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS builder
 
 WORKDIR /build
 
@@ -26,7 +26,7 @@ RUN npm prune --production
 # ==========================================
 # Stage 2: Hardened Runtime Environment
 # ==========================================
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS runner
 
 RUN apk update && \
     apk upgrade --no-cache && \
