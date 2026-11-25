@@ -3,7 +3,7 @@
 import React from "react";
 import { X, Sparkles } from "lucide-react";
 import { formatContextK } from "../lib/tokenEconomics";
-import type { ContextSegments } from "../lib/contextSegments";
+import { fitSegmentsToTotal, type ContextSegments } from "../lib/contextSegments";
 
 // Board #138 (owner directive, Nov 25 2026): the context sheet. ONE component
 // that renders as a bottom sheet on mobile (< md:) and a centered dialog on
@@ -17,6 +17,14 @@ export interface ContextSheetCompaction {
   compactedAt: string;
   tokensBefore: number;
   tokensAfter: number;
+}
+
+/** Outcome of the sheet's own Compact action, surfaced in place (UI-110). */
+export interface ContextSheetCompactResult {
+  ok: boolean;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  error?: string;
 }
 
 interface ContextSheetProps {
@@ -36,6 +44,8 @@ interface ContextSheetProps {
   isCompacting: boolean;
   onCompact: () => void;
   onRestore: () => void;
+  /** Verdict of the last Compact run from this sheet; null before the first. */
+  compactResult?: ContextSheetCompactResult | null;
 }
 
 function SegmentRow({ label, tokens, budget }: { label: string; tokens: number; budget: number }) {
@@ -74,7 +84,14 @@ export function ContextSheet(props: ContextSheetProps) {
     isCompacting,
     onCompact,
     onRestore,
+    compactResult,
   } = props;
+
+  // UI-109 + owner ruling (Nov 25 2026): the breakdown must sum to the
+  // displayed total in both directions — residual to System when the raw
+  // segments under-count (fresh chats), proportional scale-down when they
+  // over-count (fitted/elided long threads).
+  const fittedSegments = fitSegmentsToTotal(segments, usedTokens);
 
   const percent = budgetTokens > 0 ? Math.round((usedTokens / budgetTokens) * 100) : 0;
   const freeTokens = Math.max(0, budgetTokens - usedTokens);
@@ -146,16 +163,26 @@ export function ContextSheet(props: ContextSheetProps) {
 
         {/* Rows 4-6: segment bars, one idea per row */}
         <div className="space-y-2 pt-2">
-          <SegmentRow label="Tool results" tokens={segments.toolResults} budget={budgetTokens} />
-          <SegmentRow label="Conversation" tokens={segments.conversation} budget={budgetTokens} />
-          <SegmentRow label="System" tokens={segments.system} budget={budgetTokens} />
+          <SegmentRow
+            label="Tool results"
+            tokens={fittedSegments.toolResults}
+            budget={budgetTokens}
+          />
+          <SegmentRow
+            label="Conversation"
+            tokens={fittedSegments.conversation}
+            budget={budgetTokens}
+          />
+          <SegmentRow label="System" tokens={fittedSegments.system} budget={budgetTokens} />
         </div>
 
         {/* Row 7: chips — last round, compactions */}
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
-            Last round {formatContextK(lastRoundPromptTokens)}
-          </span>
+          {lastRoundPromptTokens > 0 && (
+            <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
+              Last round {formatContextK(lastRoundPromptTokens)}
+            </span>
+          )}
           <span className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-600 dark:text-zinc-300">
             Compactions{" "}
             <span className="font-mono text-slate-900 dark:text-zinc-100">{compactionCount}</span>
@@ -208,6 +235,24 @@ export function ContextSheet(props: ContextSheetProps) {
         {compactReason && (
           <p className="text-[11px] text-slate-600 dark:text-zinc-300">{compactReason}</p>
         )}
+        {compactResult &&
+          (compactResult.ok ? (
+            <p
+              data-testid="context-sheet-compact-result"
+              className="text-[11px] font-semibold text-emerald-600 dark:text-[#10b981]"
+            >
+              {compactResult.tokensBefore != null && compactResult.tokensAfter != null
+                ? `Compacted: ${formatContextK(compactResult.tokensBefore)} \u2192 ${formatContextK(compactResult.tokensAfter)} tokens`
+                : "History compacted"}
+            </p>
+          ) : (
+            <p
+              data-testid="context-sheet-compact-result"
+              className="text-[11px] font-semibold text-rose-600 dark:text-[#f87171]"
+            >
+              {compactResult.error ?? "Compaction failed"}
+            </p>
+          ))}
       </div>
     </div>
   );
