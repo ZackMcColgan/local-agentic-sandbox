@@ -49,7 +49,7 @@ function SegmentRow({
   const pct = budget > 0 ? Math.min(100, Math.round((tokens / budget) * 100)) : 0;
   return (
     <div className="flex items-center gap-3">
-      <span className="w-24 shrink-0 text-xs font-medium text-zinc-400">{label}</span>
+      <span className="w-24 shrink-0 text-xs font-medium text-zinc-300">{label}</span>
       <div className="h-[6px] flex-1 rounded-[3px] bg-zinc-800">
         <div
           className="h-full rounded-[3px] bg-[#10b981]"
@@ -110,7 +110,7 @@ export function ContextSheet(props: ContextSheetProps) {
             type="button"
             onClick={onClose}
             aria-label="Close context sheet"
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-100"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-zinc-300 hover:text-zinc-100"
           >
             <X className="h-4 w-4" />
           </button>
@@ -121,7 +121,7 @@ export function ContextSheet(props: ContextSheetProps) {
           <span className="font-mono text-2xl font-semibold text-zinc-100">
             {formatContextK(usedTokens)}
           </span>
-          <span className="font-mono text-sm text-zinc-400">
+          <span className="font-mono text-sm text-zinc-300">
             {`/ ${Math.round(budgetTokens / 1000)}K · ${percent}% · ${formatContextK(freeTokens)} free`}
           </span>
         </div>
@@ -170,7 +170,7 @@ export function ContextSheet(props: ContextSheetProps) {
               <Sparkles className="h-3.5 w-3.5 text-[#10b981]" />
               <span className="text-xs font-semibold text-zinc-200">Last compaction</span>
             </div>
-            <div className="flex justify-between font-mono text-[11px] text-zinc-400">
+            <div className="flex justify-between font-mono text-[11px] text-zinc-300">
               <span>{compaction.tokensBefore} → {compaction.tokensAfter} tokens</span>
               <span>{new Date(compaction.compactedAt).toLocaleString()}</span>
             </div>
@@ -203,7 +203,7 @@ export function ContextSheet(props: ContextSheetProps) {
           )}
         </div>
         {compactReason && (
-          <p className="text-[11px] text-zinc-400">{compactReason}</p>
+          <p className="text-[11px] text-zinc-300">{compactReason}</p>
         )}
       </div>
     </div>
