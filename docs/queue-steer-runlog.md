@@ -344,3 +344,12 @@ docs/queue-steer-runlog.md` -> clean.
 - Tests first: web-ui/tests/boardDeleteGuard.test.ts - store remove guard (working refused, item survives), DELETE route 409 for working + 200/404 unchanged, UI confirmation flow (no DELETE before confirm, DELETE after confirm, cancel sends nothing), working-item delete unavailable with reason. 6/6 green.
 - Impl: BoardStore.remove throws on status=working; DELETE route maps that to 409; BoardView Delete button now opens inline confirm ('permanently removed and cannot be undone') with Confirm/Cancel; working items show disabled 'Delete unavailable - job is running'.
 - Targeted suites (boardStore, boardUi, uiClosures) 24/24 green; tsc --noEmit clean.
+
+## job-135 (auto-resume attempt 1/2) #135 tool-call integrity: markup fence + zero-trace tripwire
+
+- Resume state: worktree `repos\integrity-135-wt` on `feature/tool-call-integrity-fence-tripwire` at develop tip, clean tree, no job commits banked.
+- Core scope already merged into develop by earlier PRs: `web-ui/lib/toolCallIntegrity.ts` (markup detector, repair directive, honest marker, zero-trace tripwire), wired in `web-ui/lib/chat/roundLoop.ts` (markup fence ~line 1556-1583; tripwire ~line 2939-2970), UI badge `web-ui/components/CompletionVerificationBadge.tsx` (data-testid `completion-unverified-badge`).
+- Gap per brief: stubbed-stream integration test. Added `web-ui/tests/toolCallIntegrityStream.test.ts` (4 tests): markup-as-text -> exactly one repair re-prompt then honest marker + status `incomplete`; normal tool round untouched (no repair directive); zero-trace claim stamped `completed-unverified` with `zero_traces` gap; traced turn never stamped unverified (direct `runChatTurn` harness with fake tool client).
+- Env note: fresh worktree had no node_modules; `npm install` failed on root husky `prepare` hook -> used `npm install --ignore-scripts`.
+- Verification: `tsx --test tests/toolCallIntegrityStream.test.ts` 4 pass; `toolCallIntegrity.test.ts` + `invariantNetA3.test.ts` 21 pass; `tsc --noEmit` clean.
+
