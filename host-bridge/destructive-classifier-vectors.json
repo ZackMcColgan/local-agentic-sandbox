@@ -319,7 +319,9 @@
   },
   {
     "tool": "host_run_powershell",
-    "args": { "command": "[Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"C:\\\\temp\\\\x.bin\"))" },
+    "args": {
+      "command": "[Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"C:\\\\temp\\\\x.bin\"))"
+    },
     "expectedDestructive": false,
     "description": "Data encoding via ToBase64String is not execution"
   },

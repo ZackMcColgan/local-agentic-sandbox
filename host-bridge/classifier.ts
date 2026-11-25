@@ -40,8 +40,7 @@ const ENCODED_COMMAND_ARG_PATTERN =
 const DOTNET_DELETE_PATTERN =
   /\[\s*(?:system\s*\.\s*)?io\s*\.\s*(?:file|directory)\s*\]\s*::\s*delete\s*\(/i;
 
-const CMD_INDIRECTION_PATTERN =
-  /(?:^|[;|&(\r\n])\s*(?:&\s+)?cmd(?:\.exe)?\s+\/[ck]\s+([\s\S]+)$/i;
+const CMD_INDIRECTION_PATTERN = /(?:^|[;|&(\r\n])\s*(?:&\s+)?cmd(?:\.exe)?\s+\/[ck]\s+([\s\S]+)$/i;
 
 function unquoteOuter(text: string): string {
   const trimmed = text.trim();
