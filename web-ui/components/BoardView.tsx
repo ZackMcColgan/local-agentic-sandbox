@@ -54,6 +54,7 @@ export function BoardView({
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [localDeletedIds, setLocalDeletedIds] = useState<Record<string, boolean>>({});
   const [localPatchedItems, setLocalPatchedItems] = useState<Record<string, BoardItem>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -321,15 +322,53 @@ export function BoardView({
           >
             Edit
           </button>
-          <button
-            type="button"
-            data-testid={`board-delete-${item.id}`}
-            disabled={deletingId === item.id}
-            onClick={() => void handleDeleteItem(item)}
-            className="rounded-full border border-rose-500/35 bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
-          >
-            {deletingId === item.id ? "Deleting…" : "Delete"}
-          </button>
+          {isLive ? (
+            <button
+              type="button"
+              data-testid={`board-delete-${item.id}`}
+              disabled
+              title="Delete unavailable — this item's job is running"
+              className="rounded-full border border-zinc-300 dark:border-white/[0.12] bg-zinc-50 dark:bg-white/[0.03] px-2 py-0.5 text-[10.5px] text-zinc-600 dark:text-stone-400 opacity-60"
+            >
+              Delete unavailable — job is running
+            </button>
+          ) : confirmDeleteId === item.id ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                data-testid={`board-delete-confirm-copy-${item.id}`}
+                className="text-[10.5px] font-semibold text-rose-700 dark:text-rose-300"
+              >
+                This item will be permanently removed and cannot be undone.
+              </span>
+              <button
+                type="button"
+                data-testid={`board-delete-confirm-${item.id}`}
+                disabled={deletingId === item.id}
+                onClick={() => void handleDeleteItem(item)}
+                className="rounded-full border border-rose-500/55 bg-rose-600 px-2 py-0.5 text-[10.5px] font-bold text-white hover:bg-rose-700 disabled:opacity-40 transition-colors"
+              >
+                {deletingId === item.id ? "Deleting…" : "Confirm Delete"}
+              </button>
+              <button
+                type="button"
+                data-testid={`board-delete-cancel-${item.id}`}
+                onClick={() => setConfirmDeleteId(null)}
+                className="rounded-full border border-zinc-300 dark:border-white/[0.12] px-2 py-0.5 text-[10.5px] text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid={`board-delete-${item.id}`}
+              disabled={deletingId === item.id}
+              onClick={() => setConfirmDeleteId(item.id)}
+              className="rounded-full border border-rose-500/35 bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 text-[10.5px] text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
+            >
+              {deletingId === item.id ? "Deleting…" : "Delete"}
+            </button>
+          )}
         </div>
       </div>
     );

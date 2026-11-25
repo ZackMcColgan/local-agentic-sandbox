@@ -85,6 +85,9 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, removed });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to delete board item";
+    if (message.includes("working")) {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
     const status = message.includes("not found") ? 404 : 400;
     return NextResponse.json({ error: message }, { status });
   }
