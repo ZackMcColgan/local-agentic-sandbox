@@ -54,9 +54,7 @@ export function deriveContextSegments(
  * Compaction count from the records the client already holds: per-message
  * compactedThisTurn flags plus the per-turn tokenEconomics rollups.
  */
-export function countCompactions(
-  messages: SegmentMessageLike[] | undefined
-): number {
+export function countCompactions(messages: SegmentMessageLike[] | undefined): number {
   let count = 0;
   for (const m of messages || []) {
     if (m.compactedThisTurn) count += 1;

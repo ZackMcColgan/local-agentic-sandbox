@@ -30,8 +30,8 @@ describe("#138 header meter is a tappable button on all surfaces", () => {
     assert.ok(window.includes("<button"), "meter pill must be a button element");
     assert.ok(window.includes("min-h-[44px]"), "meter pill must have a 44px touch target");
     assert.ok(
-      window.includes("aria-label=\"Open context details\"") ||
-        window.includes("aria-label=\"Open context sheet\""),
+      window.includes('aria-label="Open context details"') ||
+        window.includes('aria-label="Open context sheet"'),
       "meter pill button must be labeled"
     );
   });
@@ -156,10 +156,7 @@ describe("#138 context sheet content from state", () => {
 
   it("Compact history now is disabled while a turn streams, with the reason shown", () => {
     const html = renderSheet({ ...base, isStreaming: true });
-    assert.ok(
-      html.includes('data-testid="context-sheet-compact"'),
-      "compact button must exist"
-    );
+    assert.ok(html.includes('data-testid="context-sheet-compact"'), "compact button must exist");
     assert.ok(html.includes("disabled"), "compact must be disabled while streaming");
     assert.ok(
       html.includes("A turn is streaming"),
@@ -191,7 +188,13 @@ describe("#138 segment derivation from existing estimates", () => {
         role: "assistant",
         content: "Patched the header pill into a button and mounted the sheet component.",
         traces: [
-          { tool: "workspace_read_file", args: {}, result: "file contents ".repeat(400), durationMs: 5, timestamp: "now" },
+          {
+            tool: "workspace_read_file",
+            args: {},
+            result: "file contents ".repeat(400),
+            durationMs: 5,
+            timestamp: "now",
+          },
         ],
       },
     ];
@@ -205,7 +208,12 @@ describe("#138 segment derivation from existing estimates", () => {
   it("counts compactions from per-message records", () => {
     const messages = [
       { id: "a1", role: "assistant", content: "x", compactedThisTurn: true },
-      { id: "a2", role: "assistant", content: "y", tokenEconomics: { rounds: 3, promptTokens: 10, outputTokens: 5, compactions: 2 } },
+      {
+        id: "a2",
+        role: "assistant",
+        content: "y",
+        tokenEconomics: { rounds: 3, promptTokens: 10, outputTokens: 5, compactions: 2 },
+      },
       { id: "u1", role: "user", content: "z" },
     ];
     assert.equal(countCompactions(messages as never), 3);

@@ -37,15 +37,7 @@ interface ContextSheetProps {
   onRestore: () => void;
 }
 
-function SegmentRow({
-  label,
-  tokens,
-  budget,
-}: {
-  label: string;
-  tokens: number;
-  budget: number;
-}) {
+function SegmentRow({ label, tokens, budget }: { label: string; tokens: number; budget: number }) {
   const pct = budget > 0 ? Math.min(100, Math.round((tokens / budget) * 100)) : 0;
   return (
     <div className="flex items-center gap-3">
@@ -127,7 +119,10 @@ export function ContextSheet(props: ContextSheetProps) {
         </div>
 
         {/* Row 3: bar with the rose 85K trigger tick */}
-        <div data-testid="context-sheet-bar" className="relative h-[8px] w-full rounded-[4px] bg-zinc-800">
+        <div
+          data-testid="context-sheet-bar"
+          className="relative h-[8px] w-full rounded-[4px] bg-zinc-800"
+        >
           <div
             className="h-full rounded-[4px] bg-[#10b981]"
             style={{
@@ -171,7 +166,9 @@ export function ContextSheet(props: ContextSheetProps) {
               <span className="text-xs font-semibold text-zinc-200">Last compaction</span>
             </div>
             <div className="flex justify-between font-mono text-[11px] text-zinc-300">
-              <span>{compaction.tokensBefore} → {compaction.tokensAfter} tokens</span>
+              <span>
+                {compaction.tokensBefore} → {compaction.tokensAfter} tokens
+              </span>
               <span>{new Date(compaction.compactedAt).toLocaleString()}</span>
             </div>
             <pre className="max-h-40 overflow-y-auto p-2 rounded-lg bg-zinc-900 font-mono text-[11px] whitespace-pre-wrap text-zinc-300 border border-zinc-800">
@@ -202,9 +199,7 @@ export function ContextSheet(props: ContextSheetProps) {
             </button>
           )}
         </div>
-        {compactReason && (
-          <p className="text-[11px] text-zinc-300">{compactReason}</p>
-        )}
+        {compactReason && <p className="text-[11px] text-zinc-300">{compactReason}</p>}
       </div>
     </div>
   );
