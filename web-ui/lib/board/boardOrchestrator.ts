@@ -842,7 +842,17 @@ export class BoardOrchestrator {
       this.deps.getSlotMetrics ?? (() => getSharedSlotScheduler().getMetrics());
 
     while (true) {
-      if (itemsProcessed >= this.maxItems) {
+      // control.drainBudget (persisted by /api/board/control) is the effective
+      // per-drain cap when set; the request/constructor maxItems only narrows
+      // it further. A null budget leaves the constructor cap untouched.
+      const budgetControl = getControl();
+      const effectiveMaxItems =
+        typeof budgetControl.drainBudget === "number" &&
+        Number.isFinite(budgetControl.drainBudget)
+          ? Math.min(this.maxItems, Math.max(1, Math.floor(budgetControl.drainBudget)))
+          : this.maxItems;
+
+      if (itemsProcessed >= effectiveMaxItems) {
         stopReason = "max-items-reached";
         break;
       }
