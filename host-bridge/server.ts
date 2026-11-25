@@ -110,11 +110,14 @@ export function createHostServer(options: HostServerOptions = {}) {
 
   // Bounded retention: periodically drop terminal job records past the retention
   // window and delete their spool logs so the jobs directory never grows unbounded.
-  const pruneTimer = setInterval(() => {
-    try {
-      jobStore.pruneCompleted();
-    } catch {}
-  }, 60 * 60 * 1000);
+  const pruneTimer = setInterval(
+    () => {
+      try {
+        jobStore.pruneCompleted();
+      } catch {}
+    },
+    60 * 60 * 1000
+  );
   pruneTimer.unref();
 
   const server = http.createServer(async (req, res) => {

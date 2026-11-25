@@ -95,10 +95,15 @@ export class JobStore {
       .filter((r) => r.status === "done" || r.status === "failed" || r.status === "interrupted")
       .sort((a, b) => (a.finishedAt ?? a.createdAt) - (b.finishedAt ?? b.createdAt));
 
-    const expired = terminal.filter((r) => (r.finishedAt ?? r.createdAt) < now - COMPLETED_JOB_RETENTION_MS);
+    const expired = terminal.filter(
+      (r) => (r.finishedAt ?? r.createdAt) < now - COMPLETED_JOB_RETENTION_MS
+    );
     const survivors = terminal.filter((r) => !expired.includes(r));
     // Cap: keep the newest MAX_COMPLETED_JOB_RECORDS terminal records.
-    const overCap = survivors.length > MAX_COMPLETED_JOB_RECORDS ? survivors.slice(0, survivors.length - MAX_COMPLETED_JOB_RECORDS) : [];
+    const overCap =
+      survivors.length > MAX_COMPLETED_JOB_RECORDS
+        ? survivors.slice(0, survivors.length - MAX_COMPLETED_JOB_RECORDS)
+        : [];
 
     let removed = 0;
     for (const rec of [...expired, ...overCap]) {
