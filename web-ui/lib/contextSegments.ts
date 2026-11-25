@@ -74,7 +74,7 @@ export function fitSegmentsToTotal(segments: ContextSegments, usedTokens: number
     conversation: Math.floor(segments.conversation * factor),
     system: Math.floor(segments.system * factor),
   };
-  let remainder = usedTokens - (fitted.toolResults + fitted.conversation + fitted.system);
+  const remainder = usedTokens - (fitted.toolResults + fitted.conversation + fitted.system);
   const largest = (Object.keys(fitted) as Array<keyof ContextSegments>).sort(
     (a, b) => fitted[b] - fitted[a]
   )[0];
