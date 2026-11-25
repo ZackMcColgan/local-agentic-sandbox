@@ -120,6 +120,14 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    // #139: /compact composer slash command (predicate module + composer interception)
+    match: (p) =>
+      p.includes("lib/chat/compactCommand") ||
+      p.includes("components/ChatStream") ||
+      p.includes("compactSlashCommand.test.ts"),
+    tests: ["tests/compactSlashCommand.test.ts"],
+  },
+  {
     match: (p) =>
       p.includes("lib/microElision") ||
       p.includes("lib/chat/roundLoop") ||

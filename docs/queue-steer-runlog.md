@@ -361,3 +361,12 @@ docs/queue-steer-runlog.md` -> clean.
 - MAPPING_RULES: additive rule mapping ContextSheet/contextSegments/ChatStream/contextSheet.test.ts -> tests/contextSheet.test.ts.
 - Contrast audit fix: ContextSheet text-zinc-400 -> text-zinc-300 (Design Lock #3 bans unprefixed text-*-400; brief allows zinc-400 or brighter).
 - Verification: tsx --test tests/contextSheet.test.ts 12/12 green; tsc --noEmit clean; test:gate --since=origin/develop: 601 passed, 0 test failures - the single gate FAILED line is the gate npm run build step hitting an environmental EPERM scandir on an engine-held temp dir (temp dir lock), not a compile error; reproduced identically twice, unrelated to this job code.
+
+## Board #139 - /compact slash command in the composer
+
+- Branch: feature/composer-compact-slash-command (from origin/develop).
+- Test-first: web-ui/tests/compactSlashCommand.test.ts written before implementation; red on first run (module missing), green after implementation (9 pass / 0 fail).
+- Implementation:
+  - web-ui/lib/chat/compactCommand.ts - isCompactCommand(): exact trimmed, case-insensitive /compact only.
+  - web-ui/components/ChatStream.tsx - handleManualCompact refactored into shared runManualCompaction() verdict path (POST /api/threads/<id>/compact); handleSend intercepts exact /compact BEFORE decideSendAction dispatch: mid-turn refusal uses the ContextSheet unavailable reason, empty thread shows 'Nothing to compact yet' and never calls onEnsureThread, success shows tokens before -> after in an in-place composer notice (data-testid=compact-command-notice), failure restores composer text intact for retry. No user message appended, no turn started.
+  - web-ui/lib/testGate.ts - additive MAPPING_RULES entry mapping lib/chat/compactCommand + components/ChatStream to tests/compactSlashCommand.test.ts.
