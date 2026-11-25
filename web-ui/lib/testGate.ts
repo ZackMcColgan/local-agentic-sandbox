@@ -1009,6 +1009,17 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("app/api/chat/route"),
     tests: ["tests/uirLiveMeter.test.ts"],
   },
+  // Board #138: tappable context meter pill + Context sheet (bottom sheet on
+  // mobile, centered dialog on desktop) and segment derivation from existing
+  // per-message/per-trace estimates.
+  {
+    match: (p) =>
+      p.includes("components/ContextSheet") ||
+      p.includes("lib/contextSegments") ||
+      p.includes("components/ChatStream") ||
+      p.includes("contextSheet.test.ts"),
+    tests: ["tests/contextSheet.test.ts"],
+  },
   // UI Refresh slice 1: chat text fixes — user-text wrap (UI-016), sidebar
   // title wrap (UI-012), long-brief collapse (UI-014)
   {
