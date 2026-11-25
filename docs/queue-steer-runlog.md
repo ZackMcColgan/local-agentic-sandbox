@@ -339,3 +339,5 @@ docs/queue-steer-runlog.md` -> clean.
 - host-bridge/server.ts: hourly unref'd setInterval calls jobStore.pruneCompleted() so the jobs directory stays bounded while the daemon runs.
 - host-bridge/manifest.json: bridgeSourceSha256 regenerated (7021f2a6... -> 90872180...) because jobStore.ts/server.ts are part of the provenance digest scan; daemon binary NOT rebuilt.
 - Verification: test-first web-ui/tests/deadCodeCleanupJobStoreRetention.test.ts 7/7; targeted hostMode/hostAsyncJobs/hostRunnerScript/boardOrchestrator/boardOrchestratorDrainReport/boardControl/fileParser -> 57/0; npx tsc --noEmit -p web-ui/tsconfig.json clean.
+
+- PR #278 opened into develop (no merge, no deploy). Final gate: 893 passed, 1 failed. The lone failure is U-F1/U-F2 in hostDaemon.test.ts (PowerShell stderr path in powershellRunner.ts) - PRE-EXISTING/environmental: fails identically on an unrelated branch and this PR touches neither powershellRunner.ts nor hostDaemon.test.ts. All #62-scoped suites green and typecheck clean.
