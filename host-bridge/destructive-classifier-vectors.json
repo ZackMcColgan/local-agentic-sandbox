@@ -256,5 +256,83 @@
     "args": { "path": "." },
     "expectedDestructive": false,
     "description": "host_list_dir is never destructive"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "powershell -EncodedCommand aABlAGwAbABvAA==" },
+    "expectedDestructive": true,
+    "description": "EncodedCommand with benign payload is destructive on opacity alone"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "powershell -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAAQwA6AFwAeAA=" },
+    "expectedDestructive": true,
+    "description": "powershell -enc with Remove-Item payload"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "[System.IO.File]::Delete(\"C:\\\\temp\\\\x.txt\")" },
+    "expectedDestructive": true,
+    "description": "[System.IO.File]::Delete static call"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "[System.IO.Directory]::Delete(\"C:\\\\temp\\\\dir\", $true)" },
+    "expectedDestructive": true,
+    "description": "[System.IO.Directory]::Delete static call"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "[IO.File]::Delete(\"x\")" },
+    "expectedDestructive": true,
+    "description": "[IO.File]::Delete short-form static call"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd /c del /q C:\\\\temp\\\\x.txt" },
+    "expectedDestructive": true,
+    "description": "cmd /c del indirection"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd.exe /k rd /s C:\\\\temp\\\\dir" },
+    "expectedDestructive": true,
+    "description": "cmd.exe /k rd indirection"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd /c \"erase C:\\\\temp\\\\x.txt\"" },
+    "expectedDestructive": true,
+    "description": "cmd /c quoted erase indirection"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd /c dir C:\\\\temp" },
+    "expectedDestructive": false,
+    "description": "cmd /c dir is non-destructive"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd /c echo hello" },
+    "expectedDestructive": false,
+    "description": "cmd /c echo is non-destructive"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "[Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"C:\\\\temp\\\\x.bin\"))" },
+    "expectedDestructive": false,
+    "description": "Data encoding via ToBase64String is not execution"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "[System.IO.File]::ReadAllText(\"C:\\\\temp\\\\x.txt\")" },
+    "expectedDestructive": false,
+    "description": ".NET ReadAllText is not a delete"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Get-ChildItem C:\\\\temp" },
+    "expectedDestructive": false,
+    "description": "Get-ChildItem is non-destructive"
   }
 ]
