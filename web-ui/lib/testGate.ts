@@ -472,6 +472,14 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/boardDrainRecovery.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/board/boardStore") ||
+      p.includes("app/api/board/route") ||
+      p.includes("BoardView.tsx") ||
+      p.includes("boardDeleteGuard.test.ts"),
+    tests: ["tests/boardDeleteGuard.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/board/reviewerGate") || p.includes("reviewerGate.test.ts"),
     tests: ["tests/reviewerGate.test.ts"],
   },

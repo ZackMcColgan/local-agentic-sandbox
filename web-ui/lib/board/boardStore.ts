@@ -432,6 +432,11 @@ export class BoardStore {
     if (idx === -1) {
       throw new Error(`Board item not found: ${id}`);
     }
+    if (items[idx].status === "working") {
+      throw new Error(
+        `Cannot delete a working board item: ${id}. Its job is running; move it out of working first.`
+      );
+    }
     const [removed] = items.splice(idx, 1);
     this.writeAll(items);
     return removed;
