@@ -31,7 +31,6 @@ export default [
       "**/*.min.js",
       "**/*.min.css",
       "web-ui/next-env.d.ts",
-      "deploy/helm/**/templates/**",
     ],
   },
 

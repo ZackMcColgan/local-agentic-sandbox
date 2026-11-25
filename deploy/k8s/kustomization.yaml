@@ -10,6 +10,8 @@ resources:
   - browser-mcp.yaml
   - web-ui.yaml
   - llm-service.yaml
+  - strata-service.yaml
+  - host-runner-service.yaml
   - network-policies.yaml
   - observability.yaml
   - builder-tier.yaml

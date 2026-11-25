@@ -171,7 +171,7 @@ Every pull request runs seven checks: typecheck, unit tests, coverage, container
 | `web-ui/`                     | Next.js operator UI + orchestration engine              |
 | `host-bridge/`                | Host-side tool bridge (the external boundary)           |
 | `mcp-server/`, `browser-mcp/` | Sandboxed tool servers                                  |
-| `deploy/`                     | Kubernetes manifests + Helm chart                       |
+| `deploy/`                     | Kubernetes manifests (kustomize installable set)        |
 | `eval/`                       | Graded evaluation tasks                                 |
 | `docs/`                       | Architecture source, ADRs, governance, deployment notes |
 

@@ -90,9 +90,9 @@ Scheduled Task that runs the port-forward command at logon.
 ## Fresh install
 
 ```bash
-# 1. Apply namespaces, services, PVCs, and deployments (plus host service definitions)
+# 1. Apply namespaces, services, PVCs, deployments, and host service endpoints
+#    (strata-service and host-runner-service are part of the kustomization set)
 kubectl apply -k deploy/k8s
-kubectl apply -f deploy/k8s/strata-service.yaml -f deploy/k8s/host-runner-service.yaml
 
 # 2. Create required Kubernetes Secrets (e.g. sandbox-mcp, sandbox-host-runner, sandbox-llm-supervisor)
 
@@ -100,7 +100,7 @@ kubectl apply -f deploy/k8s/strata-service.yaml -f deploy/k8s/host-runner-servic
 node scripts/deploy-cluster.js all
 ```
 
-> **Note on `make k8s-deploy` and Helm:** `node scripts/deploy-cluster.js` is the canonical local Kubernetes deploy path (it imports images into `desktop-control-plane` containerd storage). The Helm chart in `deploy/helm/local-agentic-sandbox/` does not currently mount `pvc-workspace` or define host service endpoints (`strata-service`, `host-runner-service`).
+> **Note on `make k8s-deploy` and Helm:** `node scripts/deploy-cluster.js` is the canonical local Kubernetes deploy path (it imports images into `desktop-control-plane` containerd storage). The former Helm chart in `deploy/helm/` was removed: it was stale relative to the kustomize manifests (no `pvc-workspace` mount, no `strata-service`/`host-runner-service` endpoints) and had no deploy consumer. `deploy/k8s/kustomization.yaml` is the single installable manifest set.
 
 ## Troubleshooting
 

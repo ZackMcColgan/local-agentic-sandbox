@@ -1068,6 +1068,16 @@ const MAPPING_RULES: MappingRule[] = [
       p.includes("deploy/k8s/web-ui"),
     tests: ["tests/permissions.test.ts"],
   },
+  // Kustomize installable-manifest completeness: resource-set membership and
+  // service-endpoint resolution for the deploy/k8s topology.
+  {
+    match: (p) =>
+      p.includes("deploy/k8s/kustomization") ||
+      p.includes("deploy/k8s/strata-service") ||
+      p.includes("deploy/k8s/host-runner-service") ||
+      p.includes("tests/kustomizeManifests"),
+    tests: ["tests/kustomizeManifests.test.ts"],
+  },
   // Artifact canvas (uir-2): core logic, pane, and its card affordances
   {
     match: (p) =>
