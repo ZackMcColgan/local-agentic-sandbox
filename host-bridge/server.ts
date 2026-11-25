@@ -108,6 +108,15 @@ export function createHostServer(options: HostServerOptions = {}) {
     options.jobsDir || process.env.HOST_RUNNER_JOBS_DIR || path.resolve(__dirname, "jobs")
   );
 
+  // Bounded retention: periodically drop terminal job records past the retention
+  // window and delete their spool logs so the jobs directory never grows unbounded.
+  const pruneTimer = setInterval(() => {
+    try {
+      jobStore.pruneCompleted();
+    } catch {}
+  }, 60 * 60 * 1000);
+  pruneTimer.unref();
+
   const server = http.createServer(async (req, res) => {
     // Zero CORS headers - NEVER set Access-Control-Allow-* headers.
 
