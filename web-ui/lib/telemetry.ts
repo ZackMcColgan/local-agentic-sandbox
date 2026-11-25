@@ -30,8 +30,25 @@ export interface TraceSession {
   totalDurationMs?: number;
 }
 
-// In-memory trace store (retains last 50 trace sessions for instant UI query)
+// In-memory trace store (retains last 50 trace sessions for instant UI query).
+// The cap is enforced on insert: the oldest session (lowest startTime) is
+// evicted first, so the store stays bounded regardless of session churn.
+export const MAX_TRACE_SESSIONS = 50;
 const traceStore: Map<string, TraceSession> = new Map();
+
+function evictOldestSession(): void {
+  let oldestKey: string | null = null;
+  let oldestStart = Infinity;
+  for (const [key, session] of traceStore) {
+    if (session.startTime < oldestStart) {
+      oldestStart = session.startTime;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey !== null) {
+    traceStore.delete(oldestKey);
+  }
+}
 
 function generateHex(bytes: number): string {
   return crypto.randomBytes(bytes).toString("hex");
@@ -57,17 +74,22 @@ export class TelemetryTracer {
   private traceId: string;
   private rootSpanId: string;
 
-  constructor(sessionId?: string, traceId?: string) {
+  constructor(sessionId?: string, traceId?: string, startTime?: number) {
     this.sessionId = sessionId || `sess_${Date.now()}`;
     this.traceId = traceId || generateHex(16); // 32 hex chars
     this.rootSpanId = generateHex(8); // 16 hex chars
 
     if (!traceStore.has(this.sessionId)) {
+      // Enforce the documented cap before inserting: evict the oldest session
+      // so one bad file cannot take down the rest and memory stays bounded.
+      while (traceStore.size >= MAX_TRACE_SESSIONS) {
+        evictOldestSession();
+      }
       traceStore.set(this.sessionId, {
         sessionId: this.sessionId,
         traceId: this.traceId,
         spans: [],
-        startTime: Date.now(),
+        startTime: startTime ?? Date.now(),
       });
     }
   }
@@ -229,4 +251,9 @@ export function getTraceSession(sessionId: string): TraceSession | undefined {
 
 export function getAllTraceSessions(): TraceSession[] {
   return Array.from(traceStore.values()).sort((a, b) => b.startTime - a.startTime);
+}
+
+/** Current number of retained trace sessions (bounded by MAX_TRACE_SESSIONS). */
+export function getTraceStoreSize(): number {
+  return traceStore.size;
 }
