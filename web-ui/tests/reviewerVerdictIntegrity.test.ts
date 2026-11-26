@@ -393,7 +393,9 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
       "--- a/web-ui/lib/foo.ts",
       "+++ b/web-ui/lib/foo.ts",
       "@@ -1,1 +1,2 @@",
-      "+process.env.API_TOKEN",
+      // Split at runtime so this source file never contains the banned literal
+      // contiguously (the PR adds the hygiene pattern that scans for it).
+      "+process.env." + "API" + "_TOKEN",
     ].join("\n");
     const result = await evaluateReviewerGate({
       itemId: "item-137b",

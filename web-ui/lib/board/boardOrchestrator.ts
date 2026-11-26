@@ -585,6 +585,9 @@ export class BoardOrchestrator {
             prNumber: pr.prNumber,
             headSha: recordedHeadSha,
             reviewerVerdict: gateResult.verdict,
+            ...(gateResult.reviewer.turnState !== undefined
+              ? { turnState: gateResult.reviewer.turnState }
+              : {}),
             engineMinutes,
           });
         } catch (err) {

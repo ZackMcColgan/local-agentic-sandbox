@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgreementLedgerStore, isValidGateVerdict } from "@/lib/board/agreementLedger";
+import { getAgreementLedgerStore } from "@/lib/board/agreementLedger";
 import {
   createProductionEvaluateDeps,
   evaluatePrShadowVerdict,
   type ReviewerEvaluateDeps,
 } from "@/lib/board/reviewerAuditEvaluate";
+
+/**
+ * A driver verdict is a concluded operator judgment: PASS or FAIL only.
+ * NO_VERDICT abstention belongs to reviewer turns (#137); accepting it here
+ * would let a driver abstention into the agreement-rate denominator.
+ */
+function isDriverVerdict(value: unknown): value is "PASS" | "FAIL" {
+  return value === "PASS" || value === "FAIL";
+}
 
 export async function GET() {
   try {
@@ -39,7 +48,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!isValidGateVerdict(body.driverVerdict)) {
+    if (!isDriverVerdict(body.driverVerdict)) {
       return NextResponse.json(
         { error: "Invalid driverVerdict; expected 'PASS' | 'FAIL'" },
         { status: 400 }
