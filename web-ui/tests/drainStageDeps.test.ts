@@ -310,7 +310,7 @@ test("getMechanicalInput assembles diff, allowlist, commit subjects, and branch 
   assert.deepEqual(resultWithAllowlist.allowlist, ["web-ui/lib/board/productionStageDeps.ts"]);
 });
 
-test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on timeout or unparseable output", async () => {
+test("issueReviewerThread parses PASS and FAIL verdicts and abstains (NO_VERDICT) on timeout or unparseable output", async () => {
   const noopBridge: HostBridgeExecutor = async () => ({
     ok: true,
     exitCode: 0,
@@ -395,7 +395,7 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
     assert.ok(res.evidence.some((e) => e.includes("Missing error handling")));
   }
 
-  // Case 3: Unparseable assistant message -> FAIL-CLOSED
+  // Case 3: Unparseable assistant message -> ABSTAIN (NO_VERDICT), never FAIL
   {
     const { store, threads } = makeStubThreadStore();
     const wrappedStore: StageThreadStore = {
@@ -425,11 +425,13 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
       itemId: "item-unparseable",
       brief: "Review this PR",
     });
-    assert.equal(res.verdict, "FAIL");
+    // #137 verdict integrity contract: an unparseable turn records NO VERDICT
+    // (abstain) — never a FAIL. The unparseable evidence note is still recorded.
+    assert.equal(res.verdict, "NO_VERDICT");
     assert.ok(res.evidence.some((e) => /unparseable/i.test(e)));
   }
 
-  // Case 4: Timeout -> FAIL-CLOSED
+  // Case 4: Timeout -> ABSTAIN (NO_VERDICT), never FAIL
   {
     const { store } = makeStubThreadStore();
     const deps = createProductionStageDeps({
@@ -444,7 +446,9 @@ test("issueReviewerThread parses PASS and FAIL verdicts and fails closed on time
       itemId: "item-timeout",
       brief: "Review this PR",
     });
-    assert.equal(res.verdict, "FAIL");
+    // #137 verdict integrity contract: a timed-out turn records NO VERDICT
+    // (abstain) — never a FAIL. The timeout evidence note is still recorded.
+    assert.equal(res.verdict, "NO_VERDICT");
     assert.ok(res.evidence.some((e) => /timed out/i.test(e)));
   }
 });
