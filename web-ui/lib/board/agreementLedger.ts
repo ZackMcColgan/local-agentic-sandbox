@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { atomicWriteFileSync, quarantineCorruptFile } from "../fsAtomic";
 import { resolveBoardDir } from "./boardStore";
-import type { GateVerdict } from "./reviewerGate";
+import type { GateVerdict, ReviewerTurnState } from "./reviewerGate";
 
-export type { GateVerdict };
+export type { GateVerdict, ReviewerTurnState };
 
 export const AGREEMENT_LEDGER_FILENAME = "reviewer-agreement-ledger.json";
 
@@ -12,6 +12,8 @@ export interface AgreementLedgerEntry {
   prNumber: number;
   headSha: string;
   reviewerVerdict: GateVerdict;
+  /** How the reviewer turn concluded (#137). Abstentions carry their turn state. */
+  turnState?: ReviewerTurnState;
   driverVerdict: GateVerdict | null;
   agreed: boolean | null;
   reason?: string;
@@ -41,7 +43,12 @@ export interface PersistentAgreementLedger {
 }
 
 export function isValidGateVerdict(value: unknown): value is GateVerdict {
-  return value === "PASS" || value === "FAIL";
+  return value === "PASS" || value === "FAIL" || value === "NO_VERDICT";
+}
+
+/** #137: a NO_VERDICT entry is an abstention, not a concluded verdict. */
+function isAbstention(reviewerVerdict: GateVerdict): boolean {
+  return reviewerVerdict === "NO_VERDICT";
 }
 
 function emptyLedger(nowIso: string = new Date(0).toISOString()): PersistentAgreementLedger {
@@ -60,7 +67,12 @@ function recomputeLedger(
   entries: AgreementLedgerEntry[],
   nowIso: string = new Date().toISOString()
 ): PersistentAgreementLedger {
-  const audited = entries.filter((entry) => entry.driverVerdict !== null);
+  // #137: abstained (NO_VERDICT) reviewer turns are excluded from the
+  // agreement-rate denominator; only concluded reviewer verdicts pair with a
+  // driver verdict.
+  const audited = entries.filter(
+    (entry) => entry.driverVerdict !== null && !isAbstention(entry.reviewerVerdict)
+  );
   const totalPrs = audited.length;
   const agreements = audited.filter((entry) => entry.agreed === true).length;
   const agreementRate = totalPrs > 0 ? agreements / totalPrs : 0;
@@ -127,6 +139,7 @@ export class AgreementLedgerStore {
           prNumber: entry.prNumber,
           headSha: entry.headSha,
           reviewerVerdict: entry.reviewerVerdict,
+          ...(typeof entry.turnState === "string" ? { turnState: entry.turnState } : {}),
           driverVerdict: entry.driverVerdict,
           agreed:
             entry.driverVerdict === null ? null : entry.reviewerVerdict === entry.driverVerdict,
@@ -160,6 +173,7 @@ export class AgreementLedgerStore {
     prNumber: number;
     headSha: string;
     reviewerVerdict: GateVerdict;
+    turnState?: ReviewerTurnState;
     reason?: string;
     engineMinutes?: number;
   }): PersistentAgreementLedger {
@@ -174,12 +188,23 @@ export class AgreementLedgerStore {
     if (existingIndex >= 0) {
       const prev = entries[existingIndex];
       const driverVerdict = prev.driverVerdict;
+      // #137: a later completed verdict supersedes an earlier abstention, but a
+      // later abstention must never overwrite an earlier concluded verdict.
+      const reviewerVerdict =
+        input.reviewerVerdict === "NO_VERDICT" && !isAbstention(prev.reviewerVerdict)
+          ? prev.reviewerVerdict
+          : input.reviewerVerdict;
+      const turnState =
+        input.reviewerVerdict === "NO_VERDICT" && !isAbstention(prev.reviewerVerdict)
+          ? prev.turnState
+          : input.turnState;
       entries[existingIndex] = {
         ...prev,
         headSha: input.headSha,
-        reviewerVerdict: input.reviewerVerdict,
+        reviewerVerdict,
+        ...(turnState !== undefined ? { turnState } : {}),
         driverVerdict,
-        agreed: driverVerdict === null ? null : input.reviewerVerdict === driverVerdict,
+        agreed: driverVerdict === null ? null : reviewerVerdict === driverVerdict,
         ...(input.reason !== undefined ? { reason: input.reason } : {}),
         ...(input.engineMinutes !== undefined ? { engineMinutes: input.engineMinutes } : {}),
         updatedAt: nowIso,
@@ -189,6 +214,7 @@ export class AgreementLedgerStore {
         prNumber: input.prNumber,
         headSha: input.headSha,
         reviewerVerdict: input.reviewerVerdict,
+        ...(input.turnState !== undefined ? { turnState: input.turnState } : {}),
         driverVerdict: null,
         agreed: null,
         ...(input.reason !== undefined ? { reason: input.reason } : {}),

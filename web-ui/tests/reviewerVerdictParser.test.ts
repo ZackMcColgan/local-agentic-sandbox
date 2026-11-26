@@ -46,9 +46,13 @@ test("parseReviewerVerdictContent parses plain Verdict label and bare verdict to
   assert.equal(parseReviewerVerdictContent("thread-7", "FAIL").verdict, "FAIL");
 });
 
-test("parseReviewerVerdictContent fails closed with unparseable evidence note when no verdict line exists", () => {
+// #137 verdict integrity contract: a verdict-less turn records NO VERDICT
+// (abstain, turnState "unparseable") — never a FAIL. The unparseable evidence
+// note is still recorded so the abstention is auditable.
+test("parseReviewerVerdictContent records no verdict (abstains) with unparseable evidence note when no verdict line exists", () => {
   const verdict = parseReviewerVerdictContent("thread-8", "Looks mostly okay, maybe ship it?");
-  assert.equal(verdict.verdict, "FAIL");
+  assert.equal(verdict.verdict, "NO_VERDICT");
+  assert.equal(verdict.turnState, "unparseable");
   assert.ok(verdict.evidence.some((e) => /unparseable/i.test(e)));
 });
 
@@ -57,6 +61,8 @@ test("parseReviewerVerdictContent does not treat prose containing pass/fail word
     "thread-9",
     ["The suite passes locally.", "Failure modes were reviewed."].join("\n")
   );
-  assert.equal(verdict.verdict, "FAIL");
+  // Prose is not a verdict token; the contract encodes that as abstention.
+  assert.equal(verdict.verdict, "NO_VERDICT");
+  assert.equal(verdict.turnState, "unparseable");
   assert.ok(verdict.evidence.some((e) => /unparseable/i.test(e)));
 });

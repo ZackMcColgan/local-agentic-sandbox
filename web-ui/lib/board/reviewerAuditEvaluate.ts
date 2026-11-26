@@ -97,6 +97,9 @@ export async function evaluatePrShadowVerdict(
     prNumber,
     headSha,
     reviewerVerdict: gateResult.verdict,
+    ...(gateResult.reviewer.turnState !== undefined
+      ? { turnState: gateResult.reviewer.turnState }
+      : {}),
     engineMinutes,
     ...(reason ? { reason } : {}),
   });
