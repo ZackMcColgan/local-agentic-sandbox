@@ -138,9 +138,14 @@ describe("Rank 14 (U-F7): Wire dead actions & fix phantom running project tasks"
       );
       const fnStart = chatStreamSrc.indexOf("const handleManualCompact = async () =>");
       assert.ok(fnStart >= 0, "ChatStream.tsx must define handleManualCompact");
-      const fnEnd = chatStreamSrc.indexOf("const handleRestoreCompaction", fnStart);
+      // #139: the fetch now lives in the shared runManualCompaction() verdict
+      // path (used by both the ContextSheet button and the /compact composer
+      // command). Inspect the shared path plus handleManualCompact itself.
+      const sharedStart = chatStreamSrc.indexOf("const runManualCompaction = async");
+      assert.ok(sharedStart >= 0, "ChatStream.tsx must define runManualCompaction");
+      const fnEnd = chatStreamSrc.indexOf("const handleRestoreCompaction", sharedStart);
       assert.ok(fnEnd > fnStart);
-      const fnBody = chatStreamSrc.slice(fnStart, fnEnd);
+      const fnBody = chatStreamSrc.slice(sharedStart, fnEnd);
 
       assert.ok(
         fnBody.includes("/api/threads/${encodeURIComponent(currentThreadId)}/compact"),

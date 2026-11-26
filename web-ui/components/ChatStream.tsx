@@ -55,6 +55,7 @@ import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
 import type { ActiveTurnInfo, ThreadCompactionBoundary } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
+import { isCompactCommand } from "../lib/chat/compactCommand";
 import {
   parseSimulateCommand,
   createSimulatedChatResponse,
@@ -527,6 +528,18 @@ export function ChatStream({
     tokensAfter: number;
   } | null>(null);
   const [isCompactingManually, setIsCompactingManually] = useState(false);
+  // #139: in-place composer notice for the /compact slash command (tokens
+  // before -> after on success, error text on failure). Cleared on next send.
+  const [compactCommandNotice, setCompactCommandNotice] = useState<string | null>(null);
+  // UI-110: verdict of the sheet's own Compact action, rendered inside the
+  // sheet (the handler previously discarded it — failures were console-only
+  // and success changed nothing visible).
+  const [sheetCompactResult, setSheetCompactResult] = useState<{
+    ok: boolean;
+    tokensBefore?: number;
+    tokensAfter?: number;
+    error?: string;
+  } | null>(null);
   const [showCompactionModal, setShowCompactionModal] = useState(false);
   // #138: the context sheet opened by tapping the header meter pill on all
   // surfaces (bottom sheet on mobile, centered dialog on desktop).
@@ -971,9 +984,22 @@ export function ChatStream({
     });
   };
 
-  const handleManualCompact = async () => {
+  // Shared manual-compaction path: POST /api/threads/<id>/compact. Returns a
+  // verdict so callers (ContextSheet button and the #139 /compact composer
+  // command) can surface tokens before -> after or the failure reason.
+  const runManualCompaction = async (): Promise<{
+    ok: boolean;
+    tokensBefore?: number;
+    tokensAfter?: number;
+    error?: string;
+  }> => {
     const currentThreadId = activeThreadId || threadId;
-    if (!currentThreadId || isCompactingManually) return;
+    if (!currentThreadId) {
+      return { ok: false, error: "Nothing to compact yet" };
+    }
+    if (isCompactingManually) {
+      return { ok: false, error: "Compaction in flight." };
+    }
     setIsCompactingManually(true);
     try {
       const res = await fetch(`/api/threads/${encodeURIComponent(currentThreadId)}/compact`, {
@@ -981,6 +1007,8 @@ export function ChatStream({
       });
       if (res.ok) {
         const data = await res.json();
+        const tokensBefore: number | undefined = data.tokensBefore;
+        const tokensAfter: number | undefined = data.tokensAfter;
         if (data.thread?.compaction) {
           setThreadCompaction(data.thread.compaction);
           setContextStats((prev) => ({
@@ -988,13 +1016,31 @@ export function ChatStream({
             estimatedTokens: data.tokensAfter ?? prev.estimatedTokens,
           }));
         }
-      } else {
-        console.error("Manual compaction failed:", res.status);
+        return { ok: true, tokensBefore, tokensAfter };
       }
+      let error = `Compaction failed (HTTP ${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error) error = String(errJson.error);
+      } catch {
+        // Non-JSON error body: keep the status-based message.
+      }
+      return { ok: false, error };
     } catch (err) {
-      console.error("Manual compaction error:", err);
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Compaction failed",
+      };
     } finally {
       setIsCompactingManually(false);
+    }
+  };
+
+  const handleManualCompact = async () => {
+    const result = await runManualCompaction();
+    setSheetCompactResult(result);
+    if (!result.ok) {
+      console.error("Manual compaction failed:", result.error);
     }
   };
 
@@ -1663,6 +1709,38 @@ export function ChatStream({
     const prompt = rawPrompt.trim();
     const hasAttachments = attachedFiles.length > 0;
 
+    // #139: /compact slash command — exact trimmed, case-insensitive match
+    // runs manual compaction for the current thread instead of a chat turn.
+    // No user message is appended, no turn starts, no thread is created.
+    // Any longer text (e.g. "/compact please") falls through and sends as a
+    // normal byte-identical message.
+    if (isCompactCommand(prompt)) {
+      if (isGeneratingOrRunning) {
+        setCompactCommandNotice("A turn is streaming — wait for it to finish.");
+        setInput(rawPrompt);
+        return;
+      }
+      if (!hasAttachments && !activeThreadIdRef.current && !threadId) {
+        setCompactCommandNotice("Nothing to compact yet");
+        setInput(rawPrompt);
+        return;
+      }
+      setInput("");
+      setCompactCommandNotice(null);
+      const result = await runManualCompaction();
+      if (result.ok) {
+        setCompactCommandNotice(
+          `Compacted history: ${result.tokensBefore ?? "?"} → ${result.tokensAfter ?? "?"} tokens`
+        );
+      } else {
+        // Surface the failure and restore the composer text intact for retry.
+        setCompactCommandNotice(result.error ?? "Compaction failed");
+        setInput(rawPrompt);
+      }
+      return;
+    }
+
+    setCompactCommandNotice(null);
     const action = decideSendAction({
       running: isGeneratingOrRunning,
       hasAttachments,
@@ -2169,7 +2247,10 @@ export function ChatStream({
               surfaces — bottom sheet on mobile, centered dialog on desktop. */}
           <ContextSheet
             open={showContextSheet}
-            onClose={() => setShowContextSheet(false)}
+            onClose={() => {
+              setShowContextSheet(false);
+              setSheetCompactResult(null);
+            }}
             usedTokens={displayContextTokens}
             budgetTokens={contextStats.budgetTokens}
             triggerTokens={85000}
@@ -2181,6 +2262,7 @@ export function ChatStream({
             isCompacting={isCompactingManually}
             onCompact={handleManualCompact}
             onRestore={handleRestoreCompaction}
+            compactResult={sheetCompactResult}
           />
 
           {/* Image Lightbox Modal */}
@@ -2300,7 +2382,10 @@ export function ChatStream({
               <button
                 type="button"
                 data-testid="context-meter-pill"
-                onClick={() => setShowContextSheet(true)}
+                onClick={() => {
+                  setSheetCompactResult(null);
+                  setShowContextSheet(true);
+                }}
                 aria-label="Open context details"
                 className="flex items-center gap-2 shrink-0 min-h-[44px] px-1 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
                 title={`Context budget: ${displayContextTokens} / ${contextStats.budgetTokens} tokens (${Math.round((displayContextTokens / contextStats.budgetTokens) * 100)}%)`}
@@ -3035,6 +3120,18 @@ export function ChatStream({
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* #139: in-place /compact command feedback (tokens before -> after
+            on success, refusal/error text on failure). Composer text stays
+            intact on failure so the user can retry. */}
+            {compactCommandNotice && (
+              <div
+                data-testid="compact-command-notice"
+                className="mb-2 max-w-[840px] mx-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-medium"
+              >
+                <span>{compactCommandNotice}</span>
               </div>
             )}
 
