@@ -211,7 +211,9 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
       turnState: "completed",
       reason: "completed reviewer turn concluded PASS",
     });
-    const entries = store.read().entries.filter((e) => e.prNumber === 280 && e.headSha === "6cdf4010");
+    const entries = store
+      .read()
+      .entries.filter((e) => e.prNumber === 280 && e.headSha === "6cdf4010");
     assert.equal(entries.length, 1, "same PR+head must hold exactly one entry");
     assert.equal(entries[0].reviewerVerdict, "PASS");
     assert.equal(entries[0].turnState, "completed");
@@ -229,9 +231,15 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
       reviewerVerdict: "NO_VERDICT",
       turnState: "empty",
     });
-    const pr279 = store.read().entries.filter((e) => e.prNumber === 279 && e.headSha === "eed88c55");
+    const pr279 = store
+      .read()
+      .entries.filter((e) => e.prNumber === 279 && e.headSha === "eed88c55");
     assert.equal(pr279.length, 1);
-    assert.equal(pr279[0].reviewerVerdict, "PASS", "completed verdict must survive a later abstain");
+    assert.equal(
+      pr279[0].reviewerVerdict,
+      "PASS",
+      "completed verdict must survive a later abstain"
+    );
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -263,12 +271,15 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
       evidence: ["reviewer turn produced no assistant content"],
       turnState: "empty",
     });
-    assert.deepEqual(parseReviewerVerdictContent("t-unparse", "Looks mostly okay, maybe ship it?"), {
-      threadId: "t-unparse",
-      verdict: "NO_VERDICT",
-      evidence: ["reviewer verdict unparseable: no explicit VERDICT: PASS/FAIL token"],
-      turnState: "unparseable",
-    });
+    assert.deepEqual(
+      parseReviewerVerdictContent("t-unparse", "Looks mostly okay, maybe ship it?"),
+      {
+        threadId: "t-unparse",
+        verdict: "NO_VERDICT",
+        evidence: ["reviewer verdict unparseable: no explicit VERDICT: PASS/FAIL token"],
+        turnState: "unparseable",
+      }
+    );
   });
 
   it("issueReviewerThread abstains (never FAIL) on empty, unparseable, stopped-interrupted, and timed-out turns", async () => {
