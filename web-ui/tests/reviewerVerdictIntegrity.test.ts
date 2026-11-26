@@ -3,20 +3,22 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { NextRequest } from "next/server";
 
 import {
   AgreementLedgerStore,
   getAgreementLedgerStore,
   isValidGateVerdict,
 } from "../lib/board/agreementLedger";
-import { evaluateReviewerGate, parseReviewerVerdictContent } from "../lib/board/reviewerGate";
+import { evaluateReviewerGate } from "../lib/board/reviewerGate";
 import {
   createProductionStageDeps,
+  parseReviewerVerdictContent,
   type HostBridgeExecutor,
   type StageThreadStore,
 } from "../lib/board/productionStageDeps";
-import { withMockReviewerEvaluateDeps } from "../lib/board/reviewerAuditEvaluate";
-import { postReviewerAudit } from "../app/api/board/reviewer-audit/route";
+import type { ReviewerEvaluateDeps } from "../lib/board/reviewerAuditEvaluate";
+import { POST as postReviewerAudit } from "../app/api/board/reviewer-audit/route";
 import type { Thread } from "../lib/threads/threadStore";
 
 function makeTempDir(prefix: string): string {
@@ -93,6 +95,25 @@ const noopBridge: HostBridgeExecutor = async () => ({
   stderr: "",
 });
 
+// The reviewer-audit route reads its evaluate deps from this global seam
+// (web-ui/app/api/board/reviewer-audit/route.ts: `__mockReviewerEvaluateDeps`).
+async function withMockReviewerEvaluateDeps(
+  mock: ReviewerEvaluateDeps,
+  run: () => Promise<void>
+): Promise<void> {
+  const holder = globalThis as { __mockReviewerEvaluateDeps?: ReviewerEvaluateDeps | null };
+  holder.__mockReviewerEvaluateDeps = mock;
+  try {
+    await run();
+  } finally {
+    holder.__mockReviewerEvaluateDeps = null;
+  }
+}
+
+// `gh pr view --json headRefOid` results must be a valid 40-char hex SHA for the
+// route's head-sha guard (web-ui/lib/board/reviewerAuditEvaluate.ts HEAD_SHA_PATTERN).
+const VALID_HEAD_SHA = "deadbeef".repeat(5);
+
 describe("#137 reviewer-gate verdict integrity — ledger records only concluded verdicts", () => {
   it("(a) explicit PASS from a completed turn records PASS", () => {
     const dir = makeTempDir("item137-pass-");
@@ -100,7 +121,6 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     store.recordShadowVerdict({
       prNumber: 279,
       headSha: "aaaa1111",
-      driverVerdict: "PASS",
       reviewerVerdict: "PASS",
       turnState: "completed",
       reason: "defect-by-defect audit concluded PASS",
@@ -117,7 +137,6 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     store.recordShadowVerdict({
       prNumber: 279,
       headSha: "aaaa1111",
-      driverVerdict: "PASS",
       reviewerVerdict: "FAIL",
       turnState: "completed",
     });
@@ -133,7 +152,6 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
       store.recordShadowVerdict({
         prNumber: 280,
         headSha: `head-${turnState}`,
-        driverVerdict: "PASS",
         reviewerVerdict: "NO_VERDICT",
         turnState,
         reason: `reviewer turn ended ${turnState}; no verdict token emitted`,
@@ -147,7 +165,15 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     }
     assert.ok(!entries.some((e) => e.reviewerVerdict === "FAIL"), "abstain must never record FAIL");
 
-    // Agreement stats exclude abstentions from the agreement-rate denominator.
+    // Agreement stats exclude abstentions from the agreement-rate denominator:
+    // the driver verdict pairs with a COMPLETED reviewer entry, never an abstain.
+    store.recordShadowVerdict({
+      prNumber: 281,
+      headSha: "bbbb2222",
+      reviewerVerdict: "PASS",
+      turnState: "completed",
+      reason: "completed reviewer turn concluded PASS",
+    });
     store.recordDriverVerdict({
       prNumber: 281,
       headSha: "bbbb2222",
@@ -161,7 +187,7 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     assert.equal(ledger.agreementRate, 1, "abstentions must not poison the agreement rate");
     assert.equal(
       ledger.entries.filter((e) => e.reviewerVerdict === "NO_VERDICT").length,
-      3,
+      4,
       "abstentions remain visible on the ledger with turn state"
     );
 
@@ -174,7 +200,6 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     store.recordShadowVerdict({
       prNumber: 280,
       headSha: "6cdf4010",
-      driverVerdict: "PASS",
       reviewerVerdict: "NO_VERDICT",
       turnState: "interrupted",
       reason: "interrupted mid-report; audit table all pass, no verdict line",
@@ -182,7 +207,6 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     store.recordShadowVerdict({
       prNumber: 280,
       headSha: "6cdf4010",
-      driverVerdict: "PASS",
       reviewerVerdict: "PASS",
       turnState: "completed",
       reason: "completed reviewer turn concluded PASS",
@@ -196,14 +220,12 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     store.recordShadowVerdict({
       prNumber: 279,
       headSha: "eed88c55",
-      driverVerdict: "PASS",
       reviewerVerdict: "PASS",
       turnState: "completed",
     });
     store.recordShadowVerdict({
       prNumber: 279,
       headSha: "eed88c55",
-      driverVerdict: "PASS",
       reviewerVerdict: "NO_VERDICT",
       turnState: "empty",
     });
@@ -223,22 +245,26 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
   });
 
   it("parseReviewerVerdictContent abstains on empty and unparseable content with turn state", () => {
-    assert.deepEqual(parseReviewerVerdictContent("VERDICT: PASS\nok"), {
+    assert.deepEqual(parseReviewerVerdictContent("t-pass", "VERDICT: PASS\nok"), {
+      threadId: "t-pass",
       verdict: "PASS",
       evidence: ["ok"],
       turnState: "completed",
     });
-    assert.deepEqual(parseReviewerVerdictContent("VERDICT: FAIL\nno"), {
+    assert.deepEqual(parseReviewerVerdictContent("t-fail", "VERDICT: FAIL\nno"), {
+      threadId: "t-fail",
       verdict: "FAIL",
       evidence: ["no"],
       turnState: "completed",
     });
-    assert.deepEqual(parseReviewerVerdictContent(""), {
+    assert.deepEqual(parseReviewerVerdictContent("t-empty", ""), {
+      threadId: "t-empty",
       verdict: "NO_VERDICT",
       evidence: ["reviewer turn produced no assistant content"],
       turnState: "empty",
     });
-    assert.deepEqual(parseReviewerVerdictContent("Looks mostly okay, maybe ship it?"), {
+    assert.deepEqual(parseReviewerVerdictContent("t-unparse", "Looks mostly okay, maybe ship it?"), {
+      threadId: "t-unparse",
       verdict: "NO_VERDICT",
       evidence: ["reviewer verdict unparseable: no explicit VERDICT: PASS/FAIL token"],
       turnState: "unparseable",
@@ -376,20 +402,20 @@ describe("#137 reviewer-gate verdict integrity — ledger records only concluded
     const boardDir = makeTempDir("item137-route-abstain-");
     const prevBoardDir = process.env.BOARD_DIR;
     process.env.BOARD_DIR = boardDir;
-    const mock = {
+    const mock: ReviewerEvaluateDeps = {
       getMechanicalInput: async () => makeCleanInput(),
-      resolveHeadSha: async () => "deadbeef",
+      resolveHeadSha: async () => VALID_HEAD_SHA,
       issueReviewerThread: async () => ({
         threadId: "rev-route-abstain",
-        verdict: "NO_VERDICT" as const,
+        verdict: "NO_VERDICT",
         evidence: ["final assistant message empty"],
-        turnState: "empty" as const,
+        turnState: "empty",
       }),
     };
     try {
       await withMockReviewerEvaluateDeps(mock, async () => {
         const res = await postReviewerAudit(
-          new Request("http://localhost/api/board/reviewer-audit", {
+          new NextRequest("http://localhost/api/board/reviewer-audit", {
             method: "POST",
             body: JSON.stringify({ action: "evaluate", pr: 280, brief: "b" }),
             headers: { "content-type": "application/json" },
