@@ -1,4 +1,12 @@
-export type GateVerdict = "PASS" | "FAIL";
+/**
+ * #137 verdict integrity: a reviewer verdict may be recorded ONLY from a
+ * completed reviewer turn containing an explicit verdict token. An interrupted,
+ * empty, or verdict-less turn records NO_VERDICT (abstain) - never FAIL.
+ */
+export type GateVerdict = "PASS" | "FAIL" | "NO_VERDICT";
+
+/** How a reviewer turn concluded; abstentions carry the state that produced them. */
+export type ReviewerTurnState = "completed" | "interrupted" | "empty" | "unparseable" | "timeout";
 
 export const REVIEWER_GATE_STAGE3_DEFAULT = false;
 
@@ -54,6 +62,7 @@ const BANNED_HYGIENE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "hydrogen", pattern: /\bhydrogen\b/i },
   { label: "argon", pattern: /\bargon\b/i },
   { label: "sandy", pattern: /\bsandy\b/i },
+  { label: "secret-reference", pattern: /\bAPI_TOKEN\b/ },
 ];
 
 const TEST_FILE_PATTERN = /(?:^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/i;
@@ -213,6 +222,8 @@ export interface ReviewerVerdict {
   threadId: string;
   verdict: GateVerdict;
   evidence: string[];
+  /** How the reviewer turn concluded (#137). Abstentions carry their turn state. */
+  turnState?: ReviewerTurnState;
 }
 
 export interface EvaluateReviewerGateOptions {
@@ -269,8 +280,17 @@ export async function evaluateReviewerGate(
     brief: prompt,
   });
 
-  const verdict: GateVerdict =
-    mechanical.verdict === "PASS" && reviewer.verdict === "PASS" ? "PASS" : "FAIL";
+  // #137 verdict integrity: a reviewer abstention (NO_VERDICT) is not a FAIL.
+  // A mechanical failure still fails closed; otherwise the gate mirrors the
+  // reviewer's concluded verdict, and abstains when the reviewer concluded nothing.
+  let verdict: GateVerdict;
+  if (mechanical.verdict === "FAIL") {
+    verdict = "FAIL";
+  } else if (reviewer.verdict === "NO_VERDICT") {
+    verdict = "NO_VERDICT";
+  } else {
+    verdict = reviewer.verdict === "PASS" ? "PASS" : "FAIL";
+  }
   const stage3Enabled = isReviewerGateStage3Enabled(options.stage3Enabled);
   const shadowMode = !stage3Enabled;
 

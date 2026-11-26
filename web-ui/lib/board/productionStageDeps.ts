@@ -267,13 +267,21 @@ export function parseReviewerVerdictContent(threadId: string, content: string): 
   }
 
   if (!parsedVerdict) {
+    // #137 verdict integrity: a verdict-less turn is an abstention (NO_VERDICT),
+    // never a FAIL. Empty turns abstain as "empty"; verdict-less turns as "unparseable".
+    if (lines.length === 0) {
+      return {
+        threadId,
+        verdict: "NO_VERDICT",
+        evidence: ["reviewer turn produced no assistant content"],
+        turnState: "empty",
+      };
+    }
     return {
       threadId,
-      verdict: "FAIL",
-      evidence: [
-        `Reviewer thread ${threadId} produced an unparseable verdict.`,
-        ...(lines.length > 0 ? [`Raw output: ${lines.slice(0, 3).join(" | ")}`] : []),
-      ],
+      verdict: "NO_VERDICT",
+      evidence: ["reviewer verdict unparseable: no explicit VERDICT: PASS/FAIL token"],
+      turnState: "unparseable",
     };
   }
 
@@ -281,6 +289,7 @@ export function parseReviewerVerdictContent(threadId: string, content: string): 
     threadId,
     verdict: parsedVerdict,
     evidence: evidence.length > 0 ? evidence : [`Reviewer returned ${parsedVerdict}.`],
+    turnState: "completed",
   };
 }
 
@@ -536,15 +545,18 @@ export function createProductionStageDeps(
       while (true) {
         const record = await threadStore.getThread(thread.id);
         if (record) {
+          // #137 verdict integrity: an interrupted turn concludes nothing, so it
+          // abstains (NO_VERDICT) rather than recording a FAIL.
           if (record.status === "failed" || (record.status === "stopped" && dispatchSettled)) {
             return {
               threadId: thread.id,
-              verdict: "FAIL",
+              verdict: "NO_VERDICT",
               evidence: [
                 `Reviewer thread ${thread.id} settled with status '${record.status}'${
                   record.error ? `: ${record.error}` : "."
                 }`,
               ],
+              turnState: "interrupted",
             };
           }
 
@@ -556,10 +568,11 @@ export function createProductionStageDeps(
             if (!lastAssistant) {
               return {
                 threadId: thread.id,
-                verdict: "FAIL",
+                verdict: "NO_VERDICT",
                 evidence: [
                   `Reviewer thread ${thread.id} completed without an assistant verdict message.`,
                 ],
+                turnState: "empty",
               };
             }
             return parseReviewerVerdictContent(thread.id, lastAssistant.content);
@@ -569,18 +582,20 @@ export function createProductionStageDeps(
         if (dispatchError) {
           return {
             threadId: thread.id,
-            verdict: "FAIL",
+            verdict: "NO_VERDICT",
             evidence: [dispatchError],
+            turnState: "interrupted",
           };
         }
 
         if (now() >= deadline) {
           return {
             threadId: thread.id,
-            verdict: "FAIL",
+            verdict: "NO_VERDICT",
             evidence: [
               `Reviewer thread ${thread.id} timed out after ${reviewerTimeoutMs}ms without settling.`,
             ],
+            turnState: "timeout",
           };
         }
 
