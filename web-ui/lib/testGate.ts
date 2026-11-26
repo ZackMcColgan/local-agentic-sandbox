@@ -530,6 +530,15 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) =>
+      p.includes("lib/board/reviewerGate") ||
+      p.includes("lib/board/agreementLedger") ||
+      p.includes("lib/board/productionStageDeps") ||
+      p.includes("lib/board/reviewerAuditEvaluate") ||
+      p.includes("reviewerVerdictIntegrity.test.ts"),
+    tests: ["tests/reviewerVerdictIntegrity.test.ts"],
+  },
+  {
+    match: (p) =>
       p.includes("app/api/board/reviewer-audit") ||
       p.includes("lib/board/reviewerAuditEvaluate") ||
       p.includes("lib/board/productionStageDeps") ||
