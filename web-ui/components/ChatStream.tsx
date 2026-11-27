@@ -55,6 +55,7 @@ import { TaskManifest, TaskScope } from "../lib/subagents/types";
 import type { HostRunnerState } from "../lib/hostMode";
 import type { ActiveTurnInfo, ThreadCompactionBoundary } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
+import { isCompactCommand } from "../lib/chat/compactCommand";
 import {
   parseSimulateCommand,
   createSimulatedChatResponse,
@@ -527,6 +528,9 @@ export function ChatStream({
     tokensAfter: number;
   } | null>(null);
   const [isCompactingManually, setIsCompactingManually] = useState(false);
+  // #139: in-place feedback for a composer /compact run (tokens before → after
+  // on success). Cleared on the next successful run or on thread switch.
+  const [compactNotice, setCompactNotice] = useState<string | null>(null);
   const [showCompactionModal, setShowCompactionModal] = useState(false);
   // #138: the context sheet opened by tapping the header meter pill on all
   // surfaces (bottom sheet on mobile, centered dialog on desktop).
@@ -1658,10 +1662,70 @@ export function ChatStream({
     }
   };
 
+  // #139: /compact slash command — manual compaction through the same path as
+  // the "Compact history now" action. Intercepted before send dispatch and
+  // before thread creation so no chat turn is ever started and no thread is
+  // created for an empty draft.
+  const runComposerCompact = async (prompt: string): Promise<boolean> => {
+    if (isTurnLive) {
+      setErrorMsg("Compaction is unavailable while a turn is streaming. Wait for it to finish.");
+      setInput(prompt);
+      return true;
+    }
+    const currentThreadId = activeThreadIdRef.current || activeThreadState || threadId;
+    if (!currentThreadId) {
+      setErrorMsg("Nothing to compact yet. Start a conversation first.");
+      setInput(prompt);
+      return true;
+    }
+    setIsCompactingManually(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/threads/${encodeURIComponent(currentThreadId)}/compact`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thread?.compaction) {
+          setThreadCompaction(data.thread.compaction);
+          setContextStats((prev) => ({
+            ...prev,
+            estimatedTokens: data.tokensAfter ?? prev.estimatedTokens,
+          }));
+        }
+        const before = data.tokensBefore ?? 0;
+        const after = data.tokensAfter ?? 0;
+        setCompactNotice(`Compacted history: ${before} → ${after} tokens.`);
+        setInput("");
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+        return true;
+      }
+      const errJson = await res.json().catch(() => ({}));
+      setErrorMsg(errJson.error || `Compaction failed (HTTP ${res.status})`);
+      setInput(prompt);
+      return true;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
+      setErrorMsg(message || "Compaction failed");
+      setInput(prompt);
+      return true;
+    } finally {
+      setIsCompactingManually(false);
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const rawPrompt = textToSend !== undefined ? textToSend : input;
     const prompt = rawPrompt.trim();
     const hasAttachments = attachedFiles.length > 0;
+
+    // Exact /compact (case-insensitive, trimmed) runs manual compaction
+    // instead of sending a chat turn. Longer text containing /compact is a
+    // normal message and falls through byte-identically.
+    if (isCompactCommand(prompt) && !hasAttachments) {
+      await runComposerCompact(prompt);
+      return;
+    }
 
     const action = decideSendAction({
       running: isGeneratingOrRunning,
@@ -2874,6 +2938,17 @@ export function ChatStream({
                     </div>
                   );
                 })()}
+
+              {/* #139: in-place feedback for a composer /compact run */}
+              {compactNotice && (
+                <div
+                  data-testid="compact-notice"
+                  className="inline-flex items-center gap-2 h-7 px-3 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-400 w-fit"
+                >
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span>{compactNotice}</span>
+                </div>
+              )}
 
               <div ref={scrollRef} />
             </div>
