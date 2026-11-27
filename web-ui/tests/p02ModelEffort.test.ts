@@ -23,10 +23,7 @@ describe("P0.2 — reasoning effort defaults & DEFAULT_PRIMARY_MODEL", () => {
 
   it("other profiles keep low as their default when no effort is requested", () => {
     assert.equal(resolveEffectiveReasoningEffort("gemma4:e4b", undefined), "low");
-    assert.equal(
-      resolveEffectiveReasoningEffort("Swift-1.5-Qwen3.8-27B-IQ3_XS", undefined),
-      "low"
-    );
+    assert.equal(resolveEffectiveReasoningEffort("Swift-1.5-Qwen3.8-27B-IQ3_XS", undefined), "low");
     assert.equal(resolveEffectiveReasoningEffort("qwen3.8:27b-q3_k_m", undefined), "low");
   });
 
