@@ -65,7 +65,7 @@ export const PRESET_MODEL_PROFILES: ModelProfile[] = [
     role: "orchestrator",
     recommendedVRAM: "~16.0 GB",
     supportsReasoningEffort: true,
-    defaultReasoningEffort: "low",
+    defaultReasoningEffort: "medium",
     description:
       "Strata-served Flash-Next model with deep reasoning, fast inference, and agentic planning.",
   },
