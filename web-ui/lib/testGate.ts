@@ -1201,6 +1201,13 @@ const MAPPING_RULES: MappingRule[] = [
     tests: ["tests/chatAttachmentHelpers.test.ts"],
   },
   {
+    match: (p) =>
+      p.includes("lib/chat/compactCommand") ||
+      p.includes("composerCompactSlashCommand.test.ts") ||
+      p.includes("components/ChatStream.tsx"),
+    tests: ["tests/composerCompactSlashCommand.test.ts"],
+  },
+  {
     match: (p) => p.includes("lib/chat/streamMessages") || p.includes("chatStreamMessages.test.ts"),
     tests: ["tests/chatStreamMessages.test.ts", "tests/chatHistory.test.ts"],
   },

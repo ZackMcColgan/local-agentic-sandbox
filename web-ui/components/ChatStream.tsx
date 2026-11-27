@@ -56,6 +56,11 @@ import type { HostRunnerState } from "../lib/hostMode";
 import type { ActiveTurnInfo, ThreadCompactionBoundary } from "../lib/threads/types";
 import { ChatQueue, QueueItem, decideSendAction, drainNextForTurnEnd } from "../lib/chatQueue";
 import {
+  isCompactSlashCommand,
+  runCompactCommand,
+  formatCompactNotice,
+} from "../lib/chat/compactCommand";
+import {
   parseSimulateCommand,
   createSimulatedChatResponse,
   runSimulatedTask,
@@ -338,6 +343,9 @@ export function ChatStream({
     return () => clearTimeout(timer);
   }, [recoveredAtMs]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // /compact composer command: in-place feedback for manual compaction
+  // (success token delta, nothing-to-compact, mid-turn refusal, or error).
+  const [compactNotice, setCompactNotice] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [expandedProofs, setExpandedProofs] = useState<Record<string, boolean>>({});
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
@@ -1663,6 +1671,39 @@ export function ChatStream({
     const prompt = rawPrompt.trim();
     const hasAttachments = attachedFiles.length > 0;
 
+    // /compact composer command: an exact (case-insensitive) /compact runs
+    // manual compaction for the current thread through the same path as the
+    // Compact history now action, INSTEAD of sending a chat turn. No user
+    // message is appended and no turn starts. Any other input — including
+    // messages that merely contain /compact — falls through and sends normally.
+    if (isCompactSlashCommand(prompt) && !hasAttachments) {
+      setInput("");
+      const result = await runCompactCommand({
+        threadId: activeThreadIdRef.current || activeThreadState || threadId || null,
+        isStreaming: isGeneratingOrRunning,
+        isCompacting: isCompactingManually,
+      });
+      if (result.kind === "success") {
+        setThreadCompaction((prev) =>
+          prev
+            ? { ...prev, tokensBefore: result.tokensBefore, tokensAfter: result.tokensAfter }
+            : prev
+        );
+        setContextStats((prev) => ({
+          ...prev,
+          estimatedTokens: result.tokensAfter ?? prev.estimatedTokens,
+        }));
+        setCompactNotice(formatCompactNotice(result));
+      } else if (result.kind === "error") {
+        // Keep the composer text intact so the user can retry.
+        setInput(rawPrompt);
+        setCompactNotice(formatCompactNotice(result));
+      } else {
+        setCompactNotice(formatCompactNotice(result));
+      }
+      return;
+    }
+
     const action = decideSendAction({
       running: isGeneratingOrRunning,
       hasAttachments,
@@ -2943,6 +2984,16 @@ export function ChatStream({
                 >
                   Clear all
                 </button>
+              </div>
+            )}
+
+            {/* /compact composer command: in-place feedback for manual compaction */}
+            {compactNotice && (
+              <div
+                data-testid="compact-notice"
+                className="max-w-[840px] mx-auto mb-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-[12px] text-slate-600 dark:text-zinc-300"
+              >
+                {compactNotice}
               </div>
             )}
 
