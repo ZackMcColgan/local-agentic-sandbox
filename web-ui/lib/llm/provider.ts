@@ -97,6 +97,8 @@ export interface LLMGenerateResult {
   model: string;
   loadDurationMs?: number;
   totalDurationMs?: number;
+  promptTokens?: number;
+  outputTokens?: number;
   [key: string]: unknown;
 }
 
@@ -188,7 +190,10 @@ export class OllamaProvider implements LLMProvider {
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            const json = JSON.parse(trimmed);
+            const json = JSON.parse(trimmed) as LLMStreamChunk & { done_reason?: string };
+            if (typeof json.done_reason === "string" && json.done_reason && !json.finish_reason) {
+              json.finish_reason = json.done_reason;
+            }
             yield json;
           } catch {
             console.warn("[Ollama Stream] JSON parse error on chunk:", trimmed);
@@ -198,7 +203,11 @@ export class OllamaProvider implements LLMProvider {
 
       if (buffer.trim()) {
         try {
-          yield JSON.parse(buffer.trim());
+          const json = JSON.parse(buffer.trim()) as LLMStreamChunk & { done_reason?: string };
+          if (typeof json.done_reason === "string" && json.done_reason && !json.finish_reason) {
+            json.finish_reason = json.done_reason;
+          }
+          yield json;
         } catch {}
       }
     } finally {
@@ -219,9 +228,19 @@ export class OllamaProvider implements LLMProvider {
     let accumulatedThinking = "";
     const toolCalls: LLMToolCall[] = [];
     let lastChunk: LLMStreamChunk | undefined;
+    let finishReason: string | undefined;
+    let outputTokens: number | undefined;
+    let promptTokens: number | undefined;
+    let evalCount: number | undefined;
+    let promptEvalCount: number | undefined;
 
     for await (const chunk of this.streamChat(baseUrl, payload)) {
       lastChunk = chunk;
+      if (chunk.finish_reason) finishReason = chunk.finish_reason;
+      if (typeof chunk.outputTokens === "number") outputTokens = chunk.outputTokens;
+      if (typeof chunk.promptTokens === "number") promptTokens = chunk.promptTokens;
+      if (typeof chunk.eval_count === "number") evalCount = chunk.eval_count;
+      if (typeof chunk.prompt_eval_count === "number") promptEvalCount = chunk.prompt_eval_count;
       if (chunk.message?.content) accumulatedContent += chunk.message.content;
       if (chunk.message?.thinking) accumulatedThinking += chunk.message.thinking;
       if (Array.isArray(chunk.message?.tool_calls)) toolCalls.push(...chunk.message.tool_calls);
@@ -229,6 +248,11 @@ export class OllamaProvider implements LLMProvider {
 
     return {
       ...lastChunk,
+      ...(finishReason !== undefined ? { finish_reason: finishReason } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
+      ...(promptTokens !== undefined ? { promptTokens } : {}),
+      ...(evalCount !== undefined ? { eval_count: evalCount } : {}),
+      ...(promptEvalCount !== undefined ? { prompt_eval_count: promptEvalCount } : {}),
       message: {
         role: "assistant",
         content: accumulatedContent,
@@ -307,6 +331,8 @@ export class OllamaProvider implements LLMProvider {
     let insideThinking = false;
     let loadDurationMs = 0;
     let totalDurationMs = 0;
+    let promptTokens: number | undefined;
+    let outputTokens: number | undefined;
 
     if (res.body && typeof res.body.getReader === "function") {
       const reader = res.body.getReader();
@@ -327,6 +353,12 @@ export class OllamaProvider implements LLMProvider {
               const chunk = JSON.parse(line);
               if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
               if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+              if (typeof chunk.prompt_eval_count === "number") {
+                promptTokens = chunk.prompt_eval_count;
+              }
+              if (typeof chunk.eval_count === "number") {
+                outputTokens = chunk.eval_count;
+              }
               const part = chunk.response || "";
               accumulatedText += part;
 
@@ -349,6 +381,12 @@ export class OllamaProvider implements LLMProvider {
             const chunk = JSON.parse(buffer);
             if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
             if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+            if (typeof chunk.prompt_eval_count === "number") {
+              promptTokens = chunk.prompt_eval_count;
+            }
+            if (typeof chunk.eval_count === "number") {
+              outputTokens = chunk.eval_count;
+            }
             const part = chunk.response || "";
             accumulatedText += part;
           } catch (_) {
@@ -367,6 +405,12 @@ export class OllamaProvider implements LLMProvider {
           accumulatedText += chunk.response || "";
           if (chunk.load_duration) loadDurationMs = Math.round(chunk.load_duration / 1e6);
           if (chunk.total_duration) totalDurationMs = Math.round(chunk.total_duration / 1e6);
+          if (typeof chunk.prompt_eval_count === "number") {
+            promptTokens = chunk.prompt_eval_count;
+          }
+          if (typeof chunk.eval_count === "number") {
+            outputTokens = chunk.eval_count;
+          }
         } catch {
           accumulatedText += line;
         }
@@ -384,6 +428,8 @@ export class OllamaProvider implements LLMProvider {
       model: req.model,
       loadDurationMs,
       totalDurationMs,
+      ...(promptTokens !== undefined ? { promptTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
     };
   }
 
@@ -706,6 +752,7 @@ export class LlamaCppProvider implements LLMProvider {
 
     let insideThinking = false;
     let streamDone = false;
+    let sawDone = false;
     let abortListener: (() => void) | undefined;
     const abortPromise = signal
       ? new Promise<never>((_, reject) => {
@@ -718,6 +765,232 @@ export class LlamaCppProvider implements LLMProvider {
         })
       : null;
     abortPromise?.catch(() => {});
+
+    function* processSseLine(line: string): Generator<LLMStreamChunk> {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data:")) return;
+
+      const dataStr = trimmed.replace(/^data:\s*/, "");
+      if (dataStr === "[DONE]") {
+        sawDone = true;
+        return;
+      }
+
+      let parsed: {
+        finish_reason?: string;
+        usage?: { completion_tokens?: number; prompt_tokens?: number };
+        choices?: Array<{
+          finish_reason?: string;
+          delta?: {
+            reasoning_content?: string;
+            reasoning?: string;
+            content?: string;
+            tool_calls?: Array<{
+              index?: number;
+              id?: string;
+              type?: string;
+              function?: { name?: string; arguments?: string };
+            }>;
+          };
+          message?: {
+            tool_calls?: Array<{
+              index?: number;
+              id?: string;
+              type?: string;
+              function?: { name?: string; arguments?: string | Record<string, unknown> };
+            }>;
+          };
+        }>;
+      };
+      try {
+        parsed = JSON.parse(dataStr);
+      } catch {
+        return;
+      }
+
+      const choice = parsed.choices?.[0];
+      const usageOutputTokens = parsed.usage?.completion_tokens;
+      // TOKEN ECONOMICS (a): same PR #63 usage extraction site now also carries
+      // prompt_tokens so per-round prompt cost rides the existing plumbing.
+      const usagePromptTokens = parsed.usage?.prompt_tokens;
+
+      if (!choice) {
+        // Standalone pre-EOF usage chunk (choices: [], usage: { prompt_tokens, completion_tokens })
+        if (typeof usageOutputTokens === "number" || typeof usagePromptTokens === "number") {
+          yield {
+            finish_reason: parsed.finish_reason || undefined,
+            outputTokens: usageOutputTokens,
+            promptTokens: usagePromptTokens,
+          };
+        }
+        return;
+      }
+
+      const finishReason = choice.finish_reason || parsed.finish_reason;
+      let emittedMetadata = false;
+
+      // Handle streaming delta reasoning
+      const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
+      if (reasoning) {
+        emittedMetadata = true;
+        yield {
+          message: { thinking: reasoning },
+          finish_reason: finishReason || undefined,
+          outputTokens: usageOutputTokens,
+          promptTokens: usagePromptTokens,
+        };
+      }
+
+      // Handle streaming delta content with inline <think> tags separation
+      let content = choice.delta?.content;
+      if (content) {
+        if (!insideThinking && content.includes("<think>")) {
+          const parts = content.split("<think>");
+          if (parts[0]) {
+            yield { message: { content: parts[0] } };
+          }
+          insideThinking = true;
+          content = parts.slice(1).join("<think>");
+        }
+
+        if (insideThinking) {
+          if (content.includes("</think>")) {
+            const parts = content.split("</think>");
+            const after = parts.slice(1).join("</think>");
+            if (parts[0]) {
+              if (!after) emittedMetadata = true;
+              yield {
+                message: { thinking: parts[0] },
+                ...(after
+                  ? {}
+                  : {
+                      finish_reason: finishReason || undefined,
+                      outputTokens: usageOutputTokens,
+                      promptTokens: usagePromptTokens,
+                    }),
+              };
+            }
+            insideThinking = false;
+            if (after) {
+              emittedMetadata = true;
+              yield {
+                message: { content: after },
+                finish_reason: finishReason || undefined,
+                outputTokens: usageOutputTokens,
+                promptTokens: usagePromptTokens,
+              };
+            }
+          } else if (content) {
+            emittedMetadata = true;
+            yield {
+              message: { thinking: content },
+              finish_reason: finishReason || undefined,
+              outputTokens: usageOutputTokens,
+              promptTokens: usagePromptTokens,
+            };
+          }
+        } else if (content) {
+          emittedMetadata = true;
+          yield {
+            message: { content },
+            finish_reason: finishReason || undefined,
+            outputTokens: usageOutputTokens,
+            promptTokens: usagePromptTokens,
+          };
+        }
+      }
+
+      if (
+        !emittedMetadata &&
+        (finishReason ||
+          typeof usageOutputTokens === "number" ||
+          typeof usagePromptTokens === "number")
+      ) {
+        yield {
+          finish_reason: finishReason || undefined,
+          outputTokens: usageOutputTokens,
+          promptTokens: usagePromptTokens,
+        };
+      }
+
+      // Handle streaming delta tool calls
+      if (Array.isArray(choice.delta?.tool_calls)) {
+        let sawToolCallDelta = false;
+        let primaryAcc:
+          | { id?: string; type?: string; function: { name: string; arguments: string } }
+          | undefined;
+        for (const tc of choice.delta.tool_calls) {
+          const idx = tc.index ?? 0;
+          // Board #125 (Perf P2): multi-index deltas are legitimate parallel tool
+          // calls (parallel_tool_calls: true). Runaway protection lives in the
+          // fanout partition (cap + read-only allowlist), not in dropping indices.
+          if (!toolCallsAccumulator.has(idx)) {
+            toolCallsAccumulator.set(idx, {
+              id: tc.id || "",
+              type: tc.type || "function",
+              function: { name: "", arguments: "" },
+            });
+          }
+          const acc = toolCallsAccumulator.get(idx)!;
+          if (tc.id) acc.id = tc.id;
+          if (tc.type) acc.type = tc.type;
+          if (tc.function?.name) acc.function.name += tc.function.name;
+          if (tc.function?.arguments) acc.function.arguments += tc.function.arguments;
+          sawToolCallDelta = true;
+          primaryAcc = acc;
+        }
+        // Yield a lightweight progress chunk so callers (e.g. round inactivity
+        // deadlines) see life during long tool-call generations rather than
+        // buffering silently until EOF.
+        if (sawToolCallDelta) {
+          yield {
+            toolCallProgress: {
+              name: primaryAcc?.function.name || undefined,
+              argumentChars: primaryAcc?.function.arguments.length ?? 0,
+            },
+          };
+        }
+      }
+
+      // Handle non-delta message tool calls: accumulate into toolCallsAccumulator, emit progress only
+      if (Array.isArray(choice.message?.tool_calls)) {
+        let sawMessageToolCall = false;
+        let primaryAcc:
+          | { id?: string; type?: string; function: { name: string; arguments: string } }
+          | undefined;
+        for (let i = 0; i < choice.message.tool_calls.length; i++) {
+          const tc = choice.message.tool_calls[i];
+          const idx = tc.index ?? i;
+          if (!toolCallsAccumulator.has(idx)) {
+            toolCallsAccumulator.set(idx, {
+              id: tc.id || "",
+              type: tc.type || "function",
+              function: { name: "", arguments: "" },
+            });
+          }
+          const acc = toolCallsAccumulator.get(idx)!;
+          if (tc.id) acc.id = tc.id;
+          if (tc.type) acc.type = tc.type;
+          if (tc.function?.name) acc.function.name = tc.function.name;
+          const rawArgs = tc.function?.arguments;
+          if (typeof rawArgs === "string" && rawArgs.length > acc.function.arguments.length) {
+            acc.function.arguments = rawArgs;
+          } else if (rawArgs && typeof rawArgs === "object") {
+            acc.function.arguments = JSON.stringify(rawArgs);
+          }
+          sawMessageToolCall = true;
+          if (idx === 0) primaryAcc = acc;
+        }
+        if (sawMessageToolCall) {
+          yield {
+            toolCallProgress: {
+              name: primaryAcc?.function.name || undefined,
+              argumentChars: primaryAcc?.function.arguments.length ?? 0,
+            },
+          };
+        }
+      }
+    }
 
     try {
       while (true) {
@@ -736,220 +1009,16 @@ export class LlamaCppProvider implements LLMProvider {
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data:")) continue;
-
-          const dataStr = trimmed.replace(/^data:\s*/, "");
-          if (dataStr === "[DONE]") {
-            break;
-          }
-
-          let parsed: {
-            finish_reason?: string;
-            usage?: { completion_tokens?: number; prompt_tokens?: number };
-            choices?: Array<{
-              finish_reason?: string;
-              delta?: {
-                reasoning_content?: string;
-                reasoning?: string;
-                content?: string;
-                tool_calls?: Array<{
-                  index?: number;
-                  id?: string;
-                  type?: string;
-                  function?: { name?: string; arguments?: string };
-                }>;
-              };
-              message?: {
-                tool_calls?: Array<{
-                  index?: number;
-                  id?: string;
-                  type?: string;
-                  function?: { name?: string; arguments?: string | Record<string, unknown> };
-                }>;
-              };
-            }>;
-          };
-          try {
-            parsed = JSON.parse(dataStr);
-          } catch {
-            continue;
-          }
-
-          const choice = parsed.choices?.[0];
-          const usageOutputTokens = parsed.usage?.completion_tokens;
-          // TOKEN ECONOMICS (a): same PR #63 usage extraction site now also carries
-          // prompt_tokens so per-round prompt cost rides the existing plumbing.
-          const usagePromptTokens = parsed.usage?.prompt_tokens;
-
-          if (!choice) {
-            // Standalone pre-EOF usage chunk (choices: [], usage: { prompt_tokens, completion_tokens })
-            if (typeof usageOutputTokens === "number" || typeof usagePromptTokens === "number") {
-              yield {
-                finish_reason: parsed.finish_reason || undefined,
-                outputTokens: usageOutputTokens,
-                promptTokens: usagePromptTokens,
-              };
-            }
-            continue;
-          }
-
-          const finishReason = choice.finish_reason || parsed.finish_reason;
-
-          // Handle streaming delta reasoning
-          const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
-          if (reasoning) {
-            yield {
-              message: { thinking: reasoning },
-              finish_reason: finishReason || undefined,
-              outputTokens: usageOutputTokens,
-              promptTokens: usagePromptTokens,
-            };
-          }
-
-          // Handle streaming delta content with inline <think> tags separation
-          let content = choice.delta?.content;
-          if (content) {
-            if (!insideThinking && content.includes("<think>")) {
-              const parts = content.split("<think>");
-              if (parts[0]) {
-                yield { message: { content: parts[0] } };
-              }
-              insideThinking = true;
-              content = parts.slice(1).join("<think>");
-            }
-
-            if (insideThinking) {
-              if (content.includes("</think>")) {
-                const parts = content.split("</think>");
-                const after = parts.slice(1).join("</think>");
-                if (parts[0]) {
-                  yield {
-                    message: { thinking: parts[0] },
-                    ...(after
-                      ? {}
-                      : {
-                          finish_reason: finishReason || undefined,
-                          outputTokens: usageOutputTokens,
-                          promptTokens: usagePromptTokens,
-                        }),
-                  };
-                }
-                insideThinking = false;
-                if (after) {
-                  yield {
-                    message: { content: after },
-                    finish_reason: finishReason || undefined,
-                    outputTokens: usageOutputTokens,
-                    promptTokens: usagePromptTokens,
-                  };
-                }
-              } else if (content) {
-                yield {
-                  message: { thinking: content },
-                  finish_reason: finishReason || undefined,
-                  outputTokens: usageOutputTokens,
-                  promptTokens: usagePromptTokens,
-                };
-              }
-            } else if (content) {
-              yield {
-                message: { content },
-                finish_reason: finishReason || undefined,
-                outputTokens: usageOutputTokens,
-                promptTokens: usagePromptTokens,
-              };
-            }
-          } else if (
-            finishReason ||
-            (!reasoning &&
-              (typeof usageOutputTokens === "number" || typeof usagePromptTokens === "number"))
-          ) {
-            yield {
-              finish_reason: finishReason || undefined,
-              outputTokens: usageOutputTokens,
-              promptTokens: usagePromptTokens,
-            };
-          }
-
-          // Handle streaming delta tool calls
-          if (Array.isArray(choice.delta?.tool_calls)) {
-            let sawToolCallDelta = false;
-            let primaryAcc:
-              | { id?: string; type?: string; function: { name: string; arguments: string } }
-              | undefined;
-            for (const tc of choice.delta.tool_calls) {
-              const idx = tc.index ?? 0;
-              // Board #125 (Perf P2): multi-index deltas are legitimate parallel tool
-              // calls (parallel_tool_calls: true). Runaway protection lives in the
-              // fanout partition (cap + read-only allowlist), not in dropping indices.
-              if (!toolCallsAccumulator.has(idx)) {
-                toolCallsAccumulator.set(idx, {
-                  id: tc.id || "",
-                  type: tc.type || "function",
-                  function: { name: "", arguments: "" },
-                });
-              }
-              const acc = toolCallsAccumulator.get(idx)!;
-              if (tc.id) acc.id = tc.id;
-              if (tc.type) acc.type = tc.type;
-              if (tc.function?.name) acc.function.name += tc.function.name;
-              if (tc.function?.arguments) acc.function.arguments += tc.function.arguments;
-              sawToolCallDelta = true;
-              primaryAcc = acc;
-            }
-            // Yield a lightweight progress chunk so callers (e.g. round inactivity
-            // deadlines) see life during long tool-call generations rather than
-            // buffering silently until EOF.
-            if (sawToolCallDelta) {
-              yield {
-                toolCallProgress: {
-                  name: primaryAcc?.function.name || undefined,
-                  argumentChars: primaryAcc?.function.arguments.length ?? 0,
-                },
-              };
-            }
-          }
-
-          // Handle non-delta message tool calls: accumulate into toolCallsAccumulator, emit progress only
-          if (Array.isArray(choice.message?.tool_calls)) {
-            let sawMessageToolCall = false;
-            let primaryAcc:
-              | { id?: string; type?: string; function: { name: string; arguments: string } }
-              | undefined;
-            for (let i = 0; i < choice.message.tool_calls.length; i++) {
-              const tc = choice.message.tool_calls[i];
-              const idx = tc.index ?? i;
-              if (!toolCallsAccumulator.has(idx)) {
-                toolCallsAccumulator.set(idx, {
-                  id: tc.id || "",
-                  type: tc.type || "function",
-                  function: { name: "", arguments: "" },
-                });
-              }
-              const acc = toolCallsAccumulator.get(idx)!;
-              if (tc.id) acc.id = tc.id;
-              if (tc.type) acc.type = tc.type;
-              if (tc.function?.name) acc.function.name = tc.function.name;
-              const rawArgs = tc.function?.arguments;
-              if (typeof rawArgs === "string" && rawArgs.length > acc.function.arguments.length) {
-                acc.function.arguments = rawArgs;
-              } else if (rawArgs && typeof rawArgs === "object") {
-                acc.function.arguments = JSON.stringify(rawArgs);
-              }
-              sawMessageToolCall = true;
-              if (idx === 0) primaryAcc = acc;
-            }
-            if (sawMessageToolCall) {
-              yield {
-                toolCallProgress: {
-                  name: primaryAcc?.function.name || undefined,
-                  argumentChars: primaryAcc?.function.arguments.length ?? 0,
-                },
-              };
-            }
-          }
+          yield* processSseLine(line);
+          if (sawDone) break;
         }
+        if (sawDone) {
+          break;
+        }
+      }
+
+      if (!sawDone && buffer.trim()) {
+        yield* processSseLine(buffer);
       }
 
       // End of stream: emit accumulated streaming tool calls if any
@@ -1001,9 +1070,19 @@ export class LlamaCppProvider implements LLMProvider {
     let accumulatedThinking = "";
     const toolCalls: LLMToolCall[] = [];
     let lastChunk: LLMStreamChunk | undefined;
+    let finishReason: string | undefined;
+    let outputTokens: number | undefined;
+    let promptTokens: number | undefined;
+    let evalCount: number | undefined;
+    let promptEvalCount: number | undefined;
 
     for await (const chunk of this.streamChat(baseUrl, payload)) {
       lastChunk = chunk;
+      if (chunk.finish_reason) finishReason = chunk.finish_reason;
+      if (typeof chunk.outputTokens === "number") outputTokens = chunk.outputTokens;
+      if (typeof chunk.promptTokens === "number") promptTokens = chunk.promptTokens;
+      if (typeof chunk.eval_count === "number") evalCount = chunk.eval_count;
+      if (typeof chunk.prompt_eval_count === "number") promptEvalCount = chunk.prompt_eval_count;
       if (chunk.message?.content) accumulatedContent += chunk.message.content;
       if (chunk.message?.thinking) accumulatedThinking += chunk.message.thinking;
       if (Array.isArray(chunk.message?.tool_calls)) toolCalls.push(...chunk.message.tool_calls);
@@ -1011,6 +1090,11 @@ export class LlamaCppProvider implements LLMProvider {
 
     return {
       ...lastChunk,
+      ...(finishReason !== undefined ? { finish_reason: finishReason } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
+      ...(promptTokens !== undefined ? { promptTokens } : {}),
+      ...(evalCount !== undefined ? { eval_count: evalCount } : {}),
+      ...(promptEvalCount !== undefined ? { prompt_eval_count: promptEvalCount } : {}),
       message: {
         role: "assistant",
         content: accumulatedContent,
@@ -1134,11 +1218,97 @@ export class LlamaCppProvider implements LLMProvider {
     let accumulatedText = "";
     let thinkingText = "";
     let insideThinking = false;
+    let promptTokens: number | undefined;
+    let outputTokens: number | undefined;
+
+    const processGenerateLine = (line: string): boolean => {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data:")) return false;
+      const dataStr = trimmed.replace(/^data:\s*/, "");
+      if (dataStr === "[DONE]") return true;
+
+      let parsed: {
+        finish_reason?: string;
+        usage?: { completion_tokens?: number; prompt_tokens?: number };
+        choices?: Array<{
+          finish_reason?: string;
+          delta?: {
+            reasoning_content?: string;
+            reasoning?: string;
+            content?: string;
+            tool_calls?: Array<{
+              index?: number;
+              id?: string;
+              type?: string;
+              function?: { name?: string; arguments?: string };
+            }>;
+          };
+        }>;
+      };
+      try {
+        parsed = JSON.parse(dataStr);
+      } catch {
+        return false;
+      }
+
+      if (typeof parsed.usage?.prompt_tokens === "number") {
+        promptTokens = parsed.usage.prompt_tokens;
+      }
+      if (typeof parsed.usage?.completion_tokens === "number") {
+        outputTokens = parsed.usage.completion_tokens;
+      }
+
+      const choice = parsed.choices?.[0];
+      if (!choice) return false;
+
+      const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
+      if (reasoning) {
+        thinkingText += reasoning;
+        req.onThinkingChunk?.(reasoning, thinkingText);
+      }
+
+      const content = choice.delta?.content;
+      if (content) {
+        let remaining = content;
+        while (remaining.length > 0) {
+          if (!insideThinking) {
+            const openIdx = remaining.indexOf("<think>");
+            if (openIdx === -1) {
+              accumulatedText += remaining;
+              remaining = "";
+            } else {
+              if (openIdx > 0) {
+                accumulatedText += remaining.slice(0, openIdx);
+              }
+              insideThinking = true;
+              remaining = remaining.slice(openIdx + "<think>".length);
+            }
+          } else {
+            const closeIdx = remaining.indexOf("</think>");
+            if (closeIdx === -1) {
+              thinkingText += remaining;
+              req.onThinkingChunk?.(remaining, thinkingText);
+              remaining = "";
+            } else {
+              const beforeClose = remaining.slice(0, closeIdx);
+              if (beforeClose) {
+                thinkingText += beforeClose;
+                req.onThinkingChunk?.(beforeClose, thinkingText);
+              }
+              insideThinking = false;
+              remaining = remaining.slice(closeIdx + "</think>".length);
+            }
+          }
+        }
+      }
+      return false;
+    };
 
     if (res.body && typeof res.body.getReader === "function") {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let sawDone = false;
 
       try {
         while (true) {
@@ -1149,79 +1319,15 @@ export class LlamaCppProvider implements LLMProvider {
           buffer = lines.pop() || "";
 
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            const dataStr = trimmed.replace(/^data:\s*/, "");
-            if (dataStr === "[DONE]") break;
-
-            let parsed: {
-              finish_reason?: string;
-              usage?: { completion_tokens?: number; prompt_tokens?: number };
-              choices?: Array<{
-                finish_reason?: string;
-                delta?: {
-                  reasoning_content?: string;
-                  reasoning?: string;
-                  content?: string;
-                  tool_calls?: Array<{
-                    index?: number;
-                    id?: string;
-                    type?: string;
-                    function?: { name?: string; arguments?: string };
-                  }>;
-                };
-              }>;
-            };
-            try {
-              parsed = JSON.parse(dataStr);
-            } catch {
-              continue;
-            }
-
-            const choice = parsed.choices?.[0];
-            if (!choice) continue;
-
-            const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
-            if (reasoning) {
-              thinkingText += reasoning;
-              req.onThinkingChunk?.(reasoning, thinkingText);
-            }
-
-            const content = choice.delta?.content;
-            if (content) {
-              let remaining = content;
-              while (remaining.length > 0) {
-                if (!insideThinking) {
-                  const openIdx = remaining.indexOf("<think>");
-                  if (openIdx === -1) {
-                    accumulatedText += remaining;
-                    remaining = "";
-                  } else {
-                    if (openIdx > 0) {
-                      accumulatedText += remaining.slice(0, openIdx);
-                    }
-                    insideThinking = true;
-                    remaining = remaining.slice(openIdx + "<think>".length);
-                  }
-                } else {
-                  const closeIdx = remaining.indexOf("</think>");
-                  if (closeIdx === -1) {
-                    thinkingText += remaining;
-                    req.onThinkingChunk?.(remaining, thinkingText);
-                    remaining = "";
-                  } else {
-                    const beforeClose = remaining.slice(0, closeIdx);
-                    if (beforeClose) {
-                      thinkingText += beforeClose;
-                      req.onThinkingChunk?.(beforeClose, thinkingText);
-                    }
-                    insideThinking = false;
-                    remaining = remaining.slice(closeIdx + "</think>".length);
-                  }
-                }
-              }
+            if (processGenerateLine(line)) {
+              sawDone = true;
+              break;
             }
           }
+          if (sawDone) break;
+        }
+        if (!sawDone && buffer.trim()) {
+          processGenerateLine(buffer);
         }
       } finally {
         reader.releaseLock?.();
@@ -1230,21 +1336,7 @@ export class LlamaCppProvider implements LLMProvider {
       const rawText = await res.text();
       const lines = rawText.split("\n").filter((l) => l.trim().startsWith("data:"));
       for (const line of lines) {
-        const dataStr = line.replace(/^data:\s*/, "").trim();
-        if (dataStr === "[DONE]") break;
-        try {
-          const parsed = JSON.parse(dataStr);
-          const choice = parsed.choices?.[0];
-          if (choice) {
-            const reasoning = choice.delta?.reasoning_content ?? choice.delta?.reasoning;
-            if (reasoning) {
-              thinkingText += reasoning;
-              req.onThinkingChunk?.(reasoning, thinkingText);
-            }
-            const content = choice.delta?.content;
-            if (content) accumulatedText += content;
-          }
-        } catch {}
+        if (processGenerateLine(line)) break;
       }
     }
 
@@ -1276,6 +1368,8 @@ export class LlamaCppProvider implements LLMProvider {
       thinking: thinkingText.trim() || undefined,
       model: req.model,
       totalDurationMs: Date.now() - startTime,
+      ...(promptTokens !== undefined ? { promptTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
     };
   }
 
