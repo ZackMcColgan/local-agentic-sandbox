@@ -1830,11 +1830,19 @@ const MAPPING_RULES: MappingRule[] = [
   // Memory evaluation, ingestion and verification scripts
   {
     match: (p) =>
-      p.includes("scripts/eval-memory") ||
-      p.includes("scripts/ingest-docs") ||
-      p.includes("scripts/verify-phase-d") ||
-      p.includes("eval/"),
+      (p.includes("scripts/eval-memory") ||
+        p.includes("scripts/ingest-docs") ||
+        p.includes("scripts/verify-phase-d") ||
+        p.includes("eval/")) &&
+      !p.includes("lib/subagents/modelEvalPack"),
     tests: ["tests/skillGate.test.ts"],
+  },
+  {
+    // modelEvalPack is consumed by the P6 security/deploy/eval ingestion
+    // pipeline, not the skill gate. Route its changes to the suite that
+    // actually imports it.
+    match: (p) => p.includes("lib/subagents/modelEvalPack"),
+    tests: ["tests/p6SecurityDeployEvalIngestion.test.ts"],
   },
   {
     match: (p) => p.includes("scripts/verify-phase-c"),
@@ -1938,7 +1946,7 @@ const MAPPING_RULES: MappingRule[] = [
   },
   {
     match: (p) => p === "retryAfter.mjs" || p === "tests/retryAfter.test.mjs",
-    tests: ["../tests/retryAfter.test.mjs"],
+    tests: ["tests/retryAfter.test.ts"],
   },
   {
     match: (p) => p.includes("app/api/traces/route") || p.includes("tracesRoute.test.ts"),

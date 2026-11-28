@@ -55,6 +55,7 @@ export function BoardView({
   const [editSaving, setEditSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [localDeletedIds, setLocalDeletedIds] = useState<Record<string, boolean>>({});
   const [localPatchedItems, setLocalPatchedItems] = useState<Record<string, BoardItem>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -151,6 +152,7 @@ export function BoardView({
 
   const handleDeleteItem = async (item: BoardItem) => {
     setDeletingId(item.id);
+    setDeleteError(null);
     try {
       const res = await fetch(`/api/board?id=${encodeURIComponent(item.id)}`, {
         method: "DELETE",
@@ -158,7 +160,15 @@ export function BoardView({
       if (res.ok) {
         setLocalDeletedIds((prev) => ({ ...prev, [item.id]: true }));
         onItemDeleted?.(item.id);
+        setConfirmDeleteId(null);
+        return;
       }
+      // 409 (job running) / 404 (already gone) / other: keep the dialog open and
+      // tell the owner why the delete did not land instead of failing silently.
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error || `Delete failed (${res.status})`);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed (network error)");
     } finally {
       setDeletingId(null);
     }
@@ -357,6 +367,14 @@ export function BoardView({
               >
                 Cancel
               </button>
+              {deleteError && (
+                <span
+                  data-testid={`board-delete-error-${item.id}`}
+                  className="text-[10.5px] font-semibold text-rose-700 dark:text-rose-300"
+                >
+                  {deleteError}
+                </span>
+              )}
             </div>
           ) : (
             <button

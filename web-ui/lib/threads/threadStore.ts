@@ -1417,23 +1417,32 @@ export class ThreadStore {
       }),
     })
       .then(async (res) => {
-        if (!res.ok) {
-          let bodyText = "";
+        if (res.ok) {
+          // The dispatch is fire-and-forget; the turn runs server-side via the
+          // chat route. Without draining/canceling, the SSE response body stays
+          // open and leaks a socket per dispatch. Cancel it to release resources.
           try {
-            bodyText = await res.text();
+            await res.body?.cancel();
           } catch {
-            bodyText = "";
+            // Best-effort cleanup; a cancel failure must not surface as a dispatch error.
           }
-          const detail = bodyText ? ` — ${bodyText.slice(0, 500)}` : "";
-          const errorMsg = `Supervisor auto-resume dispatch failed (HTTP ${res.status})${detail}`;
-          console.error(`[ThreadStore] ${errorMsg} (threadId=${threadId})`);
-          const thread = await this.getThread(threadId);
-          if (thread) {
-            thread.error = errorMsg;
-            thread.needsAttention = true;
-            thread.status = "failed";
-            this.saveThread(thread);
-          }
+          return;
+        }
+        let bodyText = "";
+        try {
+          bodyText = await res.text();
+        } catch {
+          bodyText = "";
+        }
+        const detail = bodyText ? ` — ${bodyText.slice(0, 500)}` : "";
+        const errorMsg = `Supervisor auto-resume dispatch failed (HTTP ${res.status})${detail}`;
+        console.error(`[ThreadStore] ${errorMsg} (threadId=${threadId})`);
+        const thread = await this.getThread(threadId);
+        if (thread) {
+          thread.error = errorMsg;
+          thread.needsAttention = true;
+          thread.status = "failed";
+          this.saveThread(thread);
         }
       })
       .catch(async (err: unknown) => {

@@ -261,6 +261,22 @@ export async function POST(req: NextRequest) {
         });
       } catch (seedErr) {
         console.warn("[ChatRoute] Warning writing initial streaming placeholder:", seedErr);
+        // CHAT-PRESENCE: if the placeholder was partially written before the throw,
+        // it would otherwise sit at status "streaming" forever. Mark it failed so the
+        // thread never shows a phantom live turn.
+        try {
+          threadStore.addMessage(activeThreadId, {
+            id: assistantMessageId,
+            role: "assistant" as const,
+            content: "",
+            status: "error" as const,
+            modelUsed: activeModel,
+            selectedModel: requestedModel || activeModel,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (markErr) {
+          console.warn("[ChatRoute] Warning marking seeded placeholder failed:", markErr);
+        }
       }
       // Stall clock starts at turn execution (not enqueue); mark queued until runChatTurn starts.
       markTurnQueued(activeThreadId, threadsDir);

@@ -5,14 +5,18 @@
  * across iterative tool rounds, forcing model context drops of system prompts and user queries.
  */
 
-import { computeModelOptions } from "./chatUtils";
+import {
+  computeModelOptions,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+} from "./chatUtils";
+import { isReasoningEffortSupported } from "../config/models";
 import { compactConversationHistory } from "./conversationCompaction";
 import { COMPACTION_THRESHOLD_RATIO, ROUND_MAX_TOKENS } from "./modelLimits";
 
 export { compactConversationHistory } from "./conversationCompaction";
+export { DEFAULT_CONTEXT_WINDOW_TOKENS };
 
 export const CHAT_CONTEXT_BUDGET_TOKENS = 100000;
-export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
 
 export const EARLIER_TOOL_OUTPUT_TRUNCATED_MARKER =
   "[Earlier tool output truncated to fit the context window]";
@@ -476,8 +480,13 @@ export function resolveRoundModelOptions(params: {
   } = {
     num_ctx: baseOpts.num_ctx || resolvedWindow,
     temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5),
-    reasoning_effort: effectiveEffort,
   };
+  // Only emit reasoning_effort for models that actually support it (e.g. Hermes 3
+  // does not); sending it to an unsupported model is a silent no-op at best and a
+  // provider error at worst.
+  if (isReasoningEffortSupported(params.model)) {
+    result.reasoning_effort = effectiveEffort;
+  }
   if (params.numKeep !== undefined) {
     result.num_predict = 2048 + params.numKeep;
     result.n_keep = params.numKeep;
