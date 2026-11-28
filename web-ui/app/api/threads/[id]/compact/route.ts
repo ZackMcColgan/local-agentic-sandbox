@@ -28,6 +28,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       const result = await threadStore.compactThreadIncrementalHybrid(thread, {
         maxContentTokens: engineBudget.budgetTokens,
         contextWindowTokens: engineBudget.contextWindowTokens,
+        compactionThreshold: 0,
         summarize: async (sumReq) => {
           let text = "";
           let truncated = false;

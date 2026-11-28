@@ -2101,7 +2101,7 @@ export class ThreadStore {
     if (!result.compacted) {
       return {
         noop: true,
-        reason: "already_compacted",
+        reason: "below_threshold",
         tokensBefore,
         tokensAfter: tokensBefore,
         modelSummaryUsed: false,

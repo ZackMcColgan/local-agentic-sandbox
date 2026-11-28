@@ -287,6 +287,50 @@ describe("#138 follow-ups (UI-109/UI-110): fresh-chat coherence and compact feed
     const html = renderSheet(baseFresh);
     assert.ok(!html.includes("context-sheet-compact-result"), "no verdict before any run");
   });
+
+  it("Fix 1: a noop compact result renders as a neutral noop, never as emerald Compacted", () => {
+    const html = renderSheet({
+      ...baseFresh,
+      compactResult: {
+        ok: true,
+        noop: true,
+        reason: "already_compacted",
+        tokensBefore: 1200,
+        tokensAfter: 1200,
+      },
+    });
+    assert.ok(html.includes("context-sheet-compact-result"), "result line must render");
+    assert.ok(!html.includes("Compacted:"), "noop must NEVER render Compacted: X -> Y");
+    const resultIdx = html.indexOf("context-sheet-compact-result");
+    const resultSnippet = html.slice(resultIdx, resultIdx + 220);
+    assert.ok(
+      !resultSnippet.includes("text-emerald") && !resultSnippet.includes("#10b981"),
+      "noop must NOT use emerald success styling"
+    );
+    assert.ok(
+      resultSnippet.toLowerCase().includes("nothing to compact") ||
+        resultSnippet.toLowerCase().includes("already compacted"),
+      "noop must explain that no compaction occurred"
+    );
+  });
+
+  it("Fix 1: ChatStream surfaces noop from runManualCompaction instead of reporting success", () => {
+    const file = fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf-8");
+    const runIdx = file.indexOf("const runManualCompaction");
+    assert.ok(runIdx > 0, "runManualCompaction must exist");
+    const runWindow = file.slice(runIdx, runIdx + 1600);
+    assert.ok(
+      runWindow.includes("data.noop"),
+      "runManualCompaction must inspect data.noop from the compact endpoint"
+    );
+    const slashIdx = file.indexOf("if (isCompactCommand(prompt))");
+    assert.ok(slashIdx > 0, "/compact branch must exist");
+    const slashWindow = file.slice(slashIdx, slashIdx + 1200);
+    assert.ok(
+      slashWindow.includes("result.noop"),
+      "/compact handler must branch on result.noop so noops never render Compacted history"
+    );
+  });
 });
 
 describe("fitSegmentsToTotal: the breakdown always sums to the displayed total", () => {

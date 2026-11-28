@@ -31,7 +31,7 @@ import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
 import { deriveContextSegments, countCompactions } from "../lib/contextSegments";
 import { CHAT_CONTEXT_BUDGET_TOKENS } from "../lib/contextBudget";
 import { COMPACTION_THRESHOLD_RATIO } from "../lib/modelLimits";
-import { ContextSheet } from "./ContextSheet";
+import { ContextSheet, formatCompactionNoopMessage } from "./ContextSheet";
 import {
   RECONCILE_POLL_MAX_ATTEMPTS,
   reconcilePollDelayMs,
@@ -566,6 +566,8 @@ export function ChatStream({
   // and success changed nothing visible).
   const [sheetCompactResult, setSheetCompactResult] = useState<{
     ok: boolean;
+    noop?: boolean;
+    reason?: string;
     tokensBefore?: number;
     tokensAfter?: number;
     error?: string;
@@ -1019,6 +1021,8 @@ export function ChatStream({
   // command) can surface tokens before -> after or the failure reason.
   const runManualCompaction = async (): Promise<{
     ok: boolean;
+    noop?: boolean;
+    reason?: string;
     tokensBefore?: number;
     tokensAfter?: number;
     error?: string;
@@ -1037,16 +1041,19 @@ export function ChatStream({
       });
       if (res.ok) {
         const data = await res.json();
+        const noop = Boolean(data.noop);
+        const reason: string | undefined =
+          typeof data.reason === "string" ? data.reason : undefined;
         const tokensBefore: number | undefined = data.tokensBefore;
         const tokensAfter: number | undefined = data.tokensAfter;
-        if (data.thread?.compaction) {
+        if (!noop && data.thread?.compaction) {
           setThreadCompaction(data.thread.compaction);
           setContextStats((prev) => ({
             ...prev,
             estimatedTokens: data.tokensAfter ?? prev.estimatedTokens,
           }));
         }
-        return { ok: true, tokensBefore, tokensAfter };
+        return { ok: true, noop, reason, tokensBefore, tokensAfter };
       }
       let error = `Compaction failed (HTTP ${res.status})`;
       try {
@@ -1759,9 +1766,13 @@ export function ChatStream({
       setCompactCommandNotice(null);
       const result = await runManualCompaction();
       if (result.ok) {
-        setCompactCommandNotice(
-          `Compacted history: ${result.tokensBefore ?? "?"} → ${result.tokensAfter ?? "?"} tokens`
-        );
+        if (result.noop) {
+          setCompactCommandNotice(formatCompactionNoopMessage(result.reason));
+        } else {
+          setCompactCommandNotice(
+            `Compacted history: ${result.tokensBefore ?? "?"} → ${result.tokensAfter ?? "?"} tokens`
+          );
+        }
       } else {
         // Surface the failure and restore the composer text intact for retry.
         setCompactCommandNotice(result.error ?? "Compaction failed");

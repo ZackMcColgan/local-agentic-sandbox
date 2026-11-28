@@ -22,9 +22,26 @@ export interface ContextSheetCompaction {
 /** Outcome of the sheet's own Compact action, surfaced in place (UI-110). */
 export interface ContextSheetCompactResult {
   ok: boolean;
+  noop?: boolean;
+  reason?: string;
   tokensBefore?: number;
   tokensAfter?: number;
   error?: string;
+}
+
+export function formatCompactionNoopMessage(reason?: string): string {
+  switch (reason) {
+    case "already_compacted":
+      return "Nothing to compact — history is already compacted.";
+    case "insufficient_messages":
+      return "Nothing to compact — not enough messages yet.";
+    case "below_threshold":
+      return "Nothing to compact — context is below the compaction threshold.";
+    case "not_smaller":
+      return "Nothing to compact — history is already concise.";
+    default:
+      return "Nothing to compact.";
+  }
 }
 
 interface ContextSheetProps {
@@ -237,14 +254,23 @@ export function ContextSheet(props: ContextSheetProps) {
         )}
         {compactResult &&
           (compactResult.ok ? (
-            <p
-              data-testid="context-sheet-compact-result"
-              className="text-[11px] font-semibold text-emerald-600 dark:text-[#10b981]"
-            >
-              {compactResult.tokensBefore != null && compactResult.tokensAfter != null
-                ? `Compacted: ${formatContextK(compactResult.tokensBefore)} \u2192 ${formatContextK(compactResult.tokensAfter)} tokens`
-                : "History compacted"}
-            </p>
+            compactResult.noop ? (
+              <p
+                data-testid="context-sheet-compact-result"
+                className="text-[11px] font-medium text-slate-600 dark:text-zinc-300"
+              >
+                {formatCompactionNoopMessage(compactResult.reason)}
+              </p>
+            ) : (
+              <p
+                data-testid="context-sheet-compact-result"
+                className="text-[11px] font-semibold text-emerald-600 dark:text-[#10b981]"
+              >
+                {compactResult.tokensBefore != null && compactResult.tokensAfter != null
+                  ? `Compacted: ${formatContextK(compactResult.tokensBefore)} \u2192 ${formatContextK(compactResult.tokensAfter)} tokens`
+                  : "History compacted"}
+              </p>
+            )
           ) : (
             <p
               data-testid="context-sheet-compact-result"
