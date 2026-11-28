@@ -11,6 +11,7 @@ import type { ReadDedupMeta } from "@/lib/readDedup";
 import { collectTurnAttachments } from "@/lib/threadOutputs";
 import { collectTurnModifiedFileDiffs, type TurnFileDiff } from "@/lib/chatDiffs";
 import type { ThreadStore } from "@/lib/threads/threadStore";
+import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import { formatSseWriterError } from "@/lib/turnReconciliation";
 import type { getLLMProvider } from "@/lib/llm/provider";
 
@@ -349,6 +350,10 @@ export interface AbortedAssistantMessageInput {
   requestedModel?: string;
   lastFinishReason?: string;
   turnOutputTokens?: number;
+  roundPromptTokens?: number[];
+  roundGenerationMs?: number[];
+  dispatchedRounds?: number;
+  compactions?: number;
   turnStartMs?: number;
   turnMicroElisions: ElisionMeta[];
   turnReadDedups: ReadDedupMeta[];
@@ -375,6 +380,11 @@ export function buildAbortedAssistantMessage(input: AbortedAssistantMessageInput
   const finalOutputTokens =
     input.turnOutputTokens ??
     (input.accumulatedStreamedTokens ? estimateTokens(input.accumulatedStreamedTokens) : 0);
+  const roundPromptTokens = Array.isArray(input.roundPromptTokens) ? input.roundPromptTokens : [];
+  const roundGenerationMs = Array.isArray(input.roundGenerationMs) ? input.roundGenerationMs : [];
+  const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
+  const rounds = input.dispatchedRounds ?? roundPromptTokens.length;
+  const compactions = input.compactions ?? 0;
 
   const trimmedInFlight = input.inFlightThinking?.trim();
   const allThoughts = trimmedInFlight
@@ -404,6 +414,14 @@ export function buildAbortedAssistantMessage(input: AbortedAssistantMessageInput
     isStopped: isExplicit ? true : undefined,
     finish_reason: input.lastFinishReason || "abort",
     outputTokens: finalOutputTokens,
+    roundPromptTokens,
+    roundGenerationMs: roundGenerationMs.length > 0 ? roundGenerationMs : undefined,
+    tokenEconomics: buildJobTokenRollup({
+      rounds,
+      promptTokens: finalPromptTokens,
+      outputTokens: finalOutputTokens,
+      compactions,
+    }),
     microElisions: input.turnMicroElisions.length > 0 ? input.turnMicroElisions : undefined,
     readDedups: input.turnReadDedups.length > 0 ? input.turnReadDedups : undefined,
   };
