@@ -19,7 +19,7 @@ import { computeThreadTokenEconomics, type JobTokenRollup } from "../tokenEconom
 import { getHostSettings } from "../hostSettings";
 import { superviseStalledThread } from "./inAppSupervisor";
 import { listBoardOwnedThreadIds } from "../board/boardStore";
-import { DEFAULT_PRIMARY_MODEL } from "../../config/models";
+import { DEFAULT_PRIMARY_MODEL, resolveDefaultReasoningEffort } from "../../config/models";
 import type { ChunkBudgetConfig } from "../jobChunking";
 import { assertValidSafeId, isStrictlyInsideRoot, isValidSafeId } from "../securityHardening";
 import { atomicWriteFile, atomicWriteFileSync } from "../fsAtomic";
@@ -1533,7 +1533,10 @@ export class ThreadStore {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       model: params.model || DEFAULT_PRIMARY_MODEL,
-      reasoningEffort: params.reasoningEffort || "medium",
+      // When the caller has not explicitly chosen an effort, defer to the
+      // resident profile's defaultReasoningEffort (e.g. Flash-Next -> "medium")
+      // instead of a hardcoded value. An explicit choice always wins.
+      reasoningEffort: params.reasoningEffort || resolveDefaultReasoningEffort(params.model),
       hostAccess,
       taskId: params.taskId,
       ...(params.boardItemId !== undefined ? { boardItemId: params.boardItemId } : {}),

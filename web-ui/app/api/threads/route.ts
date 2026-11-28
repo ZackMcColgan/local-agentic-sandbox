@@ -11,7 +11,7 @@ import { generatePlanSpec } from "@/lib/subagents/planner";
 import { OvernightSupervisor, createProductionStepExecutor } from "@/lib/subagents/supervisor";
 import { WorkerPool } from "@/lib/subagents/workerPool";
 import { TaskManifest, ToolchainType, TaskScope } from "@/lib/subagents/types";
-import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import { DEFAULT_PRIMARY_MODEL, resolveDefaultReasoningEffort } from "@/config/models";
 import type { ChunkBudgetConfig } from "@/lib/jobChunking";
 import { getSharedSlotScheduler, SlotPriority } from "@/lib/slotScheduler";
 import { parseJsonBody } from "@/lib/apiJson";
@@ -138,7 +138,9 @@ export async function POST(req: Request) {
         } else {
           thread = threadStore.createThread({
             model: effectiveModel,
-            reasoningEffort: body.reasoningEffort || "low",
+            // Pass through the explicit choice (may be undefined); createThread
+            // derives the resident profile default when no choice was made.
+            reasoningEffort: body.reasoningEffort,
             initialPrompt: goal,
             attachments: body.attachments,
             taskId,
@@ -150,7 +152,9 @@ export async function POST(req: Request) {
       } else {
         thread = threadStore.createThread({
           model: effectiveModel,
-          reasoningEffort: body.reasoningEffort || "low",
+          // Pass through the explicit choice (may be undefined); createThread
+          // derives the resident profile default when no choice was made.
+          reasoningEffort: body.reasoningEffort,
           initialPrompt: goal,
           attachments: body.attachments,
           taskId,

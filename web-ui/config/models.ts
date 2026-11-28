@@ -125,3 +125,18 @@ export function getModelProfile(modelId?: string): ModelProfile | undefined {
   const lower = modelId.toLowerCase();
   return PRESET_MODEL_PROFILES.find((p) => p.id.toLowerCase() === lower);
 }
+
+/**
+ * The reasoning effort a model should run at when the user has NOT explicitly
+ * chosen one. Falls back to the profile's defaultReasoningEffort, then "low"
+ * for models that don't declare one (or don't support effort at all).
+ *
+ * This is the single source of truth for the "no explicit choice" default so the
+ * UI state, thread creation, and first-turn dispatch all agree with the resident
+ * profile (e.g. Flash-Next defaults to "medium", not "low").
+ */
+export function resolveDefaultReasoningEffort(modelId?: string): "low" | "medium" | "xhigh" {
+  const profile = getModelProfile(modelId);
+  if (profile?.defaultReasoningEffort) return profile.defaultReasoningEffort;
+  return "low";
+}

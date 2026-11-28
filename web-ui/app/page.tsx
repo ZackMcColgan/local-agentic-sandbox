@@ -20,7 +20,12 @@ import type { BoardItem } from "@/lib/board/boardStore";
 import type { BoardControlAction, BoardControlState } from "@/lib/board/boardControlStore";
 import type { ProjectsView } from "@/components/ProjectsView";
 import { ProjectRecord } from "@/lib/projects/projectStore";
-import { AgentMode, DEFAULT_AGENT_MODE, DEFAULT_PRIMARY_MODEL } from "@/config/models";
+import {
+  AgentMode,
+  DEFAULT_AGENT_MODE,
+  DEFAULT_PRIMARY_MODEL,
+  resolveDefaultReasoningEffort,
+} from "@/config/models";
 import { getInitialWelcomeMessage } from "@/lib/chatHistory";
 import { ViewShell } from "@/components/ViewShell";
 
@@ -51,7 +56,11 @@ export default function Home() {
       const saved = window.localStorage.getItem("las.reasoningEffort");
       if (saved === "low" || saved === "medium" || saved === "xhigh") return saved;
     }
-    return "low";
+    // No explicit user choice yet: defer to the resident profile's default
+    // (e.g. Flash-Next -> "medium") rather than hardcoding "low".
+    const savedModel =
+      typeof window !== "undefined" ? localStorage.getItem("preferred_model") : null;
+    return resolveDefaultReasoningEffort(savedModel || DEFAULT_PRIMARY_MODEL);
   });
   const [installedModels, setInstalledModels] = useState<string[]>([]);
   const [securityPosture, setSecurityPosture] = useState<
