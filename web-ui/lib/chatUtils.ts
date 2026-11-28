@@ -41,10 +41,11 @@ export const DEFAULT_CONTEXT_WINDOW_TOKENS = 131072;
  */
 export function computeModelOptions(
   modelToUse: string,
-  reasoningEffort?: "low" | "medium" | "xhigh"
+  reasoningEffort?: "low" | "medium" | "xhigh",
+  contextWindowTokens: number = DEFAULT_CONTEXT_WINDOW_TOKENS
 ): ModelOptions {
   const opts: ModelOptions = {
-    num_ctx: DEFAULT_CONTEXT_WINDOW_TOKENS,
+    num_ctx: contextWindowTokens,
   };
 
   const effectiveEffort = resolveEffectiveReasoningEffort(modelToUse, reasoningEffort);

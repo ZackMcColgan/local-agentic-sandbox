@@ -448,6 +448,7 @@ export function resolveRoundModelOptions(params: {
   round?: number;
   isArtifactTurn?: boolean;
   numKeep?: number;
+  contextWindowTokens?: number;
   [key: string]: unknown;
 }): {
   num_ctx: number;
@@ -463,7 +464,8 @@ export function resolveRoundModelOptions(params: {
   const shouldUseFastSynthesis =
     isArtifact || params.isSynthesisOrFinalRound || params.hasCompletedToolCalls;
   const effectiveEffort = shouldUseFastSynthesis ? "low" : params.requestedEffort || "medium";
-  const baseOpts = computeModelOptions(params.model, effectiveEffort);
+  const resolvedWindow = params.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+  const baseOpts = computeModelOptions(params.model, effectiveEffort, resolvedWindow);
   const result: {
     num_ctx: number;
     num_predict?: number;
@@ -472,7 +474,7 @@ export function resolveRoundModelOptions(params: {
     n_keep?: number;
     numKeep?: number;
   } = {
-    num_ctx: baseOpts.num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
+    num_ctx: baseOpts.num_ctx || resolvedWindow,
     temperature: shouldUseFastSynthesis ? 0.2 : (baseOpts.temperature ?? 0.5),
     reasoning_effort: effectiveEffort,
   };

@@ -2223,6 +2223,8 @@ export class ThreadStore {
           const summarize = opts.summarize;
           return this.compactThreadIncrementalHybrid(thread, {
             summarize,
+            maxContentTokens: maxBudgetTokens,
+            contextWindowTokens: opts.contextWindowTokens,
             inactivityMs: opts.inactivityMs,
             totalDeadlineMs: opts.totalDeadlineMs,
           }).then((hybridResult) => {

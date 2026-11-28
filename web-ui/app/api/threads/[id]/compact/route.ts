@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ThreadStore } from "@/lib/threads/threadStore";
 import { resolveCompactionStrategy } from "@/lib/conversationCompaction";
 import { getLLMProvider } from "@/lib/llm/provider";
+import { resolveEngineContextBudget } from "@/lib/engineContextBudget";
 import { DEFAULT_PRIMARY_MODEL } from "@/config/models";
 import { isValidSafeId } from "@/lib/securityHardening";
 
@@ -23,7 +24,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     if (resolveCompactionStrategy() === "hybrid") {
       const activeModel = thread.model || process.env.MODEL_NAME || DEFAULT_PRIMARY_MODEL;
       const provider = getLLMProvider();
+      const engineBudget = await resolveEngineContextBudget({ baseUrl: getLlmBaseUrl() });
       const result = await threadStore.compactThreadIncrementalHybrid(thread, {
+        maxContentTokens: engineBudget.budgetTokens,
+        contextWindowTokens: engineBudget.contextWindowTokens,
         summarize: async (sumReq) => {
           let text = "";
           let truncated = false;

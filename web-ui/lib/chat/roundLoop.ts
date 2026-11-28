@@ -54,8 +54,6 @@ import {
   estimateToolSchemaTokens,
   estimateEffectivePromptTokens,
   computeEffectiveInputCeiling,
-  CHAT_CONTEXT_BUDGET_TOKENS,
-  DEFAULT_CONTEXT_WINDOW_TOKENS,
   fitConversationToBudget,
   HIGH_WATER_BANKING_DIRECTIVE,
   TURN_TIMEOUT_MARKER,
@@ -66,6 +64,7 @@ import {
   MAX_STREAMED_CONTENT_CHARS,
 } from "@/lib/contextBudget";
 import { ROUND_MAX_TOKENS } from "@/lib/modelLimits";
+import { resolveEngineContextBudget, type DerivedContextBudget } from "@/lib/engineContextBudget";
 import type { ToolLoopStopReason } from "@/lib/contextBudget";
 import { buildJobTokenRollup, sumRoundPromptTokens } from "@/lib/tokenEconomics";
 import {
@@ -332,6 +331,8 @@ export interface RunChatTurnDeps {
   heartbeatIntervalMs?: number;
   /** Optional override for TOOL_ROUND_BACKSTOP (defaults to TOOL_ROUND_BACKSTOP). */
   roundBackstop?: number;
+  /** Optional seam to override runtime engine context-budget resolution (#140). */
+  resolveContextBudget?: () => Promise<DerivedContextBudget>;
 
   // Stateless MCP client handles (tracked per turn for cleanup only) & telemetry
   activeSessions: Array<{ client: Client; transport: StreamableHTTPClientTransport }>;
@@ -589,6 +590,14 @@ export async function runChatTurn(
     const roundTools = llmTools;
     const roundToolSchemaTokens = estimateToolSchemaTokens(roundTools);
 
+    // #140: derive thread token budget & physical context window once per turn
+    // from the engine's live max_context (with logged 100K fallback when unreachable).
+    const engineContextBudget = await (deps.resolveContextBudget
+      ? deps.resolveContextBudget()
+      : resolveEngineContextBudget({ baseUrl: getLlmBaseUrl() }));
+    const turnBudgetTokens = engineContextBudget.budgetTokens;
+    const turnContextWindowTokens = engineContextBudget.contextWindowTokens;
+
     // TURN-START WIRING (compaction-hybrid turn-start fix): the turn-start
     // prepare now receives the resolved strategy plus the summarize adapter so
     // a flag-on thread crossing the 85% trigger at turn start reaches the
@@ -598,9 +607,10 @@ export async function runChatTurn(
     const prep = await threadStore.prepareTurnConversationMessages(
       threadData,
       messages,
-      CHAT_CONTEXT_BUDGET_TOKENS,
+      turnBudgetTokens,
       {
         strategy: resolveCompactionStrategy(),
+        contextWindowTokens: turnContextWindowTokens,
         summarize: async (sumReq) => {
           let text = "";
           let truncated = false;
@@ -803,7 +813,9 @@ export async function runChatTurn(
       citations: oracleCitations,
       context: {
         estimatedTokens: initialEstimatedTokens,
-        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        budgetTokens: turnBudgetTokens,
+        triggerTokens: engineContextBudget.compactionTriggerTokens,
+        contextWindowTokens: turnContextWindowTokens,
         compactedThisTurn: turnCompacted,
         tokensBeforeCompaction: turnTokensBefore,
         tokensAfterCompaction: turnTokensAfter,
@@ -926,7 +938,8 @@ export async function runChatTurn(
           requestedEffort: effectiveReasoningEffort,
           userPrompt,
           hasCompletedToolCalls: traces.length > 0,
-        }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS;
+          contextWindowTokens: turnContextWindowTokens,
+        }).num_ctx || turnContextWindowTokens;
 
       // Round-scoped raw message-token tracker (Perf P6):
       // Reuses the initial turn-start scan on round 0 when clean, otherwise measures
@@ -967,7 +980,7 @@ export async function runChatTurn(
         precomputedRawMessageTokens: getRawTokens(),
       });
       const microElisionTriggerTokens = computeMicroElisionTriggerTokens({
-        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        budgetTokens: turnBudgetTokens,
         contextWindowTokens: roundContextWindowTokens,
         outputReserveTokens: ROUND_MAX_TOKENS,
         rearmFloorTokens: nextMicroElisionFloorTokens,
@@ -997,7 +1010,7 @@ export async function runChatTurn(
 
       // 1. Fit conversation to budget FIRST through ladder before evaluating continuation
       const compaction = fitConversationToBudget(conversationMessages, {
-        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        budgetTokens: turnBudgetTokens,
         measuredPromptTokens:
           lastMeasuredPromptTokens !== undefined ? preFitEffectiveTokens : undefined,
         lastMeasuredEstimateTokens:
@@ -1024,7 +1037,7 @@ export async function runChatTurn(
             if (resolveCompactionStrategy() === "hybrid" && resolveMidTurnHybridEnabled()) {
               const hybridResult = await threadStore.compactThreadIncrementalHybrid(threadData, {
                 liveMessages: conversationMessages,
-                maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+                maxContentTokens: turnBudgetTokens,
                 measuredPromptTokens:
                   lastMeasuredPromptTokens !== undefined ? preFitEffectiveTokens : undefined,
                 toolSchemaTokens: roundToolSchemaTokens,
@@ -1121,7 +1134,9 @@ export async function runChatTurn(
           citations: oracleCitations,
           context: {
             estimatedTokens: appliedTokensAfter,
-            budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+            budgetTokens: turnBudgetTokens,
+            triggerTokens: engineContextBudget.compactionTriggerTokens,
+            contextWindowTokens: turnContextWindowTokens,
             compactedThisTurn: true,
             tokensBeforeCompaction: appliedTokensBefore,
             tokensAfterCompaction: appliedTokensAfter,
@@ -1146,7 +1161,7 @@ export async function runChatTurn(
         round,
         contextTokens: getRawTokens(),
         measuredPromptTokens: postFitEffectiveTokens,
-        budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        budgetTokens: turnBudgetTokens,
         contextWindowTokens: roundContextWindowTokens,
         outputReserveTokens: ROUND_MAX_TOKENS,
         lastRoundTools,
@@ -1210,6 +1225,7 @@ export async function runChatTurn(
         userPrompt,
         isSynthesisOrFinalRound: isFinalRound,
         hasCompletedToolCalls: traces.length > 0,
+        contextWindowTokens: turnContextWindowTokens,
       });
 
       const roundAbortController = new AbortController();
@@ -1228,6 +1244,7 @@ export async function runChatTurn(
       const armRoundDeadline = roundDeadline.arm;
 
       const fittedMessages = fitContextWindow(conversationMessages, {
+        maxContentTokens: turnBudgetTokens,
         contextWindowTokens: roundOptions.num_ctx,
         tools: roundTools,
         precomputedToolSchemaTokens: roundToolSchemaTokens,
@@ -1594,7 +1611,7 @@ export async function runChatTurn(
           isLiveRealTimeIntent(userPrompt) &&
           webResearchCalls === 0 &&
           round < effectiveRoundBackstop - 1 &&
-          getRawTokens() <= CHAT_CONTEXT_BUDGET_TOKENS &&
+          getRawTokens() <= turnBudgetTokens &&
           !groundingEnforced
         ) {
           groundingEnforced = true;
@@ -2584,7 +2601,8 @@ export async function runChatTurn(
         userPrompt,
         isSynthesisOrFinalRound: true,
         hasCompletedToolCalls: traces.length > 0,
-      }).num_ctx || DEFAULT_CONTEXT_WINDOW_TOKENS,
+        contextWindowTokens: turnContextWindowTokens,
+      }).num_ctx || turnContextWindowTokens,
       ROUND_MAX_TOKENS
     );
     const synthToolSchemaTokens = roundToolSchemaTokens;
@@ -2667,6 +2685,7 @@ export async function runChatTurn(
         userPrompt,
         isSynthesisOrFinalRound: true,
         hasCompletedToolCalls: traces.length > 0,
+        contextWindowTokens: turnContextWindowTokens,
       });
       const synthRawMessageTokens = getTurnRawTokens();
 
@@ -2686,6 +2705,8 @@ export async function runChatTurn(
             activeModel: turnState.activeModel,
             conversationMessages,
             tools: roundTools,
+            maxContentTokens: turnBudgetTokens,
+            contextWindowTokens: turnContextWindowTokens,
             precomputedRawMessageTokens: synthRawMessageTokens,
             precomputedToolSchemaTokens: roundToolSchemaTokens,
             isArtifactRequest,
@@ -2835,7 +2856,7 @@ export async function runChatTurn(
       toolLoopStopReason === "web-research-cap";
     const pauseNote =
       toolLoopStopReason === "budget"
-        ? `⚠️ [Turn paused: Context budget exhausted (${budgetExhaustedAtTokens} tokens > ${CHAT_CONTEXT_BUDGET_TOKENS} budget) after ${round} tool rounds.]`
+        ? `⚠️ [Turn paused: Context budget exhausted (${budgetExhaustedAtTokens} tokens > ${turnBudgetTokens} budget) after ${round} tool rounds.]`
         : toolLoopStopReason === "web-research-cap"
           ? `⚠️ [Turn paused: Tool execution limit reached (${webResearchCalls} web research calls / ${round} rounds).]`
           : toolLoopStopReason === "backstop"

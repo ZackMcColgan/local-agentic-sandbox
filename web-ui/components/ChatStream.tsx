@@ -29,6 +29,8 @@ import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification"
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
 import { deriveContextSegments, countCompactions } from "../lib/contextSegments";
+import { CHAT_CONTEXT_BUDGET_TOKENS } from "../lib/contextBudget";
+import { COMPACTION_THRESHOLD_RATIO } from "../lib/modelLimits";
 import { ContextSheet } from "./ContextSheet";
 import {
   RECONCILE_POLL_MAX_ATTEMPTS,
@@ -518,8 +520,36 @@ export function ChatStream({
     tokensAfterCompaction?: number;
   }>({
     estimatedTokens: 0,
-    budgetTokens: 100000,
+    budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
   });
+  const contextTriggerTokens = Math.floor(contextStats.budgetTokens * COMPACTION_THRESHOLD_RATIO);
+
+  // #140: hydrate context budget from the live engine on mount so the header meter
+  // and ContextSheet reflect the engine's configured max_context before turn 1.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/engine", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (
+          !cancelled &&
+          data &&
+          typeof data.budget_tokens === "number" &&
+          Number.isFinite(data.budget_tokens) &&
+          data.budget_tokens > 0
+        ) {
+          setContextStats((prev) =>
+            prev.budgetTokens === data.budget_tokens
+              ? prev
+              : { ...prev, budgetTokens: data.budget_tokens }
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [threadCompaction, setThreadCompaction] = useState<{
     throughMessageId: string;
     summary: string;
@@ -2253,7 +2283,7 @@ export function ChatStream({
             }}
             usedTokens={displayContextTokens}
             budgetTokens={contextStats.budgetTokens}
-            triggerTokens={85000}
+            triggerTokens={contextTriggerTokens}
             segments={contextSegments}
             lastRoundPromptTokens={recordContextTokens}
             compactionCount={contextCompactionCount}
@@ -2414,7 +2444,7 @@ export function ChatStream({
                     <span
                       data-testid="context-meter-tick"
                       aria-hidden="true"
-                      title="85K compaction trigger"
+                      title={`${Math.round(contextTriggerTokens / 1000)}K compaction trigger`}
                       className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] bg-[#f87171]"
                     />
                   </div>

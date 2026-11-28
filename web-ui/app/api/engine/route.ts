@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  clearEngineContextBudgetCache,
+  deriveContextBudget,
+  parseEngineMaxContext,
+} from "@/lib/engineContextBudget";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +51,8 @@ export async function GET() {
         );
         if (healthRes && healthRes.ok) {
           const healthData = await healthRes.json().catch(() => ({}));
+          const rawMaxContext = parseEngineMaxContext(healthData);
+          const derived = deriveContextBudget(rawMaxContext);
           return NextResponse.json({
             status: healthData.loaded ? "running" : "starting",
             reachable: true,
@@ -55,6 +62,10 @@ export async function GET() {
             vram_mb: typeof healthData.vram_mb === "number" ? healthData.vram_mb : null,
             uptime_s: typeof healthData.uptime_s === "number" ? healthData.uptime_s : null,
             pid: healthData.pid ?? null,
+            max_context: rawMaxContext ?? derived.contextWindowTokens,
+            budget_tokens: derived.budgetTokens,
+            trigger_tokens: derived.compactionTriggerTokens,
+            budget_source: derived.source,
           });
         }
       } catch {}
@@ -71,13 +82,20 @@ export async function GET() {
     }
 
     const data = await res.json();
+    const rawMaxContext = parseEngineMaxContext(data);
+    const derived = deriveContextBudget(rawMaxContext);
     return NextResponse.json({
       reachable: true,
       ...data,
       model: data.model ?? null,
       vram_mb: typeof data.vram_mb === "number" ? data.vram_mb : null,
+      max_context: rawMaxContext ?? derived.contextWindowTokens,
+      budget_tokens: derived.budgetTokens,
+      trigger_tokens: derived.compactionTriggerTokens,
+      budget_source: derived.source,
     });
   } catch (err: unknown) {
+    const fallback = deriveContextBudget(null, "Supervisor offline");
     return NextResponse.json({
       status: "stopped",
       reachable: false,
@@ -86,6 +104,10 @@ export async function GET() {
       model: null,
       vram_mb: null,
       uptime_s: 0,
+      max_context: fallback.contextWindowTokens,
+      budget_tokens: fallback.budgetTokens,
+      trigger_tokens: fallback.compactionTriggerTokens,
+      budget_source: fallback.source,
     });
   }
 }
@@ -108,6 +130,9 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Lifecycle transition may change the engine's configured max_context
+  clearEngineContextBudgetCache();
 
   const headers: Record<string, string> = {
     Accept: "application/json",
