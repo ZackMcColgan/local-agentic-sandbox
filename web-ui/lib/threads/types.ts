@@ -30,6 +30,8 @@ export interface TurnConversationPreparation {
   compactedThisTurn: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
+  summarizationPromptTokens?: number;
+  summarizationOutputTokens?: number;
   /** True when the boundary summary placed in the model view is the MODEL DIGEST. */
   modelSummaryUsed?: boolean;
   /** Set when the hybrid pass failed and the extraction digest was used instead. */
@@ -86,6 +88,8 @@ export interface ThreadMessage {
   compactedThisTurn?: boolean;
   tokensBeforeCompaction?: number;
   tokensAfterCompaction?: number;
+  summarizationPromptTokens?: number;
+  summarizationOutputTokens?: number;
   compactionActions?: string[];
   selectedModel?: string;
   status?: "completed" | "incomplete" | "error" | "streaming";

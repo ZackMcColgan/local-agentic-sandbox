@@ -408,6 +408,20 @@ export async function runChatTurn(
     turnState.roundGenerationMs ?? []);
   let dispatchedRounds = (turnState.dispatchedRounds = turnState.dispatchedRounds ?? 0);
   let turnCompactionCount = (turnState.compactions = turnState.compactions ?? 0);
+  let summarizationPromptTokens = 0;
+  const recordSummarizationUsage = (usage: {
+    summarizationPromptTokens?: number;
+    summarizationOutputTokens?: number;
+  }) => {
+    if (typeof usage.summarizationPromptTokens === "number" && usage.summarizationPromptTokens > 0) {
+      summarizationPromptTokens += usage.summarizationPromptTokens;
+    }
+    if (typeof usage.summarizationOutputTokens === "number" && usage.summarizationOutputTokens > 0) {
+      turnState.cumulativeOutputTokens =
+        (turnState.cumulativeOutputTokens ?? 0) + usage.summarizationOutputTokens;
+      turnState.turnOutputTokens = turnState.cumulativeOutputTokens;
+    }
+  };
 
   let effectiveReasoningEffort = deps.initialEffectiveReasoningEffort;
   let threadData: ChatThreadData | null = deps.initialThreadData;
@@ -624,6 +638,8 @@ export async function runChatTurn(
         summarize: async (sumReq) => {
           let text = "";
           let truncated = false;
+          let promptTokens: number | undefined;
+          let outputTokens: number | undefined;
           for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
             model: turnState.activeModel,
             messages: [
@@ -637,11 +653,18 @@ export async function runChatTurn(
             sumReq.onProgress?.();
             if (chunk.message?.content) text += chunk.message.content;
             if (chunk.finish_reason === "length") truncated = true;
+            if (typeof chunk.promptTokens === "number") promptTokens = chunk.promptTokens;
+            else if (typeof chunk.prompt_eval_count === "number")
+              promptTokens = chunk.prompt_eval_count;
+            if (typeof chunk.outputTokens === "number") outputTokens = chunk.outputTokens;
+            else if (typeof chunk.eval_count === "number") outputTokens = chunk.eval_count;
           }
-          return { text, truncated };
+          return { text, truncated, promptTokens, outputTokens };
         },
       }
     );
+
+    recordSummarizationUsage(prep);
 
     let turnCompacted = prep.compactedThisTurn;
     let turnTokensBefore = prep.tokensBeforeCompaction;
@@ -1054,6 +1077,8 @@ export async function runChatTurn(
                 summarize: async (sumReq) => {
                   let text = "";
                   let truncated = false;
+                  let promptTokens: number | undefined;
+                  let outputTokens: number | undefined;
                   for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
                     model: turnState.activeModel,
                     messages: [
@@ -1070,10 +1095,13 @@ export async function runChatTurn(
                     sumReq.onProgress?.();
                     if (chunk.message?.content) text += chunk.message.content;
                     if (chunk.finish_reason === "length") truncated = true;
+                    promptTokens = chunk.promptTokens ?? chunk.prompt_eval_count ?? promptTokens;
+                    outputTokens = chunk.outputTokens ?? chunk.eval_count ?? outputTokens;
                   }
-                  return { text, truncated };
+                  return { text, truncated, promptTokens, outputTokens };
                 },
               });
+              recordSummarizationUsage(hybridResult);
               if (!hybridResult.noop) {
                 if (hybridResult.messages && hybridResult.messages.length > 0) {
                   appliedMessages = hybridResult.messages.map((m) => ({ ...m }));
@@ -2966,7 +2994,7 @@ export async function runChatTurn(
         : (turnState.turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0));
     const turnDurationMs = Math.max(1, Date.now() - turnStartMs);
     // TOKEN ECONOMICS (a): per-round prompt-token integral + per-job rollup.
-    const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
+    const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens) + summarizationPromptTokens;
 
     const zeroTraceResult = evaluateZeroTraceTripwire({
       content: cleanedContent,
@@ -3150,7 +3178,8 @@ export async function runChatTurn(
               (turnState.accumulatedStreamedTokens
                 ? estimateTokens(turnState.accumulatedStreamedTokens)
                 : 0));
-        const errorPromptTokens = sumRoundPromptTokens(roundPromptTokens);
+        const errorPromptTokens =
+          sumRoundPromptTokens(roundPromptTokens) + summarizationPromptTokens;
         const errorMsg = {
           id: assistantMessageId,
           role: "assistant" as const,

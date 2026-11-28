@@ -185,6 +185,10 @@ export interface SummarizeResult {
   text: string;
   /** Set true when generation hit the token cap (finish_reason === "length"). */
   truncated?: boolean;
+  /** Provider-reported prompt tokens for the summarization pass. */
+  promptTokens?: number;
+  /** Provider-reported completion tokens for the summarization pass. */
+  outputTokens?: number;
 }
 
 export interface IdentifierCoverageResult {
@@ -275,6 +279,10 @@ export interface HybridCompactionResult extends CompactionResult {
   fallbackReason?: HybridFallbackReason;
   /** Messages replaced by the digest (for the summarization source). */
   replacedMessages?: CompactionMessage[];
+  /** Provider-reported prompt tokens spent on the hybrid summarization call. */
+  summarizationPromptTokens?: number;
+  /** Provider-reported completion tokens spent on the hybrid summarization call. */
+  summarizationOutputTokens?: number;
 }
 
 /**
@@ -379,7 +387,10 @@ export async function runHybridCompaction(
     // AbortController is the only thing that ever aborts the pass.
   };
 
-  const fallbackToDigest = (reason: HybridFallbackReason): HybridCompactionResult => {
+  const fallbackToDigest = (
+    reason: HybridFallbackReason,
+    usage?: { promptTokens?: number; outputTokens?: number }
+  ): HybridCompactionResult => {
     console.warn(
       `[compaction-hybrid] summarization fallback (${reason}); extraction digest retained as live content and audit copy (model summary discarded)`
     );
@@ -392,6 +403,12 @@ export async function runHybridCompaction(
       fallback: true,
       fallbackReason: reason,
       replacedMessages,
+      ...(usage?.promptTokens !== undefined
+        ? { summarizationPromptTokens: usage.promptTokens }
+        : {}),
+      ...(usage?.outputTokens !== undefined
+        ? { summarizationOutputTokens: usage.outputTokens }
+        : {}),
     };
   };
 
@@ -407,23 +424,44 @@ export async function runHybridCompaction(
     );
   }
 
+  const sumUsage = {
+    promptTokens:
+      typeof result.promptTokens === "number" && Number.isFinite(result.promptTokens)
+        ? result.promptTokens
+        : undefined,
+    outputTokens:
+      typeof result.outputTokens === "number" && Number.isFinite(result.outputTokens)
+        ? result.outputTokens
+        : undefined,
+  };
+
   if (!result.text.trim()) {
-    return fallbackToDigest("empty_summary");
+    return fallbackToDigest("empty_summary", sumUsage);
   }
   if (result.truncated) {
-    return fallbackToDigest("truncated");
+    return fallbackToDigest("truncated", sumUsage);
   }
   if (!result.text.startsWith(COMPACTION_MODEL_DIGEST_HEADER)) {
-    return fallbackToDigest("identifier_post_check_rejected");
+    return fallbackToDigest("identifier_post_check_rejected", sumUsage);
   }
   const coverage = verifyIdentifierCoverage(digest, result.text);
   if (!coverage.ok) {
-    return fallbackToDigest("identifier_post_check_rejected");
+    return fallbackToDigest("identifier_post_check_rejected", sumUsage);
   }
 
   const hybridMessages: CompactionMessage[] = [...base.messages];
   hybridMessages[digestIndex] = { role: "assistant", content: result.text };
-  const tokensAfter = estimateTokens(hybridMessages);
+  const schemaTokens =
+    options.toolSchemaTokens ??
+    (Array.isArray(options.tools) && options.tools.length > 0
+      ? estimateTokens(JSON.stringify(options.tools))
+      : 0);
+  const rawTotal = estimateTokens(messages) + schemaTokens;
+  const rawAfter = estimateTokens(hybridMessages) + schemaTokens;
+  const tokensAfter =
+    base.tokensBefore > rawTotal && rawTotal > 0
+      ? Math.max(rawAfter, Math.ceil(rawAfter * (base.tokensBefore / rawTotal)))
+      : rawAfter;
 
   return {
     compacted: true,
@@ -436,6 +474,12 @@ export async function runHybridCompaction(
     modelSummaryUsed: true,
     fallback: false,
     replacedMessages,
+    ...(sumUsage.promptTokens !== undefined
+      ? { summarizationPromptTokens: sumUsage.promptTokens }
+      : {}),
+    ...(sumUsage.outputTokens !== undefined
+      ? { summarizationOutputTokens: sumUsage.outputTokens }
+      : {}),
   };
 }
 

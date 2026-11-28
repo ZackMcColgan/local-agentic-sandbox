@@ -1096,4 +1096,55 @@ describe("Hybrid Compaction Suite (extraction + guarded model digest)", () => {
       else process.env.COMPACTION_STRATEGY = saved;
     }
   });
+
+  it("Fix 8: runHybridCompaction includes toolSchemaTokens + calibration ratio in tokensAfter and propagates summarization token usage", async () => {
+    const saved = process.env.COMPACTION_STRATEGY;
+    try {
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const messages = buildLargeConversation(CHAT_CONTEXT_BUDGET_TOKENS, 0.9);
+      const toolSchemaTokens = 4000;
+      const rawTotal = estimateTokens(messages) + toolSchemaTokens;
+      // Provider measured 1.5x higher than raw estimate -> calibration ratio = 1.5
+      const measuredPromptTokens = Math.round(rawTotal * 1.5);
+
+      const res = await runHybridCompaction(messages, {
+        maxContentTokens: CHAT_CONTEXT_BUDGET_TOKENS,
+        compactionThreshold: 0.85,
+        preserveRecentMessages: 3,
+        toolSchemaTokens,
+        measuredPromptTokens,
+        summarize: async () => ({
+          text: `${COMPACTION_MODEL_DIGEST_HEADER}\nPrior User Goals & Requests:\n- inspect web-ui/lib/contextBudget.ts\nRetained Identifiers & Artifacts:\n- File paths: web-ui/lib/contextBudget.ts\n- Git SHAs: 86c8901c6433617cb9abe5db97123a0f52f58c89\n- URLs: https://github.com/test/repo`,
+          truncated: false,
+          promptTokens: 3200,
+          outputTokens: 450,
+        }),
+      });
+
+      assert.equal(res.modelSummaryUsed, true);
+      const rawAfter = estimateTokens(res.messages) + toolSchemaTokens;
+      const expectedCalibratedAfter = Math.max(
+        rawAfter,
+        Math.ceil(rawAfter * (res.tokensBefore / rawTotal))
+      );
+      assert.equal(
+        res.tokensAfter,
+        expectedCalibratedAfter,
+        "hybrid tokensAfter must include toolSchemaTokens and calibration ratio like extraction"
+      );
+      assert.equal(
+        res.summarizationPromptTokens,
+        3200,
+        "summarization promptTokens must propagate onto HybridCompactionResult"
+      );
+      assert.equal(
+        res.summarizationOutputTokens,
+        450,
+        "summarization outputTokens must propagate onto HybridCompactionResult"
+      );
+    } finally {
+      if (saved === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = saved;
+    }
+  });
 });
