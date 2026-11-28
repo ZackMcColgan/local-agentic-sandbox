@@ -92,6 +92,41 @@ describe("chat turn engine", () => {
     assert.equal(stopped.finish_reason, "abort");
   });
 
+  it("Fix 6: buildAbortedAssistantMessage carries roundPromptTokens, roundGenerationMs, and tokenEconomics rollup", () => {
+    const aborted = buildAbortedAssistantMessage({
+      assistantMessageId: "a-abort-tokens",
+      activeThreadId: "t1",
+      threadsDir: "/nonexistent",
+      turnCreatedFiles: [],
+      turnPreImages: new Map(),
+      turnHostDiffs: [],
+      explicitStopped: true,
+      turnSignalAborted: true,
+      accumulatedStreamedTokens: "Partial answer",
+      accumulatedThoughts: [],
+      traces: [],
+      activeModel: "test-model",
+      turnOutputTokens: 320,
+      roundPromptTokens: [4200, 6100],
+      roundGenerationMs: [850, 1200],
+      dispatchedRounds: 2,
+      compactions: 1,
+      turnMicroElisions: [],
+      turnReadDedups: [],
+      nowIso: "2026-11-27T00:00:00.000Z",
+    });
+
+    assert.equal(aborted.outputTokens, 320);
+    assert.deepEqual(aborted.roundPromptTokens, [4200, 6100]);
+    assert.deepEqual(aborted.roundGenerationMs, [850, 1200]);
+    assert.deepEqual(aborted.tokenEconomics, {
+      rounds: 2,
+      promptTokens: 10300,
+      outputTokens: 320,
+      compactions: 1,
+    });
+  });
+
   it("runSynthesisPass streams thinking + content and forwards token/usage callbacks", async () => {
     const events: Record<string, unknown>[] = [];
     const promptTokens: number[] = [];

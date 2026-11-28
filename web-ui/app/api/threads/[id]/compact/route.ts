@@ -28,9 +28,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       const result = await threadStore.compactThreadIncrementalHybrid(thread, {
         maxContentTokens: engineBudget.budgetTokens,
         contextWindowTokens: engineBudget.contextWindowTokens,
+        compactionThreshold: 0,
         summarize: async (sumReq) => {
           let text = "";
           let truncated = false;
+          let promptTokens: number | undefined;
+          let outputTokens: number | undefined;
           for await (const chunk of provider.streamChat(getLlmBaseUrl(), {
             model: activeModel,
             messages: [
@@ -44,8 +47,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
             sumReq.onProgress?.();
             if (chunk.message?.content) text += chunk.message.content;
             if (chunk.finish_reason === "length") truncated = true;
+            if (typeof chunk.promptTokens === "number") promptTokens = chunk.promptTokens;
+            else if (typeof chunk.prompt_eval_count === "number")
+              promptTokens = chunk.prompt_eval_count;
+            if (typeof chunk.outputTokens === "number") outputTokens = chunk.outputTokens;
+            else if (typeof chunk.eval_count === "number") outputTokens = chunk.eval_count;
           }
-          return { text, truncated };
+          return { text, truncated, promptTokens, outputTokens };
         },
       });
       return NextResponse.json(result);

@@ -257,6 +257,10 @@ export interface RunChatTurnState {
   turnOutputTokens: number | undefined;
   /** Cumulative completion tokens across all dispatched rounds and synthesis passes. */
   cumulativeOutputTokens?: number;
+  roundPromptTokens?: number[];
+  roundGenerationMs?: number[];
+  dispatchedRounds?: number;
+  compactions?: number;
   turnCreatedFiles: string[];
   turnPreImages: Map<string, string>;
   turnHostDiffs: TurnFileDiff[];
@@ -398,6 +402,26 @@ export async function runChatTurn(
   const turnStartMs = deps.turnStartMs ?? Date.now();
   const effectiveRoundBackstop = deps.roundBackstop ?? TOOL_ROUND_BACKSTOP;
   turnState.cumulativeOutputTokens = turnState.cumulativeOutputTokens ?? 0;
+  const roundPromptTokens: number[] = (turnState.roundPromptTokens =
+    turnState.roundPromptTokens ?? []);
+  const roundGenerationMs: number[] = (turnState.roundGenerationMs =
+    turnState.roundGenerationMs ?? []);
+  let dispatchedRounds = (turnState.dispatchedRounds = turnState.dispatchedRounds ?? 0);
+  let turnCompactionCount = (turnState.compactions = turnState.compactions ?? 0);
+  let summarizationPromptTokens = 0;
+  const recordSummarizationUsage = (usage: {
+    summarizationPromptTokens?: number;
+    summarizationOutputTokens?: number;
+  }) => {
+    if (typeof usage.summarizationPromptTokens === "number" && usage.summarizationPromptTokens > 0) {
+      summarizationPromptTokens += usage.summarizationPromptTokens;
+    }
+    if (typeof usage.summarizationOutputTokens === "number" && usage.summarizationOutputTokens > 0) {
+      turnState.cumulativeOutputTokens =
+        (turnState.cumulativeOutputTokens ?? 0) + usage.summarizationOutputTokens;
+      turnState.turnOutputTokens = turnState.cumulativeOutputTokens;
+    }
+  };
 
   let effectiveReasoningEffort = deps.initialEffectiveReasoningEffort;
   let threadData: ChatThreadData | null = deps.initialThreadData;
@@ -614,6 +638,8 @@ export async function runChatTurn(
         summarize: async (sumReq) => {
           let text = "";
           let truncated = false;
+          let promptTokens: number | undefined;
+          let outputTokens: number | undefined;
           for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
             model: turnState.activeModel,
             messages: [
@@ -627,11 +653,18 @@ export async function runChatTurn(
             sumReq.onProgress?.();
             if (chunk.message?.content) text += chunk.message.content;
             if (chunk.finish_reason === "length") truncated = true;
+            if (typeof chunk.promptTokens === "number") promptTokens = chunk.promptTokens;
+            else if (typeof chunk.prompt_eval_count === "number")
+              promptTokens = chunk.prompt_eval_count;
+            if (typeof chunk.outputTokens === "number") outputTokens = chunk.outputTokens;
+            else if (typeof chunk.eval_count === "number") outputTokens = chunk.eval_count;
           }
-          return { text, truncated };
+          return { text, truncated, promptTokens, outputTokens };
         },
       }
     );
+
+    recordSummarizationUsage(prep);
 
     let turnCompacted = prep.compactedThisTurn;
     let turnTokensBefore = prep.tokensBeforeCompaction;
@@ -828,7 +861,6 @@ export async function runChatTurn(
       tool_calls?: LlmToolCall[];
     } = { role: "assistant", content: "" };
     let round = 0;
-    let dispatchedRounds = 0;
     // CHAT-7: no fixed 8-round ceiling. Rounds are governed by context headroom;
     // TOOL_ROUND_BACKSTOP is only the runaway guard.
     let toolLoopStopReason: ToolLoopStopReason | undefined = undefined;
@@ -858,12 +890,11 @@ export async function runChatTurn(
     let carriedToolRoundProse = "";
     // TOKEN ECONOMICS (a): per-round prompt-token integral + compaction count,
     // rolled up onto the assistant message and the thread record.
-    const roundPromptTokens: number[] = [];
-    const roundGenerationMs: number[] = [];
     const thinkingSegments: Array<{ round: number; text: string }> = [];
     const roundNarrations: Array<{ round: number; text: string }> = [];
     let cumulativeOutputTokens = 0;
-    let turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
+    turnCompactionCount = prep.compactedThisTurn ? 1 : 0;
+    turnState.compactions = turnCompactionCount;
     // Fix D1 (F8a): provider-measured prompt truth calibration across rounds.
     let lastMeasuredPromptTokens: number | undefined = undefined;
     let lastMeasuredEstimateTokens: number | undefined = undefined;
@@ -1046,6 +1077,8 @@ export async function runChatTurn(
                 summarize: async (sumReq) => {
                   let text = "";
                   let truncated = false;
+                  let promptTokens: number | undefined;
+                  let outputTokens: number | undefined;
                   for await (const chunk of streamLlmChat(getLlmBaseUrl(), {
                     model: turnState.activeModel,
                     messages: [
@@ -1062,10 +1095,13 @@ export async function runChatTurn(
                     sumReq.onProgress?.();
                     if (chunk.message?.content) text += chunk.message.content;
                     if (chunk.finish_reason === "length") truncated = true;
+                    promptTokens = chunk.promptTokens ?? chunk.prompt_eval_count ?? promptTokens;
+                    outputTokens = chunk.outputTokens ?? chunk.eval_count ?? outputTokens;
                   }
-                  return { text, truncated };
+                  return { text, truncated, promptTokens, outputTokens };
                 },
               });
+              recordSummarizationUsage(hybridResult);
               if (!hybridResult.noop) {
                 if (hybridResult.messages && hybridResult.messages.length > 0) {
                   appliedMessages = hybridResult.messages.map((m) => ({ ...m }));
@@ -1117,6 +1153,7 @@ export async function runChatTurn(
         turnTokensAfter = appliedTokensAfter;
         turnCompactionActions = appliedActions;
         turnCompactionCount++;
+        turnState.compactions = turnCompactionCount;
 
         await sendEvent({
           type: "compaction",
@@ -1280,6 +1317,7 @@ export async function runChatTurn(
       let roundOutputTokens = 0;
       let roundPromptTokenCount: number | undefined = undefined;
       dispatchedRounds++;
+      turnState.dispatchedRounds = dispatchedRounds;
       const currentRoundNumber = dispatchedRounds;
       turnState.inFlightThinking = "";
       turnState.inFlightThinkingRound = currentRoundNumber;
@@ -2692,6 +2730,7 @@ export async function runChatTurn(
       // SYNTHESIS-RETRY: a single synthesis pass, streamed into the shared accumulators.
       const runSynthesisPass = async () => {
         dispatchedRounds++;
+      turnState.dispatchedRounds = dispatchedRounds;
         const synthRoundNumber = dispatchedRounds;
         const synthStartMs = Date.now();
         let synthOutputTokens = 0;
@@ -2955,7 +2994,7 @@ export async function runChatTurn(
         : (turnState.turnOutputTokens ?? (cleanedContent ? estimateTokens(cleanedContent) : 0));
     const turnDurationMs = Math.max(1, Date.now() - turnStartMs);
     // TOKEN ECONOMICS (a): per-round prompt-token integral + per-job rollup.
-    const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens);
+    const finalPromptTokens = sumRoundPromptTokens(roundPromptTokens) + summarizationPromptTokens;
 
     const zeroTraceResult = evaluateZeroTraceTripwire({
       content: cleanedContent,
@@ -3132,6 +3171,15 @@ export async function runChatTurn(
         const errorThoughts = turnState.inFlightThinking?.trim()
           ? [...accumulatedThoughts, turnState.inFlightThinking.trim()]
           : accumulatedThoughts;
+        const errorOutputTokens =
+          (turnState.cumulativeOutputTokens ?? 0) > 0
+            ? turnState.cumulativeOutputTokens!
+            : (turnState.turnOutputTokens ??
+              (turnState.accumulatedStreamedTokens
+                ? estimateTokens(turnState.accumulatedStreamedTokens)
+                : 0));
+        const errorPromptTokens =
+          sumRoundPromptTokens(roundPromptTokens) + summarizationPromptTokens;
         const errorMsg = {
           id: assistantMessageId,
           role: "assistant" as const,
@@ -3147,6 +3195,15 @@ export async function runChatTurn(
           selectedModel: requestedModel || turnState.activeModel,
           timestamp: new Date().toISOString(),
           status: "error" as const,
+          outputTokens: errorOutputTokens,
+          roundPromptTokens,
+          roundGenerationMs: roundGenerationMs.length > 0 ? roundGenerationMs : undefined,
+          tokenEconomics: buildJobTokenRollup({
+            rounds: dispatchedRounds,
+            promptTokens: errorPromptTokens,
+            outputTokens: errorOutputTokens,
+            compactions: turnCompactionCount,
+          }),
         };
         threadStore.addMessage(activeThreadId, errorMsg);
       } catch (errSave) {

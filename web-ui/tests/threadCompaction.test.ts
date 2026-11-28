@@ -287,4 +287,63 @@ describe("Thread Compaction Boundary & Restore Suite", () => {
       } catch {}
     }
   });
+
+  it("Fix 1: compactThreadIncrementalHybrid reports below_threshold (not already_compacted) when below threshold, and manual compact route compacts eligible hybrid threads", async () => {
+    const fix1Dir = path.resolve("./.tmp-test-fix1-hybrid-noop-" + Date.now());
+    const prevStrategy = process.env.COMPACTION_STRATEGY;
+    const prevThreadsDir = process.env.THREADS_DIR;
+    try {
+      process.env.THREADS_DIR = fix1Dir;
+      process.env.COMPACTION_STRATEGY = "hybrid";
+      const store = new ThreadStore(fix1Dir);
+      const thread: Thread = {
+        id: "thread-fix1-hybrid",
+        title: "Hybrid Manual Compact",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        model: "swift-15-27b-mtp",
+        reasoningEffort: "medium",
+        messages: [
+          { id: "m1", role: "user", content: "Short query 1 " + "x".repeat(200), timestamp: "now" },
+          { id: "m2", role: "assistant", content: "Short answer 1 " + "y".repeat(200), timestamp: "now" },
+          { id: "m3", role: "user", content: "Short query 2 " + "x".repeat(200), timestamp: "now" },
+          { id: "m4", role: "assistant", content: "Short answer 2 " + "y".repeat(200), timestamp: "now" },
+          { id: "m5", role: "user", content: "Short query 3", timestamp: "now" },
+          { id: "m6", role: "assistant", content: "Short answer 3", timestamp: "now" },
+          { id: "m7", role: "user", content: "Short query 4", timestamp: "now" },
+          { id: "m8", role: "assistant", content: "Short answer 4", timestamp: "now" },
+        ],
+      };
+      store.saveThread(thread);
+
+      // Direct call with default threshold (85%) on a small thread must report below_threshold, not already_compacted.
+      const belowRes = await store.compactThreadIncrementalHybrid(thread, {
+        summarize: async () => ({ text: "unused" }),
+      });
+      assert.equal(belowRes.noop, true);
+      assert.equal(
+        belowRes.reason,
+        "below_threshold",
+        "below-threshold hybrid noop must report reason=below_threshold, not already_compacted"
+      );
+
+      // Manual compact route in hybrid mode passes compactionThreshold: 0 so eligible threads compact.
+      const req = new Request(`http://localhost/api/threads/${thread.id}/compact`, {
+        method: "POST",
+      });
+      const res = await POST(req, { params: Promise.resolve({ id: thread.id }) });
+      const data = await res.json();
+      assert.equal(res.status, 200);
+      assert.equal(data.noop, false, "manual hybrid compact on eligible thread should compact");
+    } finally {
+      if (prevStrategy === undefined) delete process.env.COMPACTION_STRATEGY;
+      else process.env.COMPACTION_STRATEGY = prevStrategy;
+      if (prevThreadsDir === undefined) delete process.env.THREADS_DIR;
+      else process.env.THREADS_DIR = prevThreadsDir;
+      try {
+        fs.rmSync(fix1Dir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
 });

@@ -1980,6 +1980,8 @@ export class ThreadStore {
     throughMessageId?: string;
     modelSummaryUsed: boolean;
     fallbackReason?: HybridFallbackReason;
+    summarizationPromptTokens?: number;
+    summarizationOutputTokens?: number;
     messages?: CompactionMessage[];
     thread: Thread;
   }> {
@@ -2051,6 +2053,8 @@ export class ThreadStore {
         throughMessageId,
         modelSummaryUsed: result.modelSummaryUsed,
         fallbackReason: result.fallbackReason,
+        summarizationPromptTokens: result.summarizationPromptTokens,
+        summarizationOutputTokens: result.summarizationOutputTokens,
         messages: result.messages,
         thread,
       };
@@ -2101,7 +2105,7 @@ export class ThreadStore {
     if (!result.compacted) {
       return {
         noop: true,
-        reason: "already_compacted",
+        reason: "below_threshold",
         tokensBefore,
         tokensAfter: tokensBefore,
         modelSummaryUsed: false,
@@ -2131,6 +2135,8 @@ export class ThreadStore {
       throughMessageId: throughMessage.id,
       modelSummaryUsed: result.modelSummaryUsed,
       fallbackReason: result.fallbackReason,
+      summarizationPromptTokens: result.summarizationPromptTokens,
+      summarizationOutputTokens: result.summarizationOutputTokens,
       messages: result.messages,
       thread,
     };
@@ -2234,6 +2240,8 @@ export class ThreadStore {
                 compactedThisTurn: true,
                 tokensBeforeCompaction: hybridResult.tokensBefore,
                 tokensAfterCompaction: hybridResult.tokensAfter,
+                summarizationPromptTokens: hybridResult.summarizationPromptTokens,
+                summarizationOutputTokens: hybridResult.summarizationOutputTokens,
                 modelSummaryUsed: hybridResult.modelSummaryUsed,
                 fallbackReason: hybridResult.fallbackReason,
               };

@@ -696,5 +696,74 @@ describe("Batch C — Counting truth (F10, F11, F12)", () => {
         `durationMs (${assistant.durationMs}ms) must still include the 250ms LLM prefill`
       );
     });
+
+    it("Fix 6: errored turn persists outputTokens, roundPromptTokens, roundGenerationMs, and tokenEconomics", async () => {
+      let callCount = 0;
+      const mock = await startMockLlmServer((_req, _body, res) => {
+        callCount++;
+        if (callCount === 1) {
+          res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+          res.write(
+            `${JSON.stringify({
+              message: {
+                role: "assistant",
+                content: "Checking...",
+                tool_calls: [
+                  {
+                    id: "tc_err_1",
+                    function: { name: "workspace_list_files", arguments: {} },
+                  },
+                ],
+              },
+              done: true,
+              done_reason: "stop",
+              prompt_eval_count: 1450,
+              eval_count: 42,
+            })}\n`
+          );
+          res.end();
+          return;
+        }
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end("simulated upstream crash");
+      });
+      server = mock.server;
+      process.env.LLM_BASE_URL = mock.baseUrl;
+
+      const req = new NextRequest("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId: "thread-fix6-error-tokens",
+          messages: [{ role: "user", content: "List files then trigger error" }],
+        }),
+      });
+
+      const res = await POST(req);
+      await readSseEvents(res);
+
+      const store = new ThreadStore(tmpThreadsDir);
+      const thread = await store.getThread("thread-fix6-error-tokens");
+      const assistant = thread?.messages.find((m) => m.role === "assistant");
+      assert.ok(assistant, "error assistant message must be persisted");
+      assert.equal(assistant.status, "error");
+      assert.ok(
+        (assistant.outputTokens ?? 0) >= 42,
+        `errored turn must persist outputTokens (got ${assistant.outputTokens})`
+      );
+      assert.deepEqual(
+        assistant.roundPromptTokens,
+        [1450],
+        "errored turn must persist roundPromptTokens from completed rounds"
+      );
+      assert.ok(
+        Array.isArray(assistant.roundGenerationMs) && assistant.roundGenerationMs.length >= 1,
+        "errored turn must persist roundGenerationMs"
+      );
+      assert.ok(assistant.tokenEconomics, "errored turn must persist tokenEconomics rollup");
+      assert.equal(assistant.tokenEconomics!.promptTokens, 1450);
+      assert.ok(assistant.tokenEconomics!.outputTokens >= 42);
+      assert.ok(assistant.tokenEconomics!.rounds >= 1);
+    });
   });
 });

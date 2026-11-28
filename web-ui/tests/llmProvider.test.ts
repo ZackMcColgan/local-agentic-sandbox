@@ -1329,4 +1329,191 @@ describe("LLM Provider Abstraction Suite (Ollama & llama.cpp)", () => {
       assert.match(fullText, /PONG/i, "Live engine output must contain PONG");
     });
   });
+
+  describe("Wave 1B Token-Economics Truth (Fixes 7, 9, 10)", () => {
+    it("Fix 7: OllamaProvider.generate returns promptTokens and outputTokens from prompt_eval_count/eval_count", async () => {
+      const provider = new OllamaProvider();
+      const result = await provider.generate(
+        { model: "test-model", prompt: "Say hi" },
+        "http://127.0.0.1:11434",
+        {
+          fetchImpl: (async () =>
+            createMockNdjsonResponse([
+              JSON.stringify({ response: "Hello ", done: false }) + "\n",
+              JSON.stringify({
+                response: "world",
+                done: true,
+                prompt_eval_count: 123,
+                eval_count: 45,
+                load_duration: 5_000_000,
+                total_duration: 25_000_000,
+              }) + "\n",
+            ])) as typeof globalThis.fetch,
+        }
+      );
+      assert.equal(result.text, "Hello world");
+      assert.equal(result.promptTokens, 123);
+      assert.equal(result.outputTokens, 45);
+    });
+
+    it("Fix 7: LlamaCppProvider.generate returns promptTokens and outputTokens from standalone usage-only SSE chunks", async () => {
+      const provider = new LlamaCppProvider();
+      const result = await provider.generate(
+        { model: "qwen-27b", prompt: "Say hi" },
+        "http://127.0.0.1:8080",
+        {
+          fetchImpl: (async () =>
+            createMockSseResponse([
+              'data: {"choices":[{"delta":{"content":"Hello world"}}]}\n\n',
+              'data: {"choices":[],"usage":{"prompt_tokens":321,"completion_tokens":54}}\n\n',
+              "data: [DONE]\n\n",
+            ])) as typeof globalThis.fetch,
+        }
+      );
+      assert.equal(result.text, "Hello world");
+      assert.equal(result.promptTokens, 321);
+      assert.equal(result.outputTokens, 54);
+    });
+
+    it("Fix 9a: LlamaCppProvider.streamChat exits outer loop on [DONE] without reading further chunks", async () => {
+      const encoder = new TextEncoder();
+      let sentFirst = false;
+      const stream = new ReadableStream({
+        pull(controller) {
+          if (!sentFirst) {
+            sentFirst = true;
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
+              )
+            );
+          } else {
+            // Simulate a trailing chunk or keep-alive stream after [DONE]:
+            // if the outer loop did not exit on [DONE], this content would be yielded.
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{"content":"AFTER_DONE"}}]}\n\n')
+            );
+            controller.close();
+          }
+        },
+      });
+      globalThis.fetch = (async () =>
+        new Response(stream, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        })) as typeof globalThis.fetch;
+
+      const provider = new LlamaCppProvider();
+      const chunks: LLMStreamChunk[] = [];
+      for await (const c of provider.streamChat("http://127.0.0.1:8080", {
+        model: "qwen-27b",
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+        chunks.push(c);
+      }
+      assert.ok(chunks.some((c) => c.message?.content === "ok"));
+      assert.ok(
+        !chunks.some((c) => c.message?.content === "AFTER_DONE"),
+        "[DONE] must exit the outer read loop and never process subsequent chunks"
+      );
+    });
+
+    it("Fix 9b: LlamaCppProvider.streamChat preserves finish_reason and usage on think-only deltas", async () => {
+      globalThis.fetch = (async () =>
+        createMockSseResponse([
+          'data: {"choices":[{"delta":{"content":"<think>"}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"reasoning"}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"</think>"},"finish_reason":"length"}],"usage":{"prompt_tokens":200,"completion_tokens":80}}\n\n',
+          "data: [DONE]\n\n",
+        ])) as typeof globalThis.fetch;
+
+      const provider = new LlamaCppProvider();
+      const chunks: LLMStreamChunk[] = [];
+      for await (const c of provider.streamChat("http://127.0.0.1:8080", {
+        model: "qwen-27b",
+        messages: [{ role: "user", content: "think" }],
+      })) {
+        chunks.push(c);
+      }
+      assert.ok(
+        chunks.some((c) => c.finish_reason === "length"),
+        "finish_reason on </think>-only delta must survive"
+      );
+      assert.ok(
+        chunks.some((c) => c.promptTokens === 200 && c.outputTokens === 80),
+        "usage on </think>-only delta must survive"
+      );
+    });
+
+    it("Fix 9c: LlamaCppProvider.streamChat parses trailing SSE line without final newline", async () => {
+      globalThis.fetch = (async () =>
+        createMockSseResponse([
+          'data: {"choices":[{"delta":{"content":"hi"}}]}\n',
+          'data: {"choices":[],"finish_reason":"stop","usage":{"prompt_tokens":150,"completion_tokens":12}}',
+        ])) as typeof globalThis.fetch;
+
+      const provider = new LlamaCppProvider();
+      const chunks: LLMStreamChunk[] = [];
+      for await (const c of provider.streamChat("http://127.0.0.1:8080", {
+        model: "qwen-27b",
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+        chunks.push(c);
+      }
+      assert.ok(
+        chunks.some((c) => c.promptTokens === 150 && c.outputTokens === 12),
+        "trailing buffer line without newline must be parsed"
+      );
+    });
+
+    it("Fix 9d: LlamaCppProvider.chat preserves usage and finish_reason instead of clobbering with final done chunk", async () => {
+      globalThis.fetch = (async () =>
+        createMockSseResponse([
+          'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":410,"completion_tokens":99}}\n\n',
+          "data: [DONE]\n\n",
+        ])) as typeof globalThis.fetch;
+
+      const provider = new LlamaCppProvider();
+      const res = await provider.chat("http://127.0.0.1:8080", {
+        model: "qwen-27b",
+        messages: [{ role: "user", content: "hi" }],
+      });
+      assert.equal(res.message?.content, "Hello");
+      assert.equal(res.finish_reason, "length", "chat() must preserve finish_reason");
+      assert.equal(res.promptTokens, 410, "chat() must preserve promptTokens");
+      assert.equal(res.outputTokens, 99, "chat() must preserve outputTokens");
+    });
+
+    it("Fix 10: OllamaProvider.streamChat maps done_reason to finish_reason", async () => {
+      globalThis.fetch = (async () =>
+        createMockNdjsonResponse([
+          JSON.stringify({ message: { role: "assistant", content: "Truncated..." }, done: false }) +
+            "\n",
+          JSON.stringify({
+            message: { role: "assistant", content: "" },
+            done: true,
+            done_reason: "length",
+            prompt_eval_count: 500,
+            eval_count: 1024,
+          }) + "\n",
+        ])) as typeof globalThis.fetch;
+
+      const provider = new OllamaProvider();
+      const chunks: LLMStreamChunk[] = [];
+      for await (const c of provider.streamChat("http://127.0.0.1:11434", {
+        model: "test-model",
+        messages: [{ role: "user", content: "write a book" }],
+      })) {
+        chunks.push(c);
+      }
+      const last = chunks[chunks.length - 1];
+      assert.equal(last.done, true);
+      assert.equal(
+        last.finish_reason,
+        "length",
+        "Ollama done_reason='length' must be mapped to finish_reason='length'"
+      );
+    });
+  });
 });

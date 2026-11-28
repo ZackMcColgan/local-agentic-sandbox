@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { X, Sparkles } from "lucide-react";
 import { formatContextK } from "../lib/tokenEconomics";
 import { fitSegmentsToTotal, type ContextSegments } from "../lib/contextSegments";
@@ -22,9 +22,26 @@ export interface ContextSheetCompaction {
 /** Outcome of the sheet's own Compact action, surfaced in place (UI-110). */
 export interface ContextSheetCompactResult {
   ok: boolean;
+  noop?: boolean;
+  reason?: string;
   tokensBefore?: number;
   tokensAfter?: number;
   error?: string;
+}
+
+export function formatCompactionNoopMessage(reason?: string): string {
+  switch (reason) {
+    case "already_compacted":
+      return "Nothing to compact — history is already compacted.";
+    case "insufficient_messages":
+      return "Nothing to compact — not enough messages yet.";
+    case "below_threshold":
+      return "Nothing to compact — context is below the compaction threshold.";
+    case "not_smaller":
+      return "Nothing to compact — history is already concise.";
+    default:
+      return "Nothing to compact.";
+  }
 }
 
 interface ContextSheetProps {
@@ -69,10 +86,22 @@ function SegmentRow({ label, tokens, budget }: { label: string; tokens: number; 
 }
 
 export function ContextSheet(props: ContextSheetProps) {
-  if (!props.open) return null;
+  const { open, onClose } = props;
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   const {
-    onClose,
     usedTokens,
     budgetTokens,
     triggerTokens,
@@ -94,6 +123,10 @@ export function ContextSheet(props: ContextSheetProps) {
   const fittedSegments = fitSegmentsToTotal(segments, usedTokens);
 
   const percent = budgetTokens > 0 ? Math.round((usedTokens / budgetTokens) * 100) : 0;
+  const triggerPercent =
+    budgetTokens > 0
+      ? Math.min(100, Math.max(0, Math.round((triggerTokens / budgetTokens) * 100)))
+      : 85;
   const freeTokens = Math.max(0, budgetTokens - usedTokens);
   const compactDisabled = isStreaming || isCompacting;
   const compactReason = isStreaming
@@ -154,9 +187,13 @@ export function ContextSheet(props: ContextSheetProps) {
             data-testid="context-sheet-tick"
             aria-hidden="true"
             title={`${Math.round(triggerTokens / 1000)}K compaction trigger`}
-            className="absolute left-[85%] -top-[3px] w-[2px] h-[14px] bg-[#f87171]"
+            className="absolute -top-[3px] w-[2px] h-[14px] bg-[#f87171]"
+            style={{ left: `${triggerPercent}%` }}
           />
-          <span className="absolute left-[85%] top-[10px] font-mono text-[10px] text-[#f87171]">
+          <span
+            className="absolute top-[10px] font-mono text-[10px] text-[#f87171]"
+            style={{ left: `${triggerPercent}%` }}
+          >
             {Math.round(triggerTokens / 1000)}K
           </span>
         </div>
@@ -226,7 +263,8 @@ export function ContextSheet(props: ContextSheetProps) {
               type="button"
               data-testid="context-sheet-restore"
               onClick={onRestore}
-              className="min-h-[44px] px-3 rounded-xl text-xs font-semibold border border-[#f87171] text-[#f87171] hover:border-[#fca5a5] hover:text-[#fca5a5] transition-colors"
+              disabled={compactDisabled}
+              className="min-h-[44px] px-3 rounded-xl text-xs font-semibold border border-[#f87171] text-[#f87171] hover:border-[#fca5a5] hover:text-[#fca5a5] disabled:opacity-40 disabled:pointer-events-none transition-colors"
             >
               Restore full history
             </button>
@@ -237,14 +275,23 @@ export function ContextSheet(props: ContextSheetProps) {
         )}
         {compactResult &&
           (compactResult.ok ? (
-            <p
-              data-testid="context-sheet-compact-result"
-              className="text-[11px] font-semibold text-emerald-600 dark:text-[#10b981]"
-            >
-              {compactResult.tokensBefore != null && compactResult.tokensAfter != null
-                ? `Compacted: ${formatContextK(compactResult.tokensBefore)} \u2192 ${formatContextK(compactResult.tokensAfter)} tokens`
-                : "History compacted"}
-            </p>
+            compactResult.noop ? (
+              <p
+                data-testid="context-sheet-compact-result"
+                className="text-[11px] font-medium text-slate-600 dark:text-zinc-300"
+              >
+                {formatCompactionNoopMessage(compactResult.reason)}
+              </p>
+            ) : (
+              <p
+                data-testid="context-sheet-compact-result"
+                className="text-[11px] font-semibold text-emerald-600 dark:text-[#10b981]"
+              >
+                {compactResult.tokensBefore != null && compactResult.tokensAfter != null
+                  ? `Compacted: ${formatContextK(compactResult.tokensBefore)} \u2192 ${formatContextK(compactResult.tokensAfter)} tokens`
+                  : "History compacted"}
+              </p>
+            )
           ) : (
             <p
               data-testid="context-sheet-compact-result"

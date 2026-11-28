@@ -376,5 +376,44 @@ describe("#140 Context budget follows the engine", () => {
         "roundLoop must resolve context budget from the engine"
       );
     });
+
+    it("Recheck 11: ContextSheet and ChatStream derive trigger tick position instead of hardcoding left-[85%]", () => {
+      const chatStream = fs.readFileSync(
+        path.join(webUiRoot, "components", "ChatStream.tsx"),
+        "utf-8"
+      );
+      const contextSheet = fs.readFileSync(
+        path.join(webUiRoot, "components", "ContextSheet.tsx"),
+        "utf-8"
+      );
+      assert.ok(
+        !chatStream.includes("left-[85%]"),
+        "ChatStream trigger tick must not hardcode left-[85%]"
+      );
+      assert.ok(
+        !contextSheet.includes("left-[85%]"),
+        "ContextSheet trigger tick and label must not hardcode left-[85%]"
+      );
+    });
+
+    it("Recheck 11: compaction digest header reflects the derived threshold tokens instead of hardcoded 85,000", async () => {
+      const { compactConversationHistory } = await import("../lib/conversationCompaction");
+      const conv = makeConversation(40000);
+      const res = compactConversationHistory(conv, {
+        maxContentTokens: 40000,
+        compactionThreshold: 0.75,
+        contextWindowTokens: 65536,
+      });
+      assert.equal(res.compacted, true);
+      const digest = res.messages.find((m) => m.role === "assistant")?.content ?? "";
+      assert.ok(
+        !digest.includes("85,000 tokens"),
+        `digest header must not hardcode 85,000 tokens when threshold is 30,000: ${digest.slice(0, 140)}`
+      );
+      assert.ok(
+        digest.includes("75%") && digest.includes("30,000 tokens"),
+        `digest header must cite derived 75% / 30,000 tokens: ${digest.slice(0, 140)}`
+      );
+    });
   });
 });
