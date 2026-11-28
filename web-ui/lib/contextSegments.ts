@@ -16,24 +16,63 @@ export interface ContextSegments {
   system: number;
 }
 
+interface SegmentTraceLike {
+  id?: string;
+  tool?: string;
+  timestamp?: string;
+  result?: unknown;
+}
+
 interface SegmentMessageLike {
   role?: string;
   content?: unknown;
-  traces?: Array<{ result?: unknown }> | undefined;
+  traces?: SegmentTraceLike[] | undefined;
   compactedThisTurn?: boolean;
   tokenEconomics?: JobTokenRollup;
+}
+
+function traceDedupeKey(t: SegmentTraceLike): string | null {
+  if (typeof t.id === "string" && t.id.length > 0) {
+    return `id:${t.id}`;
+  }
+  if (t.tool || t.timestamp) {
+    const resLen =
+      typeof t.result === "string"
+        ? t.result.length
+        : t.result != null
+          ? JSON.stringify(t.result).length
+          : 0;
+    return `meta:${t.tool ?? ""}|${t.timestamp ?? ""}|${resLen}`;
+  }
+  return null;
 }
 
 /**
  * Derives the three segment bars from the thread's messages and traces.
  * Trace result payloads count as tool results; user/assistant text counts as
  * conversation; system-role content counts as system. Pure; safe for render.
+ *
+ * Traces present in both `m.traces` and `liveTraces` are deduplicated so live
+ * streaming traces are never double-counted.
  */
 export function deriveContextSegments(
   messages: SegmentMessageLike[] | undefined,
-  liveTraces?: Array<{ result?: unknown }> | undefined
+  liveTraces?: SegmentTraceLike[] | undefined
 ): ContextSegments {
   const seg: ContextSegments = { toolResults: 0, conversation: 0, system: 0 };
+  const seenRefs = new Set<object>();
+  const seenKeys = new Set<string>();
+
+  const countTrace = (t: SegmentTraceLike | null | undefined) => {
+    if (!t || typeof t !== "object") return;
+    if (seenRefs.has(t)) return;
+    const key = traceDedupeKey(t);
+    if (key && seenKeys.has(key)) return;
+    seenRefs.add(t);
+    if (key) seenKeys.add(key);
+    seg.toolResults += estimateTokens(t.result ?? "");
+  };
+
   for (const m of messages || []) {
     if (m.role === "system") {
       seg.system += estimateTokens(m.content ?? "");
@@ -41,11 +80,11 @@ export function deriveContextSegments(
       seg.conversation += estimateTokens(m.content ?? "");
     }
     for (const t of m.traces || []) {
-      seg.toolResults += estimateTokens(t.result ?? "");
+      countTrace(t);
     }
   }
   for (const t of liveTraces || []) {
-    seg.toolResults += estimateTokens(t.result ?? "");
+    countTrace(t);
   }
   return seg;
 }
@@ -83,14 +122,76 @@ export function fitSegmentsToTotal(segments: ContextSegments, usedTokens: number
 }
 
 /**
- * Compaction count from the records the client already holds: per-message
- * compactedThisTurn flags plus the per-turn tokenEconomics rollups.
+ * Compaction count from the records the client already holds. A single turn
+ * persists both `compactedThisTurn: true` and `tokenEconomics.compactions`, so
+ * take the max per message rather than summing both fields.
  */
 export function countCompactions(messages: SegmentMessageLike[] | undefined): number {
   let count = 0;
   for (const m of messages || []) {
-    if (m.compactedThisTurn) count += 1;
-    if (m.tokenEconomics?.compactions) count += m.tokenEconomics.compactions;
+    const rollupCount =
+      typeof m.tokenEconomics?.compactions === "number" && m.tokenEconomics.compactions > 0
+        ? m.tokenEconomics.compactions
+        : 0;
+    const flagCount = m.compactedThisTurn ? 1 : 0;
+    count += Math.max(rollupCount, flagCount);
   }
   return count;
+}
+
+/**
+ * Resolves the context meter's current token count.
+ * Prefers the latest round's actual prompt tokens from persisted messages,
+ * EXCEPT when a compaction occurred at or after the latest recorded round
+ * (manual compaction or mid-turn compaction), in which case the post-compaction
+ * token count wins until a newer round persists.
+ */
+export function resolveDisplayContextTokens(params: {
+  messages: Array<{ roundPromptTokens?: number[]; timestamp?: string }> | undefined;
+  estimatedTokens: number;
+  compaction?: { compactedAt?: string; tokensAfter?: number } | null;
+  compactedAtMs?: number | null;
+}): number {
+  let recordTokens = 0;
+  let lastRecordMs: number | null = null;
+  for (const m of params.messages || []) {
+    const rounds = m.roundPromptTokens;
+    if (!Array.isArray(rounds) || rounds.length === 0) continue;
+    for (let i = rounds.length - 1; i >= 0; i--) {
+      const v = rounds[i];
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+        recordTokens = v;
+        const parsed = m.timestamp ? Date.parse(m.timestamp) : NaN;
+        lastRecordMs = Number.isFinite(parsed) ? parsed : null;
+        break;
+      }
+    }
+  }
+
+  // Mid-turn compaction SSE event (before the turn's new roundPromptTokens persists)
+  if (
+    typeof params.compactedAtMs === "number" &&
+    Number.isFinite(params.compactedAtMs) &&
+    params.estimatedTokens > 0 &&
+    (lastRecordMs === null || params.compactedAtMs >= lastRecordMs)
+  ) {
+    return params.estimatedTokens;
+  }
+
+  // Persisted or just-applied manual compaction boundary newer than the last recorded round
+  if (
+    params.compaction &&
+    typeof params.compaction.tokensAfter === "number" &&
+    Number.isFinite(params.compaction.tokensAfter) &&
+    params.compaction.tokensAfter >= 0
+  ) {
+    const compactedMs = params.compaction.compactedAt
+      ? Date.parse(params.compaction.compactedAt)
+      : NaN;
+    if (Number.isFinite(compactedMs) && (lastRecordMs === null || compactedMs >= lastRecordMs)) {
+      return params.compaction.tokensAfter;
+    }
+  }
+
+  return recordTokens > 0 ? recordTokens : params.estimatedTokens;
 }

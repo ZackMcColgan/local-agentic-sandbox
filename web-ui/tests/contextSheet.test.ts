@@ -10,6 +10,7 @@ import {
   countCompactions,
   fitSegmentsToTotal,
 } from "../lib/contextSegments";
+import * as contextSegmentsMod from "../lib/contextSegments";
 
 // Board #138 (owner directive, Nov 25 2026): the header context meter pill is
 // a TAP TARGET on every surface. Tapping opens one Context sheet (bottom sheet
@@ -355,5 +356,167 @@ describe("fitSegmentsToTotal: the breakdown always sums to the displayed total",
   it("zero total: segments pass through (nothing to fit to)", () => {
     const seg = { toolResults: 10, conversation: 5, system: 1 };
     assert.deepEqual(fitSegmentsToTotal(seg, 0), seg);
+  });
+});
+
+describe("Wave 1B Compaction Truth regressions (Fixes 2-5)", () => {
+  it("Fix 2: countCompactions does not double-count when a message has both compactedThisTurn and tokenEconomics.compactions", () => {
+    const messages = [
+      {
+        id: "a1",
+        role: "assistant",
+        content: "done",
+        compactedThisTurn: true,
+        tokenEconomics: { rounds: 4, promptTokens: 90000, outputTokens: 1200, compactions: 1 },
+      },
+      {
+        id: "a2",
+        role: "assistant",
+        content: "done2",
+        compactedThisTurn: true,
+        tokenEconomics: { rounds: 6, promptTokens: 120000, outputTokens: 1500, compactions: 2 },
+      },
+      {
+        id: "a3",
+        role: "assistant",
+        content: "legacy",
+        compactedThisTurn: true,
+      },
+    ];
+    assert.equal(
+      countCompactions(messages as never),
+      4,
+      "1 + 2 + 1 = 4 compactions (never 2 + 3 + 1 = 6)"
+    );
+  });
+
+  it("Fix 3: resolveDisplayContextTokens reflects post-compaction truth and ChatStream resets contextStats on thread switch", () => {
+    const resolveFn = (contextSegmentsMod as Record<string, unknown>).resolveDisplayContextTokens as
+      | ((params: {
+          messages: Array<{ roundPromptTokens?: number[]; timestamp?: string }> | undefined;
+          estimatedTokens: number;
+          compaction?: { compactedAt?: string; tokensAfter?: number } | null;
+        }) => number)
+      | undefined;
+    assert.equal(typeof resolveFn, "function", "resolveDisplayContextTokens must be exported");
+
+    // Pre-compaction message has 88K prompt tokens; manual compaction ran AFTER it reducing to 22K
+    const messages = [
+      {
+        role: "assistant",
+        roundPromptTokens: [88000],
+        timestamp: "2026-11-27T10:00:00.000Z",
+      },
+    ];
+    assert.equal(
+      resolveFn!({
+        messages,
+        estimatedTokens: 22000,
+        compaction: { compactedAt: "2026-11-27T10:05:00.000Z", tokensAfter: 22000 },
+      }),
+      22000,
+      "after compaction, meter must show post-compaction tokens instead of stale roundPromptTokens"
+    );
+
+    // After a newer turn lands, the new roundPromptTokens wins again
+    const messagesAfterNewTurn = [
+      ...messages,
+      {
+        role: "assistant",
+        roundPromptTokens: [31000],
+        timestamp: "2026-11-27T10:10:00.000Z",
+      },
+    ];
+    assert.equal(
+      resolveFn!({
+        messages: messagesAfterNewTurn,
+        estimatedTokens: 22000,
+        compaction: { compactedAt: "2026-11-27T10:05:00.000Z", tokensAfter: 22000 },
+      }),
+      31000,
+      "once a newer round persists after compaction, its roundPromptTokens must win"
+    );
+
+    // ChatStream must reset contextStats.estimatedTokens on thread switch
+    const chatStreamSrc = fs.readFileSync(path.join(componentsDir, "ChatStream.tsx"), "utf-8");
+    assert.ok(
+      chatStreamSrc.includes("resolveDisplayContextTokens"),
+      "ChatStream must use resolveDisplayContextTokens for displayContextTokens"
+    );
+    const switchEffectIdx = chatStreamSrc.indexOf("Rehydration of thread compaction boundary");
+    assert.ok(switchEffectIdx > 0);
+    const switchWindow = chatStreamSrc.slice(switchEffectIdx, switchEffectIdx + 1200);
+    assert.ok(
+      switchWindow.includes("estimatedTokens: 0"),
+      "ChatStream must reset contextStats.estimatedTokens to 0 on thread switch"
+    );
+  });
+
+  it("Fix 4: deriveContextSegments counts each trace once even when present in both m.traces and liveTraces", () => {
+    const sharedTrace = {
+      tool: "workspace_read_file",
+      args: { path: "a.ts" },
+      result: "payload ".repeat(200),
+      durationMs: 12,
+      timestamp: "2026-11-27T10:00:00.000Z",
+    };
+    const clonedTrace = { ...sharedTrace };
+    const messages = [{ id: "a1", role: "assistant", content: "ok", traces: [sharedTrace] }];
+
+    const onlyMessages = deriveContextSegments(messages as never, []);
+    const withSameRef = deriveContextSegments(messages as never, [sharedTrace]);
+    const withClone = deriveContextSegments(messages as never, [clonedTrace]);
+
+    assert.equal(
+      withSameRef.toolResults,
+      onlyMessages.toolResults,
+      "identical trace object in liveTraces must not be double-counted"
+    );
+    assert.equal(
+      withClone.toolResults,
+      onlyMessages.toolResults,
+      "cloned trace with same tool/timestamp/result in liveTraces must not be double-counted"
+    );
+  });
+
+  it("Fix 5: ContextSheet guards Restore while streaming/compacting and handles Escape to close", () => {
+    const boundary = {
+      summary: "DIGEST",
+      compactedAt: "2026-11-25T10:00:00Z",
+      tokensBefore: 91000,
+      tokensAfter: 38000,
+    };
+    const htmlStreaming = renderToString(
+      React.createElement(ContextSheet, {
+        open: true,
+        onClose: () => {},
+        usedTokens: 50000,
+        budgetTokens: 100000,
+        triggerTokens: 85000,
+        segments: { toolResults: 20000, conversation: 20000, system: 10000 },
+        lastRoundPromptTokens: 50000,
+        compactionCount: 1,
+        compaction: boundary,
+        isStreaming: true,
+        isCompacting: false,
+        onCompact: () => {},
+        onRestore: () => {},
+      })
+    );
+    const restoreIdx = htmlStreaming.indexOf('data-testid="context-sheet-restore"');
+    assert.ok(restoreIdx > 0, "restore button must render when boundary exists");
+    const buttonStart = htmlStreaming.lastIndexOf("<button", restoreIdx);
+    const buttonEnd = htmlStreaming.indexOf(">", restoreIdx);
+    const restoreOpenTag = htmlStreaming.slice(buttonStart, buttonEnd + 1);
+    assert.ok(
+      /\bdisabled(?:=""|\b)/.test(restoreOpenTag),
+      "Restore full history button must have disabled attribute while streaming"
+    );
+
+    const sheetSrc = fs.readFileSync(path.join(componentsDir, "ContextSheet.tsx"), "utf-8");
+    assert.ok(
+      sheetSrc.includes('"Escape"') || sheetSrc.includes("'Escape'"),
+      "ContextSheet must handle Escape key to close"
+    );
   });
 });

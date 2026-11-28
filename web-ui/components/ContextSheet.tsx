@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { X, Sparkles } from "lucide-react";
 import { formatContextK } from "../lib/tokenEconomics";
 import { fitSegmentsToTotal, type ContextSegments } from "../lib/contextSegments";
@@ -86,10 +86,22 @@ function SegmentRow({ label, tokens, budget }: { label: string; tokens: number; 
 }
 
 export function ContextSheet(props: ContextSheetProps) {
-  if (!props.open) return null;
+  const { open, onClose } = props;
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   const {
-    onClose,
     usedTokens,
     budgetTokens,
     triggerTokens,
@@ -243,7 +255,8 @@ export function ContextSheet(props: ContextSheetProps) {
               type="button"
               data-testid="context-sheet-restore"
               onClick={onRestore}
-              className="min-h-[44px] px-3 rounded-xl text-xs font-semibold border border-[#f87171] text-[#f87171] hover:border-[#fca5a5] hover:text-[#fca5a5] transition-colors"
+              disabled={compactDisabled}
+              className="min-h-[44px] px-3 rounded-xl text-xs font-semibold border border-[#f87171] text-[#f87171] hover:border-[#fca5a5] hover:text-[#fca5a5] disabled:opacity-40 disabled:pointer-events-none transition-colors"
             >
               Restore full history
             </button>

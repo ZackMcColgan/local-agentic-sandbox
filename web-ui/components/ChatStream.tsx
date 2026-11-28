@@ -28,7 +28,11 @@ import { ExecutionTraceItem } from "./ExecutionTrace";
 import type { CompletionStamp, VerificationGap } from "@/lib/finishVerification";
 import { copyText } from "../lib/clipboard";
 import { formatContextK, latestRoundPromptTokens } from "../lib/tokenEconomics";
-import { deriveContextSegments, countCompactions } from "../lib/contextSegments";
+import {
+  deriveContextSegments,
+  countCompactions,
+  resolveDisplayContextTokens,
+} from "../lib/contextSegments";
 import { CHAT_CONTEXT_BUDGET_TOKENS } from "../lib/contextBudget";
 import { COMPACTION_THRESHOLD_RATIO } from "../lib/modelLimits";
 import { ContextSheet, formatCompactionNoopMessage } from "./ContextSheet";
@@ -465,6 +469,12 @@ export function ChatStream({
 
   // Rehydration of thread compaction boundary on thread switch (skipped when parent already fetched the thread)
   useEffect(() => {
+    setContextStats((prev) => ({
+      estimatedTokens: 0,
+      budgetTokens: prev.budgetTokens,
+    }));
+    setSheetCompactResult(null);
+    setCompactCommandNotice(null);
     if (!threadId) {
       setThreadCompaction(null);
       return;
@@ -518,6 +528,7 @@ export function ChatStream({
     compactedThisTurn?: boolean;
     tokensBeforeCompaction?: number;
     tokensAfterCompaction?: number;
+    compactedAtMs?: number;
   }>({
     estimatedTokens: 0,
     budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
@@ -665,8 +676,12 @@ export function ChatStream({
   const recordContextTokens = latestRoundPromptTokens(
     messages as unknown as Array<{ roundPromptTokens?: number[] }>
   );
-  const displayContextTokens =
-    recordContextTokens > 0 ? recordContextTokens : contextStats.estimatedTokens;
+  const displayContextTokens = resolveDisplayContextTokens({
+    messages: messages as unknown as Array<{ roundPromptTokens?: number[]; timestamp?: string }>,
+    estimatedTokens: contextStats.estimatedTokens,
+    compaction: threadCompaction,
+    compactedAtMs: contextStats.compactedAtMs,
+  });
 
   // CHAT-QUEUE: Client-side message queue during active turns
   const turnActiveRef = useRef<boolean>(false);
@@ -1092,6 +1107,11 @@ export function ChatStream({
       });
       if (res.ok) {
         setThreadCompaction(null);
+        setContextStats((prev) => ({
+          ...prev,
+          estimatedTokens: 0,
+          compactedAtMs: undefined,
+        }));
         setShowCompactionModal(false);
       }
     } catch (err) {
@@ -1387,6 +1407,7 @@ export function ChatStream({
                 compactedThisTurn: true,
                 tokensBeforeCompaction: event.tokensBefore,
                 tokensAfterCompaction: event.tokensAfter,
+                compactedAtMs: Date.now(),
               }));
               setMessages((prev) =>
                 upsertAssistant(prev, (msg) => ({
