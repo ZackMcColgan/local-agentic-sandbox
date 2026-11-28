@@ -336,5 +336,301 @@
     "args": { "command": "Get-ChildItem C:\\\\temp" },
     "expectedDestructive": false,
     "description": "Get-ChildItem is non-destructive"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"Remove-Item\" -Recurse -Force ./build" },
+    "expectedDestructive": true,
+    "description": "Bypass: double-quoted Remove-Item via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& 'Remove-Item' ./file.txt" },
+    "expectedDestructive": true,
+    "description": "Bypass: single-quoted Remove-Item via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& (\"Remove-Item\") ./file.txt" },
+    "expectedDestructive": true,
+    "description": "Bypass: parenthesized quoted Remove-Item via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"del\" C:\\\\temp\\\\x.txt" },
+    "expectedDestructive": true,
+    "description": "Bypass: double-quoted del alias via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"rm\" -rf ./build" },
+    "expectedDestructive": true,
+    "description": "Bypass: double-quoted rm alias via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"shutdown\" /s /t 0" },
+    "expectedDestructive": true,
+    "description": "Bypass: double-quoted shutdown via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": ". \"Remove-Item\" ./build" },
+    "expectedDestructive": true,
+    "description": "Bypass: dot-sourced quoted Remove-Item"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& { rm -rf ./build }" },
+    "expectedDestructive": true,
+    "description": "Bypass: rm inside scriptblock braces"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "if ($true) { del C:\\\\temp\\\\x.txt }" },
+    "expectedDestructive": true,
+    "description": "Bypass: del inside if-statement braces"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "try { rmdir /s /q temp } catch {}" },
+    "expectedDestructive": true,
+    "description": "Bypass: rmdir inside try-block braces"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "`Rem`ove-Item ./build" },
+    "expectedDestructive": true,
+    "description": "Bypass: backtick-obfuscated Remove-Item"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "`d`el C:\\\\temp\\\\x.txt" },
+    "expectedDestructive": true,
+    "description": "Bypass: backtick-obfuscated del"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "r`m -rf ./build" },
+    "expectedDestructive": true,
+    "description": "Bypass: backtick-obfuscated rm"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "`s`hutdown /s /t 0" },
+    "expectedDestructive": true,
+    "description": "Bypass: backtick-obfuscated shutdown"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd /q /c \"del C:\\\\temp\\\\x.txt\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: cmd indirection with /q before /c"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd.exe /d /q /c \"rd /s /q C:\\\\temp\\\\dir\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: cmd.exe indirection with multiple flags before /c"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"cmd\" /q /c \"erase C:\\\\temp\\\\x.txt\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: quoted cmd indirection with /q before /c"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"powershell\" -EncodedCommand aABlAGwAbABvAA==" },
+    "expectedDestructive": true,
+    "description": "Bypass: quoted powershell name with -EncodedCommand"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& 'pwsh.exe' -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAAQwA6AFwAeAA=" },
+    "expectedDestructive": true,
+    "description": "Bypass: single-quoted pwsh.exe with -enc"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "iex \"Remove-Item ./build\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: iex dynamic execution"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Invoke-Expression \"del C:\\\\temp\\\\x.txt\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: Invoke-Expression dynamic execution"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "\"Remove-Item ./build\" | iex" },
+    "expectedDestructive": true,
+    "description": "Bypass: piped iex dynamic execution"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "[scriptblock]::Create(\"Remove-Item ./build\").Invoke()" },
+    "expectedDestructive": true,
+    "description": "Bypass: [scriptblock]::Create().Invoke()"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": {
+      "command": "[System.Management.Automation.ScriptBlock]::Create(\"del x.txt\").Invoke()"
+    },
+    "expectedDestructive": true,
+    "description": "Bypass: fully-qualified ScriptBlock::Create().Invoke()"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "powershell -Command \"Remove-Item ./build\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: powershell -Command with destructive payload"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "powershell -NoProfile -c \"del C:\\\\temp\\\\x.txt\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: powershell -NoProfile -c with destructive payload"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "pwsh -Command \"rm -rf ./build\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: pwsh -Command with destructive payload"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "robocopy C:\\\\empty C:\\\\target /mir" },
+    "expectedDestructive": true,
+    "description": "Bypass: robocopy /mir destructive mirror"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "robocopy.exe src dst /MIR /R:0" },
+    "expectedDestructive": true,
+    "description": "Bypass: robocopy.exe /MIR uppercase"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "robocopy src dst /purge" },
+    "expectedDestructive": true,
+    "description": "Bypass: robocopy /purge destructive delete"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output $(Remove-Item ./build)" },
+    "expectedDestructive": true,
+    "description": "Bypass: bare $() subexpression containing Remove-Item"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output \"$(del C:\\\\temp\\\\x.txt)\"" },
+    "expectedDestructive": true,
+    "description": "Bypass: double-quoted $() subexpression containing del"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "$x = $(rm -rf ./build)" },
+    "expectedDestructive": true,
+    "description": "Bypass: $() subexpression assigned to variable containing rm"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "git status" },
+    "expectedDestructive": false,
+    "description": "Positive control: git status"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "git diff --stat" },
+    "expectedDestructive": false,
+    "description": "Positive control: git diff --stat"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "git commit -m \"fix Remove-Item and del bypass\"" },
+    "expectedDestructive": false,
+    "description": "Positive control: git commit message mentioning destructive commands"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "npm run build" },
+    "expectedDestructive": false,
+    "description": "Positive control: npm run build"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "npm run test:gate" },
+    "expectedDestructive": false,
+    "description": "Positive control: npm run test:gate"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "node -e \"console.log('hello')\"" },
+    "expectedDestructive": false,
+    "description": "Positive control: node -e benign script"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Select-String -Path ./src/*.ts -Pattern \"Remove-Item\"" },
+    "expectedDestructive": false,
+    "description": "Positive control: Select-String searching for Remove-Item"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output \"Hello $($env:USERNAME)\"" },
+    "expectedDestructive": false,
+    "description": "Positive control: double-quoted $() with safe env var"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output \"$(Get-Date)\"" },
+    "expectedDestructive": false,
+    "description": "Positive control: double-quoted $() with safe cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "Write-Output '$(Remove-Item ./foo)'" },
+    "expectedDestructive": false,
+    "description": "Positive control: single-quoted literal $() is not evaluated"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "if ($true) { Write-Output \"ok\" }" },
+    "expectedDestructive": false,
+    "description": "Positive control: benign if-block"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& { Get-ChildItem ./src }" },
+    "expectedDestructive": false,
+    "description": "Positive control: benign scriptblock invocation"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "& \"git\" status" },
+    "expectedDestructive": false,
+    "description": "Positive control: quoted benign command via call operator"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "cmd /q /c echo hello" },
+    "expectedDestructive": false,
+    "description": "Positive control: cmd /q /c benign command"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "powershell -NoProfile -Command \"Get-Date\"" },
+    "expectedDestructive": false,
+    "description": "Positive control: powershell -Command benign cmdlet"
+  },
+  {
+    "tool": "host_run_powershell",
+    "args": { "command": "robocopy C:\\\\src C:\\\\dst /E" },
+    "expectedDestructive": false,
+    "description": "Positive control: robocopy non-destructive copy without /mir or /purge"
   }
 ]
