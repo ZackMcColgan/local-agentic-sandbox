@@ -292,7 +292,8 @@ describe("CHAT-7: Budget-Governed Tool Rounds (no fixed 8-round ceiling, 1000-ro
         "must pass headroom estimate"
       );
       assert.ok(
-        content.includes("budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS"),
+        content.includes("budgetTokens: turnBudgetTokens") ||
+          content.includes("budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS"),
         "must pass the budget"
       );
       assert.ok(content.includes("roundBackstop: TOOL_ROUND_BACKSTOP"), "must pass the backstop");

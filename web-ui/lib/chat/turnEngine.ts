@@ -458,6 +458,10 @@ export interface RunSynthesisPassParams {
   precomputedRawMessageTokens?: number;
   /** Pre-computed estimateToolSchemaTokens(tools) to reuse instead of re-stringifying (Perf P6). */
   precomputedToolSchemaTokens?: number;
+  /** Runtime-derived thread token budget (#140). */
+  maxContentTokens?: number;
+  /** Runtime-derived physical engine context window (#140). */
+  contextWindowTokens?: number;
 }
 
 /**
@@ -490,6 +494,8 @@ export async function runSynthesisPass(
     log = console.log,
     precomputedRawMessageTokens,
     precomputedToolSchemaTokens,
+    maxContentTokens,
+    contextWindowTokens,
   } = params;
 
   let passContent = "";
@@ -504,6 +510,8 @@ export async function runSynthesisPass(
       messages: fitContextWindow(conversationMessages, {
         isArtifactTurn: isArtifactRequest,
         tools: hasTools ? tools : undefined,
+        ...(maxContentTokens !== undefined ? { maxContentTokens } : {}),
+        ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
         ...(precomputedRawMessageTokens !== undefined ? { precomputedRawMessageTokens } : {}),
         ...(precomputedToolSchemaTokens !== undefined ? { precomputedToolSchemaTokens } : {}),
       }),

@@ -45,6 +45,8 @@ export interface TurnStartCompactionOptions {
   /** Injectable deadlines (test seam); default to the pinned guardrails. */
   inactivityMs?: number;
   totalDeadlineMs?: number;
+  /** Runtime-derived physical engine context window (#140). */
+  contextWindowTokens?: number;
 }
 
 export interface ThreadAttachment {

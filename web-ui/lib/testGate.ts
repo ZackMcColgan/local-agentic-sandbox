@@ -120,6 +120,22 @@ interface MappingRule {
 
 const MAPPING_RULES: MappingRule[] = [
   {
+    // #140: context budget follows the engine's configured max_context
+    match: (p) =>
+      p.includes("lib/engineContextBudget") ||
+      p.includes("lib/contextBudget") ||
+      p.includes("lib/chatUtils") ||
+      p.includes("lib/chat/roundLoop") ||
+      p.includes("lib/chat/turnEngine") ||
+      p.includes("lib/threads/threadStore") ||
+      p.includes("app/api/engine") ||
+      p.includes("app/api/threads/[id]/compact") ||
+      p.includes("components/ChatStream") ||
+      p.includes("components/ContextSheet") ||
+      p.includes("engineContextBudget.test.ts"),
+    tests: ["tests/engineContextBudget.test.ts"],
+  },
+  {
     // #139: /compact composer slash command (predicate module + composer interception)
     match: (p) =>
       p.includes("lib/chat/compactCommand") ||
