@@ -534,6 +534,10 @@ export function ChatStream({
     budgetTokens: CHAT_CONTEXT_BUDGET_TOKENS,
   });
   const contextTriggerTokens = Math.floor(contextStats.budgetTokens * COMPACTION_THRESHOLD_RATIO);
+  const contextTriggerPercent =
+    contextStats.budgetTokens > 0
+      ? Math.min(100, Math.max(0, Math.round((contextTriggerTokens / contextStats.budgetTokens) * 100)))
+      : Math.round(COMPACTION_THRESHOLD_RATIO * 100);
 
   // #140: hydrate context budget from the live engine on mount so the header meter
   // and ContextSheet reflect the engine's configured max_context before turn 1.
@@ -2477,7 +2481,8 @@ export function ChatStream({
                       data-testid="context-meter-tick"
                       aria-hidden="true"
                       title={`${Math.round(contextTriggerTokens / 1000)}K compaction trigger`}
-                      className="absolute left-[85%] -top-[3px] w-[2px] h-[11px] bg-[#f87171]"
+                      className="absolute -top-[3px] w-[2px] h-[11px] bg-[#f87171]"
+                      style={{ left: `${contextTriggerPercent}%` }}
                     />
                   </div>
                 </div>

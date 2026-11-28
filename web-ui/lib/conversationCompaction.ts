@@ -566,7 +566,10 @@ export function extractIdentifiersAndErrors(messages: CompactionMessage[]): {
 /**
  * Summarizes an array of older messages into a concise structured Markdown digest.
  */
-export function summarizeTurnHistory(olderMessages: CompactionMessage[]): string {
+export function summarizeTurnHistory(
+  olderMessages: CompactionMessage[],
+  options?: { thresholdRatio?: number; thresholdTokens?: number }
+): string {
   const userQueries: string[] = [];
   const toolsInvoked: Set<string> = new Set();
   const keyDeliverables: string[] = [];
@@ -608,8 +611,12 @@ export function summarizeTurnHistory(olderMessages: CompactionMessage[]): string
 
   const { filePaths, gitShas, urls, errorLines } = extractIdentifiersAndErrors(olderMessages);
 
+  const thresholdPct = Math.round((options?.thresholdRatio ?? DEFAULT_COMPACTION_THRESHOLD) * 100);
+  const thresholdToks =
+    options?.thresholdTokens ??
+    Math.floor(CHAT_CONTEXT_BUDGET_TOKENS * (options?.thresholdRatio ?? DEFAULT_COMPACTION_THRESHOLD));
   const lines: string[] = [
-    "[CONVERSATION COMPACTED (85% THRESHOLD)]: Earlier conversation history summarized (85% budget / 85,000 tokens).",
+    `[CONVERSATION COMPACTED (${thresholdPct}% THRESHOLD)]: Earlier conversation history summarized (${thresholdPct}% budget / ${thresholdToks.toLocaleString("en-US")} tokens).`,
   ];
 
   if (userQueries.length > 0) {
@@ -767,7 +774,10 @@ export function compactConversationHistory(
     return { compacted: false, messages, tokensBefore, tokensAfter: tokensBefore };
   }
 
-  const summaryContent = summarizeTurnHistory(olderMessages);
+  const summaryContent = summarizeTurnHistory(olderMessages, {
+    thresholdRatio,
+    thresholdTokens,
+  });
 
   const compactedMessages: CompactionMessage[] = [];
   if (hasSystem) {

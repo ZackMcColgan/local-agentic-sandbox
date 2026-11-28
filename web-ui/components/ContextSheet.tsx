@@ -123,6 +123,10 @@ export function ContextSheet(props: ContextSheetProps) {
   const fittedSegments = fitSegmentsToTotal(segments, usedTokens);
 
   const percent = budgetTokens > 0 ? Math.round((usedTokens / budgetTokens) * 100) : 0;
+  const triggerPercent =
+    budgetTokens > 0
+      ? Math.min(100, Math.max(0, Math.round((triggerTokens / budgetTokens) * 100)))
+      : 85;
   const freeTokens = Math.max(0, budgetTokens - usedTokens);
   const compactDisabled = isStreaming || isCompacting;
   const compactReason = isStreaming
@@ -183,9 +187,13 @@ export function ContextSheet(props: ContextSheetProps) {
             data-testid="context-sheet-tick"
             aria-hidden="true"
             title={`${Math.round(triggerTokens / 1000)}K compaction trigger`}
-            className="absolute left-[85%] -top-[3px] w-[2px] h-[14px] bg-[#f87171]"
+            className="absolute -top-[3px] w-[2px] h-[14px] bg-[#f87171]"
+            style={{ left: `${triggerPercent}%` }}
           />
-          <span className="absolute left-[85%] top-[10px] font-mono text-[10px] text-[#f87171]">
+          <span
+            className="absolute top-[10px] font-mono text-[10px] text-[#f87171]"
+            style={{ left: `${triggerPercent}%` }}
+          >
             {Math.round(triggerTokens / 1000)}K
           </span>
         </div>
