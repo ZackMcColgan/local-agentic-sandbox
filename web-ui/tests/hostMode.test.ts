@@ -240,6 +240,123 @@ describe("Host Mode & Destructive Action Gate Suite", () => {
       false
     );
   });
+
+  describe("Destructive Classifier Bypass Hardening & Positive Controls", () => {
+    it("blocks quoted destructive command names via call operator or dot-sourcing", () => {
+      const cases = [
+        '& "Remove-Item" -Recurse -Force ./build',
+        "& 'Remove-Item' ./file.txt",
+        '& ("Remove-Item") ./file.txt',
+        '& "del" C:\\temp\\x.txt',
+        '& "rm" -rf ./build',
+        '& "shutdown" /s /t 0',
+        '. "Remove-Item" ./build',
+      ];
+      for (const command of cases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, true, `Expected destructive for: ${command}`);
+      }
+    });
+
+    it("blocks destructive commands anchored after opening brace {", () => {
+      const cases = [
+        "& { rm -rf ./build }",
+        "if ($true) { del C:\\temp\\x.txt }",
+        "try { rmdir /s /q temp } catch {}",
+      ];
+      for (const command of cases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, true, `Expected destructive for: ${command}`);
+      }
+    });
+
+    it("blocks backtick-obfuscated destructive commands", () => {
+      const cases = [
+        "`Rem`ove-Item ./build",
+        "`d`el C:\\temp\\x.txt",
+        "r`m -rf ./build",
+        "`s`hutdown /s /t 0",
+      ];
+      for (const command of cases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, true, `Expected destructive for: ${command}`);
+      }
+    });
+
+    it("blocks cmd indirection with intervening flags before /c or /k", () => {
+      const cases = [
+        'cmd /q /c "del C:\\temp\\x.txt"',
+        'cmd.exe /d /q /c "rd /s /q C:\\temp\\dir"',
+        '& "cmd" /q /c "erase C:\\temp\\x.txt"',
+      ];
+      for (const command of cases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, true, `Expected destructive for: ${command}`);
+      }
+    });
+
+    it("blocks quoted powershell/pwsh executable names with -EncodedCommand", () => {
+      const cases = [
+        '& "powershell" -EncodedCommand aABlAGwAbABvAA==',
+        "& 'pwsh.exe' -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAAQwA6AFwAeAA=",
+      ];
+      for (const command of cases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, true, `Expected destructive for: ${command}`);
+      }
+    });
+
+    it("blocks iex, Invoke-Expression, [scriptblock]::Create, powershell -Command, robocopy /mir, and destructive $() subexpressions", () => {
+      const cases = [
+        'iex "Remove-Item ./build"',
+        'Invoke-Expression "del C:\\temp\\x.txt"',
+        '"Remove-Item ./build" | iex',
+        '[scriptblock]::Create("Remove-Item ./build").Invoke()',
+        '[System.Management.Automation.ScriptBlock]::Create("del x.txt").Invoke()',
+        'powershell -Command "Remove-Item ./build"',
+        'powershell -NoProfile -c "del C:\\temp\\x.txt"',
+        'pwsh -Command "rm -rf ./build"',
+        "robocopy C:\\empty C:\\target /mir",
+        "robocopy.exe src dst /MIR /R:0",
+        "robocopy src dst /purge",
+        "Write-Output $(Remove-Item ./build)",
+        'Write-Output "$(del C:\\temp\\x.txt)"',
+        "$x = $(rm -rf ./build)",
+      ];
+      for (const command of cases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, true, `Expected destructive for: ${command}`);
+      }
+    });
+
+    it("allows ordinary build, test, git, and file commands without false positives", () => {
+      const safeCases = [
+        "git status",
+        "git diff --stat",
+        'git commit -m "fix Remove-Item and del bypass"',
+        "npm run build",
+        "npm test",
+        "npm run test:gate",
+        "node -e \"console.log('hello')\"",
+        "Get-Content ./package.json",
+        'Select-String -Path ./src/*.ts -Pattern "Remove-Item"',
+        'Write-Output "Hello $($env:USERNAME)"',
+        'Write-Output "$(Get-Date)"',
+        "Write-Output '$(Remove-Item ./foo)'",
+        'if ($true) { Write-Output "ok" }',
+        "& { Get-ChildItem ./src }",
+        '& "git" status',
+        '& "npm" test',
+        "cmd /q /c echo hello",
+        'powershell -NoProfile -Command "Get-Date"',
+        "robocopy C:\\src C:\\dst /E",
+      ];
+      for (const command of safeCases) {
+        const res = isDestructiveHostAction("host_run_powershell", { command });
+        assert.equal(res.isDestructive, false, `Unexpected false positive for: ${command}`);
+      }
+    });
+  });
 });
 
 describe("Host Mode F2.2 Single-Use & Expiring Approvals Suite", () => {
